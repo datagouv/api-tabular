@@ -1,10 +1,10 @@
 # udata-hydra-csvapi
 
-This connects to (udata-hydra)[https://github.com/etalab/udata-hydra] and serves the converted CSVs as an API.
+This connects to [udata-hydra](https://github.com/etalab/udata-hydra) and serves the converted CSVs as an API.
 
 ## Run locally
 
-Start (udata-hydra)[https://github.com/etalab/udata-hydra] via `docker compose`.
+Start [udata-hydra](https://github.com/etalab/udata-hydra) via `docker compose`.
 
 Launch this project:
 
