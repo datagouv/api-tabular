@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "udata-hydra-csvapi"
+version = "0.1.0"
+description = "API for CSV converted by udata-hydra"
+authors = ["Alexandre Bulté <alexandre@bulte.net>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "udata_hydra_csvapi"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

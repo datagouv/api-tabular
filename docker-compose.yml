@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  postgrest:
+    image: "postgrest/postgrest:v10.1.2"
+    environment:
+      # connect to hydra database-csv
+      - PGRST_DB_URI=postgres://postgres:postgres@database-csv:5432/postgres
+      - PGRST_OPENAPI_SERVER_PROXY_URI=http://127.0.0.1:8080
+      - PGRST_SERVER_PORT=8080
+      - PGRST_DB_ANON_ROLE=web_anon
+    ports:
+      - 8080:8080
+    networks:
+      - udata-hydra_default
+
+# allows connectivity to hydra
+networks:
+  udata-hydra_default:
+    external: true
