@@ -55,6 +55,15 @@ async def test_api_resource_data(client, rmock):
     assert await res.json() == {"such": "data"}
 
 
+async def test_api_resource_data_with_args(client, rmock):
+    args = "limit=1&select=numnum"
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?{args}", payload={"such": "data"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
+    assert res.status == 200
+    assert await res.json() == {"such": "data"}
+
+
 async def test_api_resource_data_not_found(client, mock_get_resource_empty):
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 404
