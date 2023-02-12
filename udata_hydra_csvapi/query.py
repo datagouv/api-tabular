@@ -2,7 +2,7 @@ import json
 
 from aiohttp import web, ClientSession
 
-from csvapi import config
+from udata_hydra_csvapi import config
 
 
 class QueryException(web.HTTPException):

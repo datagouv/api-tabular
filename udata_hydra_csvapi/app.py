@@ -2,7 +2,7 @@ import os
 
 from aiohttp import web, ClientSession
 
-from csvapi.query import get_resource, get_resource_data
+from udata_hydra_csvapi.query import get_resource, get_resource_data
 
 routes = web.RouteTableDef()
 
