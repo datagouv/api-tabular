@@ -19,7 +19,7 @@ def setup():
     config.override(PG_RST_URL=PG_RST_URL)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def rmock():
     # passthrough for local requests (aiohttp TestServer)
     with aioresponses(passthrough=["http://127.0.0.1"]) as m:
@@ -33,12 +33,29 @@ async def client():
         yield client
 
 
-@pytest.fixture(autouse=True)
-def mock_postgrest(rmock):
-    pattern = re.compile(fr"^https://example\.com/tables_index\?.*{RESOURCE_ID}.*$")
+@pytest.fixture
+def mock_get_resource(rmock):
+    pattern = re.compile(fr"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$")
     rmock.get(pattern, payload=[{
         "created_at": DATE,
         "url": "https://example.com",
     }])
+
+
+@pytest.fixture
+def mock_get_resource_profile(rmock):
+    pattern = re.compile(fr"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$")
+    rmock.get(pattern, payload=[{"profile": {"this": "is-a-profile"}}])
+
+
+@pytest.fixture
+def mock_get_resource_data(rmock):
+    pattern = re.compile(fr"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$")
+    rmock.get(pattern, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx", payload={"such": "data"})
+
+
+@pytest.fixture
+def mock_get_resource_empty(rmock):
     pattern = re.compile(r"^https://example\.com/tables_index\?.*$")
     rmock.get(pattern, payload=[])
