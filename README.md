@@ -21,7 +21,9 @@ poetry install
 poetry run adev runserver -p8005 csvapi/app.py
 ```
 
-And query postgrest via the proxy using a `resource_id`.
+And query postgrest via the proxy using a `resource_id`, cf below.
+
+## API
 
 ### Meta informations on resource
 

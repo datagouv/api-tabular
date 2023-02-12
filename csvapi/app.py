@@ -40,11 +40,15 @@ async def resource_profile(request):
 async def resource_data(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
-    response = web.StreamResponse()
-    response.content_type = "application/json"
-    await response.prepare(request)
+    response = None
     # stream response from postgrest, this might be a big payload
     async for chunk in get_resource_data(request.app["csession"], resource, request.query_string):
+        # build the response after get_resource_data has been called:
+        # if a QueryException occurs we don't want to start a chunked streaming response
+        if not response:
+            response = web.StreamResponse()
+            response.content_type = "application/json"
+            await response.prepare(request)
         await response.write(chunk)
     return response
 
