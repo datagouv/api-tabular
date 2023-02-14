@@ -69,7 +69,7 @@ async def test_api_resource_data_not_found(client, mock_get_resource_empty):
     assert res.status == 404
 
 
-async def test_api_resource_data_table_not_found(client, rmock):
+async def test_api_resource_data_table_error(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
     rmock.get(f"{PG_RST_URL}/xxx", status=502, payload={"such": "error"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
