@@ -5,16 +5,19 @@ services:
     image: "postgrest/postgrest:v10.1.2"
     environment:
       # connect to hydra database-csv
-      - PGRST_DB_URI=postgres://postgres:postgres@database-csv:5432/postgres
-      - PGRST_OPENAPI_SERVER_PROXY_URI=http://127.0.0.1:8080
+      - PGRST_DB_URI=postgres://csvapi:csvapi@postgres-test:5432/csvapi
+      - p=http://127.0.0.1:8080
       - PGRST_SERVER_PORT=8080
-      - PGRST_DB_ANON_ROLE=web_anon
+      - PGRST_DB_ANON_ROLE=csvapi
+      - PGRST_DB_SCHEMA=csvapi
     ports:
       - 8080:8080
-    networks:
-      - udata-hydra_default
-
-# allows connectivity to hydra
-networks:
-  udata-hydra_default:
-    external: true
+  postgres-test:
+    image: "postgres:14"
+    volumes:
+      - ./db/initdb/:/docker-entrypoint-initdb.d/
+      - ./db/sample.csv:/tmp/sample.csv
+    environment:
+      - POSTGRES_DB=csvapi
+      - POSTGRES_USER=csvapi
+      - POSTGRES_PASSWORD=csvapi
