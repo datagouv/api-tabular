@@ -53,3 +53,9 @@ def test_query_build_multiple():
     query_str = 'column_name__exact=BIDULE&limit=5&offset=12'
     result = build_sql_query_string(query_str)
     assert result == 'column_name=eq.BIDULE&limit=5&offset=12'
+
+
+def test_query_build_multiple_with_unknown():
+    query_str = 'limit=1&select=numnum'
+    result = build_sql_query_string(query_str)
+    assert result == 'limit=1'
