@@ -21,14 +21,14 @@ poetry install
 poetry run adev runserver -p8005 udata_hydra_csvapi/app.py
 ```
 
-And query postgrest via the proxy using a `resource_id`, cf below.
+And query postgrest via the proxy using a `resource_id`, cf below. Test resource_id is `27d469ff-9908-4b7e-a2e0-9439bb38a395`
 
 ## API
 
 ### Meta informations on resource
 
 ```shell
-curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/
 ```
 
 ```json
@@ -37,12 +37,12 @@ curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/
   "url": "https://data.toulouse-metropole.fr//explore/dataset/boulodromes/download?format=csv&timezone=Europe/Berlin&use_labels_for_header=false",
   "links": [
     {
-      "href": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+      "href": "/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/profile/",
       "type": "GET",
       "rel": "profile"
     },
     {
-      "href": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/",
+      "href": "/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/",
       "type": "GET",
       "rel": "data"
     }
@@ -53,7 +53,7 @@ curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/
 ### Profile (csv-detective output) for a resource
 
 ```shell
-curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/profile/
 ```
 
 ```json
@@ -76,7 +76,7 @@ curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/pr
 ### Data for a resource (ie resource API)
 
 ```shell
-curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?limit=1
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?limit=1
 ```
 
 ```json
@@ -115,7 +115,7 @@ curl http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/da
 On this endpoint you can use every neat stuff postgrest provides. Here we only want the `ins_nom` column where it icontains "maurice":
 
 ```shell
-curl "http://localhost:8005/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?select=ins_nom&ins_nom=ilike.*maurice*"
+curl "http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?select=ins_nom&ins_nom=ilike.*maurice*"
 ```
 
 ```json
