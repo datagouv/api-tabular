@@ -14,31 +14,32 @@ class QueryException(web.HTTPException):
 
 def build_sql_query_string(request_arg: str) -> str:
     sql_query = ''
-    for arg in request_arg.split('&'):
-        value = arg.split('=')[1]
-        argument = arg.split('=')[0]
-        if '__' in argument:
-            comparator = argument.split('__')[1]
-            column = argument.split('__')[0]
-            if comparator == 'sort':
-                if value == 'asc':
-                    sql_query += f'order={column}.asc&'
-                elif value == 'desc':
-                    sql_query += f'order={column}.desc&'
-            elif comparator == 'exact':
-                sql_query += f'{column}=eq.{value}&'
-            elif comparator == 'contains':
-                sql_query += f'{column}=like.*{value}*&'
-            elif comparator == 'less':
-                sql_query += f'{column}=lte.{value}&'
-            elif comparator == 'greater':
-                sql_query += f'{column}=gte.{value}&'
-        elif argument == 'limit':
-            sql_query += f'{arg}&'
-        elif argument == 'offset':
-            sql_query += f'{arg}&'
-    if sql_query[-1] == '&':
-        sql_query = sql_query[:-1]
+    if request_arg:
+        for arg in request_arg.split('&'):
+            value = arg.split('=')[1]
+            argument = arg.split('=')[0]
+            if '__' in argument:
+                comparator = argument.split('__')[1]
+                column = argument.split('__')[0]
+                if comparator == 'sort':
+                    if value == 'asc':
+                        sql_query += f'order={column}.asc&'
+                    elif value == 'desc':
+                        sql_query += f'order={column}.desc&'
+                elif comparator == 'exact':
+                    sql_query += f'{column}=eq.{value}&'
+                elif comparator == 'contains':
+                    sql_query += f'{column}=like.*{value}*&'
+                elif comparator == 'less':
+                    sql_query += f'{column}=lte.{value}&'
+                elif comparator == 'greater':
+                    sql_query += f'{column}=gte.{value}&'
+            elif argument == 'limit':
+                sql_query += f'{arg}&'
+            elif argument == 'offset':
+                sql_query += f'{arg}&'
+        if sql_query[-1] == '&':
+            sql_query = sql_query[:-1]
     return sql_query
 
 
