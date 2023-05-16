@@ -9,7 +9,7 @@ packages = [{include = "udata_hydra_csvapi"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-aiohttp = "^3.8.3"
+aiohttp = "^3.8.4"
 toml = "^0.10.2"
 
 

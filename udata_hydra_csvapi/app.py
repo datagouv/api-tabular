@@ -45,7 +45,7 @@ async def resource_data(request):
     async for chunk in get_resource_data(request.app["csession"], resource, request.query_string):
         # build the response after get_resource_data has been called:
         # if a QueryException occurs we don't want to start a chunked streaming response
-        if not response:
+        if response is None:
             response = web.StreamResponse()
             response.content_type = "application/json"
             await response.prepare(request)
