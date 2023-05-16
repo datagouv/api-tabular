@@ -39,10 +39,13 @@ async def resource_profile(request):
 @routes.get(r"/api/resources/{rid}/data/")
 async def resource_data(request):
     resource_id = request.match_info["rid"]
+    page = request.rel_url.query.get('page', 1)
+    page_size = request.rel_url.query.get('page_size', 50)
+    query_string = request.query_string.split('&')
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response = None
     # stream response from postgrest, this might be a big payload
-    async for chunk in get_resource_data(request.app["csession"], resource, request.query_string):
+    async for chunk in get_resource_data(request.app["csession"], resource, query_string, page, page_size):
         # build the response after get_resource_data has been called:
         # if a QueryException occurs we don't want to start a chunked streaming response
         if response is None:

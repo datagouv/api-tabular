@@ -2,8 +2,8 @@ from udata_hydra_csvapi.query import build_sql_query_string
 
 
 def test_query_build_limit():
-    query_str = 'limit=12'
-    result = build_sql_query_string(query_str)
+    query_str = ''
+    result = build_sql_query_string(query_str, 1, 12)
     assert result == 'limit=12'
 
 

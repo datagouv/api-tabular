@@ -12,35 +12,32 @@ class QueryException(web.HTTPException):
         super().__init__(content_type="application/json", text=json.dumps(data))
 
 
-def build_sql_query_string(request_arg: str) -> str:
-    sql_query = ''
-    if request_arg:
-        for arg in request_arg.split('&'):
-            value = arg.split('=')[1]
-            argument = arg.split('=')[0]
-            if '__' in argument:
-                comparator = argument.split('__')[1]
-                column = argument.split('__')[0]
-                if comparator == 'sort':
-                    if value == 'asc':
-                        sql_query += f'order={column}.asc&'
-                    elif value == 'desc':
-                        sql_query += f'order={column}.desc&'
-                elif comparator == 'exact':
-                    sql_query += f'{column}=eq.{value}&'
-                elif comparator == 'contains':
-                    sql_query += f'{column}=like.*{value}*&'
-                elif comparator == 'less':
-                    sql_query += f'{column}=lte.{value}&'
-                elif comparator == 'greater':
-                    sql_query += f'{column}=gte.{value}&'
-            elif argument == 'limit':
-                sql_query += f'{arg}&'
-            elif argument == 'offset':
-                sql_query += f'{arg}&'
-        if sql_query[-1] == '&':
-            sql_query = sql_query[:-1]
-    return sql_query
+def build_sql_query_string(request_arg: str, page: int, page_size: int) -> str:
+    sql_query = []
+    for arg in request_arg:
+        value = arg.split('=')[1]
+        argument = arg.split('=')[0]
+        if '__' in argument:
+            comparator = argument.split('__')[1]
+            column = argument.split('__')[0]
+            if comparator == 'sort':
+                if value == 'asc':
+                    sql_query.append(f'order={column}.asc')
+                elif value == 'desc':
+                    sql_query.append(f'order={column}.desc')
+            elif comparator == 'exact':
+                sql_query.append(f'{column}=eq.{value}')
+            elif comparator == 'contains':
+                sql_query.append(f'{column}=like.*{value}*')
+            elif comparator == 'less':
+                sql_query.append(f'{column}=lte.{value}')
+            elif comparator == 'greater':
+                sql_query.append(f'{column}=gte.{value}')
+    if page > 1:
+        offset = page_size * (page - 1)
+        sql_query.append(f'offset={offset}')
+    sql_query.append(f'limit={page_size}')
+    return '&'.join(sql_query)
 
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list):
@@ -55,8 +52,8 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list):
         return record[0]
 
 
-async def get_resource_data(session: ClientSession, resource: dict, query_string: str):
-    sql_query = build_sql_query_string(query_string)
+async def get_resource_data(session: ClientSession, resource: dict, query_string: str, page: int, page_size: int):
+    sql_query = build_sql_query_string(query_string, page, page_size)
     async with session.get(f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}") as res:
         if not res.ok:
             raise QueryException(res.status, await res.json())
