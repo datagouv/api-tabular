@@ -33,10 +33,10 @@ def build_sql_query_string(request_arg: str, page: int, page_size: int) -> str:
                 sql_query.append(f'{column}=lte.{value}')
             elif comparator == 'greater':
                 sql_query.append(f'{column}=gte.{value}')
+    sql_query.append(f'limit={page_size}')
     if page > 1:
         offset = page_size * (page - 1)
         sql_query.append(f'offset={offset}')
-    sql_query.append(f'limit={page_size}')
     return '&'.join(sql_query)
 
 
