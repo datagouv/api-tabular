@@ -18,8 +18,7 @@ def build_sql_query_string(request_arg: str, page: int, page_size: int) -> str:
         value = arg.split('=')[1]
         argument = arg.split('=')[0]
         if '__' in argument:
-            comparator = argument.split('__')[1]
-            column = argument.split('__')[0]
+            column, comparator = argument.split('__')
             if comparator == 'sort':
                 if value == 'asc':
                     sql_query.append(f'order={column}.asc')
