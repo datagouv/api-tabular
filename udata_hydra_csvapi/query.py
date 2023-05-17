@@ -1,6 +1,7 @@
 import json
 
 from aiohttp import web, ClientSession
+from slugify import slugify
 
 from udata_hydra_csvapi import config
 
@@ -15,23 +16,24 @@ class QueryException(web.HTTPException):
 def build_sql_query_string(request_arg: str, page: int, page_size: int) -> str:
     sql_query = []
     for arg in request_arg:
-        value = arg.split('=')[1]
-        argument = arg.split('=')[0]
+        argument, value = arg.split('=')
         if '__' in argument:
             column, comparator = argument.split('__')
-            if comparator == 'sort':
+            normalized_column = slugify(column, separator='_')
+            normalized_comparator = comparator.lower()
+            if normalized_comparator == 'sort':
                 if value == 'asc':
-                    sql_query.append(f'order={column}.asc')
+                    sql_query.append(f'order={normalized_column}.asc')
                 elif value == 'desc':
-                    sql_query.append(f'order={column}.desc')
-            elif comparator == 'exact':
-                sql_query.append(f'{column}=eq.{value}')
-            elif comparator == 'contains':
-                sql_query.append(f'{column}=like.*{value}*')
-            elif comparator == 'less':
-                sql_query.append(f'{column}=lte.{value}')
-            elif comparator == 'greater':
-                sql_query.append(f'{column}=gte.{value}')
+                    sql_query.append(f'order={normalized_column}.desc')
+            elif normalized_comparator == 'exact':
+                sql_query.append(f'{normalized_column}=eq.{value}')
+            elif normalized_comparator == 'contains':
+                sql_query.append(f'{normalized_column}=like.*{value}*')
+            elif normalized_comparator == 'less':
+                sql_query.append(f'{normalized_column}=lte.{value}')
+            elif normalized_comparator == 'greater':
+                sql_query.append(f'{normalized_column}=gte.{value}')
     sql_query.append(f'limit={page_size}')
     if page > 1:
         offset = page_size * (page - 1)
@@ -52,7 +54,10 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list):
 
 
 async def get_resource_data(session: ClientSession, resource: dict, query_string: str, page: int, page_size: int):
-    sql_query = build_sql_query_string(query_string, page, page_size)
+    try:
+        sql_query = build_sql_query_string(query_string, page, page_size)
+    except ValueError:
+        raise QueryException(400, 'Invalid query string')
     async with session.get(f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}") as res:
         if not res.ok:
             raise QueryException(res.status, await res.json())
