@@ -49,16 +49,17 @@ async def test_api_resource_profile_not_found(client, mock_get_resource_empty):
 
 async def test_api_resource_data(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
-    rmock.get(f"{PG_RST_URL}/xxx", payload={"such": "data"})
+    rmock.get(f"{PG_RST_URL}/xxx?limit=50", payload={"such": "data"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 200
     assert await res.json() == {"such": "data"}
 
 
 async def test_api_resource_data_with_args(client, rmock):
-    args = "limit=1"
+    args = "page=1"
+    query_args = "limit=50"
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
-    rmock.get(f"{PG_RST_URL}/xxx?{args}", payload={"such": "data"})
+    rmock.get(f"{PG_RST_URL}/xxx?{query_args}", payload={"such": "data"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 200
     assert await res.json() == {"such": "data"}
@@ -71,7 +72,7 @@ async def test_api_resource_data_not_found(client, mock_get_resource_empty):
 
 async def test_api_resource_data_table_error(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
-    rmock.get(f"{PG_RST_URL}/xxx", status=502, payload={"such": "error"})
+    rmock.get(f"{PG_RST_URL}/xxx?limit=50", status=502, payload={"such": "error"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 502
     assert await res.json() == {"such": "error"}

@@ -39,9 +39,9 @@ async def resource_profile(request):
 @routes.get(r"/api/resources/{rid}/data/")
 async def resource_data(request):
     resource_id = request.match_info["rid"]
-    page = request.rel_url.query.get('page', 1)
-    page_size = request.rel_url.query.get('page_size', 50)
-    query_string = request.query_string.split('&')
+    page = int(request.rel_url.query.get('page', '1'))
+    page_size = int(request.rel_url.query.get('page_size', '50'))
+    query_string = request.query_string.split('&') if request.query_string else []
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response = None
     # stream response from postgrest, this might be a big payload
