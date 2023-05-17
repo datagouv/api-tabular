@@ -59,3 +59,11 @@ async def get_resource_data(session: ClientSession, resource: dict, query_string
             raise QueryException(res.status, await res.json())
         async for chunk in res.content.iter_chunked(1024):
             yield chunk
+
+async def get_metrics_data(session: ClientSession, table: str, query_string: str, page: int, page_size: int):
+    sql_query = build_sql_query_string(query_string, page, page_size)
+    async with session.get(f"{config.PG_RST_URL}/{table}?{sql_query}") as res:
+        if not res.ok:
+            raise QueryException(res.status, await res.json())
+        async for chunk in res.content.iter_chunked(1024):
+            yield chunk

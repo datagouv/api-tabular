@@ -2,7 +2,7 @@ import os
 
 from aiohttp import web, ClientSession
 
-from udata_hydra_csvapi.query import get_resource, get_resource_data
+from udata_hydra_csvapi.query import get_resource, get_resource_data, get_metrics_data
 
 routes = web.RouteTableDef()
 
@@ -47,6 +47,24 @@ async def resource_data(request):
     # stream response from postgrest, this might be a big payload
     async for chunk in get_resource_data(request.app["csession"], resource, query_string, page, page_size):
         # build the response after get_resource_data has been called:
+        # if a QueryException occurs we don't want to start a chunked streaming response
+        if response is None:
+            response = web.StreamResponse()
+            response.content_type = "application/json"
+            await response.prepare(request)
+        await response.write(chunk)
+    return response
+
+
+@routes.get(r"/api/metrics/{table}")
+async def resource_data(request):
+    table = request.match_info["table"]
+    page = int(request.rel_url.query.get('page', '1'))
+    page_size = int(request.rel_url.query.get('page_size', '50'))
+    query_string = request.query_string.split('&') if request.query_string else []
+    response = None
+    async for chunk in get_metrics_data(request.app["csession"], table, query_string, page, page_size):
+        # build the response after get_metrics_data has been called:
         # if a QueryException occurs we don't want to start a chunked streaming response
         if response is None:
             response = web.StreamResponse()
