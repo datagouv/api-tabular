@@ -11,6 +11,7 @@ packages = [{include = "udata_hydra_csvapi"}]
 python = "^3.9"
 aiohttp = "^3.8.4"
 toml = "^0.10.2"
+python-slugify = "^8.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
