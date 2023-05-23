@@ -76,7 +76,7 @@ curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/pr
 ### Data for a resource (ie resource API)
 
 ```shell
-curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?limit=1
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/
 ```
 
 ```json
@@ -112,16 +112,27 @@ curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/da
 ]
 ```
 
-On this endpoint you can use every neat stuff postgrest provides. Here we only want the `ins_nom` column where it icontains "maurice":
+This endpoint can be queried with the following operators as query string:
 
-```shell
-curl "http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?select=ins_nom&ins_nom=ilike.*maurice*"
+```
+# sort by column
+column_name__sort=asc
+column_name__sort=desc
+
+# contains
+column_name__contains=word
+
+# exacts
+column_name__exact=word
+
+# less
+column_name__less=12
+
+# greater
+column_name__greater=12
 ```
 
-```json
-[
-  {
-    "ins_nom": "BOULODROME MAURICE BECANNE"
-  }
-]
+Pagination is made throught queries with `page` `and page_size`:
+```
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?page=2&page_size=30
 ```
