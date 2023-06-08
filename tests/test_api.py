@@ -92,3 +92,35 @@ async def test_api_resource_data_table_error(client, rmock):
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 502
     assert await res.json() == {"such": "error"}
+
+
+async def test_api_percent_encoding_arabic(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?%D9%85%D9%88%D8%A7%D8%B1%D8%AF=eq.%D9%85%D9%88%D8%A7%D8%B1%D8%AF&limit=50", status=200, payload={"such": "data"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?%D9%85%D9%88%D8%A7%D8%B1%D8%AF__exact=%D9%85%D9%88%D8%A7%D8%B1%D8%AF")
+    assert res.status == 200
+    assert await res.json() == {"such": "data"}
+
+
+async def test_api_percent_encoding_latin(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?c_est_déjà_l_été=eq.BIDULE&limit=50", status=200, payload={"such": "data"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?C\'est déjà l\'été.__exact=BIDULE")
+    assert res.status == 400
+    assert await res.json() == {"such": "data"}
+
+
+async def test_api_percent_encoding_cyrillic(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?компьютер=eq.Компьютер&limit=50", status=200, payload={"such": "data"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?Компьютер__exact=Компьютер")
+    assert res.status == 200
+    assert await res.json() == {"such": "data"}
+
+
+async def test_api_with_unsupported_args(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?limit=50", status=200, payload={"such": "data"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?limit=1&select=numnum")
+    assert res.status == 200
+    assert await res.json() == {"such": "data"}

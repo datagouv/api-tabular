@@ -19,7 +19,7 @@ def build_sql_query_string(request_arg: str, page: int, page_size: int) -> str:
         argument, value = arg.split('=')
         if '__' in argument:
             column, comparator = argument.split('__')
-            normalized_column = slugify(column, separator='_')
+            normalized_column = slugify(column, separator='_', allow_unicode=True)
             normalized_comparator = comparator.lower()
             if normalized_comparator == 'sort':
                 if value == 'asc':
