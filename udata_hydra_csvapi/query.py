@@ -20,8 +20,8 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
     headers = {'Prefer': 'count=exact'}
     url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
     async with session.get(url, headers=headers) as res:
-        record = await res.json()
-        total = process_total(res.headers.get('Content-Range'))
         if not res.ok:
             raise QueryException(res.status, 'Database error', await res.json())
+        record = await res.json()
+        total = process_total(res.headers.get('Content-Range'))
         return record, total

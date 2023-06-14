@@ -23,7 +23,8 @@ def build_sql_query_string(request_arg: str, page_size: int, offset: int) -> str
             elif normalized_comparator == 'greater':
                 sql_query.append(f'{normalized_column}=gte.{value}')
     sql_query.append(f'limit={page_size}')
-    sql_query.append(f'offset={offset}')
+    if offset >= 1:
+        sql_query.append(f'offset={offset}')
     return '&'.join(sql_query)
 
 
