@@ -2,7 +2,10 @@ import os
 
 from aiohttp import web, ClientSession
 
+from udata_hydra_csvapi import config
 from udata_hydra_csvapi.query import get_resource, get_resource_data
+from udata_hydra_csvapi.utils import build_sql_query_string, build_link_with_page
+from udata_hydra_csvapi.error import QueryException
 
 routes = web.RouteTableDef()
 
@@ -39,21 +42,40 @@ async def resource_profile(request):
 @routes.get(r"/api/resources/{rid}/data/")
 async def resource_data(request):
     resource_id = request.match_info["rid"]
-    page = int(request.rel_url.query.get('page', '1'))
-    page_size = int(request.rel_url.query.get('page_size', '50'))
     query_string = request.query_string.split('&') if request.query_string else []
+    page = int(request.query.get('page', '1'))
+    page_size = int(request.query.get('page_size', config.PAGE_SIZE_DEFAULT))
+
+    if page_size > 50:
+        raise QueryException(400, 'Invalid query string', 'Page size exceeds allowed maximum')
+    if page > 1:
+        offset = page_size * (page - 1)
+    else:
+        offset = 0
+
+    try:
+        sql_query = build_sql_query_string(query_string, page_size, offset)
+    except ValueError:
+        raise QueryException(400, 'Invalid query string', 'Malformed query')
+
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
-    response = None
-    # stream response from postgrest, this might be a big payload
-    async for chunk in get_resource_data(request.app["csession"], resource, query_string, page, page_size):
-        # build the response after get_resource_data has been called:
-        # if a QueryException occurs we don't want to start a chunked streaming response
-        if response is None:
-            response = web.StreamResponse()
-            response.content_type = "application/json"
-            await response.prepare(request)
-        await response.write(chunk)
-    return response
+    response, total = await get_resource_data(request.app["csession"], resource, sql_query)
+
+    body = {
+        'data': response,
+        'links': {},
+        'meta': {
+            'page': page,
+            'page_size': page_size,
+            'total': total
+        }
+    }
+    if page_size + offset < total:
+        body['links']['next'] = build_link_with_page(request.path, query_string, page + 1, page_size)
+        if page > 1:
+            body['links']['prev'] = build_link_with_page(request.path, query_string, page - 1, page_size)
+
+    return web.json_response(body)
 
 
 async def app_factory():
