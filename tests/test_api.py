@@ -95,7 +95,15 @@ async def test_api_resource_data_with_args_error(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
-    assert await res.json() == {'code': 400, 'detail': 'Malformed query', 'title': 'Invalid query string'}
+    assert await res.json() == {'errors': [{'detail': 'Malformed query', 'title': 'Invalid query string'}]}
+
+
+async def test_api_resource_data_with_page_size_error(client, rmock):
+    args = "page=1&page_size=100"
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
+    assert res.status == 400
+    assert await res.json() == {'errors': [{'detail': 'Page size exceeds allowed maximum', 'title': 'Invalid query string'}]}
 
 
 async def test_api_resource_data_not_found(client, mock_get_resource_empty):
@@ -108,7 +116,7 @@ async def test_api_resource_data_table_error(client, rmock):
     rmock.get(f"{PG_RST_URL}/xxx?limit=20", status=502, payload={"such": "error"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 502
-    assert await res.json() == {'code': 502, 'detail': {'such': 'error'}, 'title': 'Database error'}
+    assert await res.json() == {'errors': [{'detail': {'such': 'error'}, 'title': 'Database error'}]}
 
 
 async def test_api_percent_encoding_arabic(client, rmock):

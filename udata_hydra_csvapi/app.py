@@ -46,7 +46,7 @@ async def resource_data(request):
     page = int(request.query.get('page', '1'))
     page_size = int(request.query.get('page_size', config.PAGE_SIZE_DEFAULT))
 
-    if page_size > 50:
+    if page_size > config.PAGE_SIZE_MAX:
         raise QueryException(400, 'Invalid query string', 'Page size exceeds allowed maximum')
     if page > 1:
         offset = page_size * (page - 1)
