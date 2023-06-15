@@ -1,5 +1,3 @@
-from slugify import slugify
-
 
 def build_sql_query_string(request_arg: list, page_size: int, offset: int = 0) -> str:
     sql_query = []
@@ -7,21 +5,20 @@ def build_sql_query_string(request_arg: list, page_size: int, offset: int = 0) -
         argument, value = arg.split('=')
         if '__' in argument:
             column, comparator = argument.split('__')
-            normalized_column = slugify(column, separator='_', allow_unicode=True)
             normalized_comparator = comparator.lower()
             if normalized_comparator == 'sort':
                 if value == 'asc':
-                    sql_query.append(f'order={normalized_column}.asc')
+                    sql_query.append(f'order={column}.asc')
                 elif value == 'desc':
-                    sql_query.append(f'order={normalized_column}.desc')
+                    sql_query.append(f'order={column}.desc')
             elif normalized_comparator == 'exact':
-                sql_query.append(f'{normalized_column}=eq.{value}')
+                sql_query.append(f'{column}=eq.{value}')
             elif normalized_comparator == 'contains':
-                sql_query.append(f'{normalized_column}=like.*{value}*')
+                sql_query.append(f'{column}=like.*{value}*')
             elif normalized_comparator == 'less':
-                sql_query.append(f'{normalized_column}=lte.{value}')
+                sql_query.append(f'{column}=lte.{value}')
             elif normalized_comparator == 'greater':
-                sql_query.append(f'{normalized_column}=gte.{value}')
+                sql_query.append(f'{column}=gte.{value}')
     sql_query.append(f'limit={page_size}')
     if offset >= 1:
         sql_query.append(f'offset={offset}')
