@@ -103,7 +103,8 @@ async def test_api_resource_data_with_page_size_error(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
-    assert await res.json() == {'errors': [{'detail': 'Page size exceeds allowed maximum', 'title': 'Invalid query string'}]}
+    assert await res.json() == {
+        'errors': [{'detail': 'Page size exceeds allowed maximum', 'title': 'Invalid query string'}]}
 
 
 async def test_api_resource_data_not_found(client, mock_get_resource_empty):
@@ -176,5 +177,33 @@ async def test_api_with_unsupported_args(client, rmock):
         'data': {"such": "data"},
         'links': {},
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
+    }
+    assert await res.json() == body
+
+
+async def test_api_pagination(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(
+        f"{PG_RST_URL}/xxx?limit=1",
+        status=200, payload=[{"such": "data"}], headers={"Content-Range": "0-2/2"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page=1&page_size=1")
+    assert res.status == 200
+    body = {
+        'data': [{"such": "data"}],
+        'links': {'next': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1'},
+        'meta': {'page': 1, 'page_size': 1, 'total': 2}
+    }
+    assert await res.json() == body
+
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"parsing_table": "xxx"}])
+    rmock.get(
+        f"{PG_RST_URL}/xxx?limit=1&offset=1",
+        status=200, payload=[{"such": "data"}], headers={"Content-Range": "0-2/2"})
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page=2&page_size=1")
+    assert res.status == 200
+    body = {
+        'data': [{"such": "data"}],
+        'links': {'prev': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1'},
+        'meta': {'page': 2, 'page_size': 1, 'total': 2}
     }
     assert await res.json() == body

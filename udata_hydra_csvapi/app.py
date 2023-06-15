@@ -72,8 +72,8 @@ async def resource_data(request):
     }
     if page_size + offset < total:
         body['links']['next'] = build_link_with_page(request.path, query_string, page + 1, page_size)
-        if page > 1:
-            body['links']['prev'] = build_link_with_page(request.path, query_string, page - 1, page_size)
+    if page > 1:
+        body['links']['prev'] = build_link_with_page(request.path, query_string, page - 1, page_size)
 
     return web.json_response(body)
 
