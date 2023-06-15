@@ -54,7 +54,11 @@ async def test_api_resource_data(client, rmock):
     assert res.status == 200
     body = {
         'data': {"such": "data"},
-        'links': {},
+        'links': {
+            'next': None,
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
     }
     assert await res.json() == body
@@ -68,7 +72,11 @@ async def test_api_resource_data_with_args(client, rmock):
     assert res.status == 200
     body = {
         'data': {"such": "data"},
-        'links': {},
+        'links': {
+            'next': None,
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
     }
     assert await res.json() == body
@@ -84,7 +92,11 @@ async def test_api_resource_data_with_args_case(client, rmock):
     assert res.status == 200
     body = {
         'data': {"such": "data"},
-        'links': {},
+        'links': {
+            'next': None,
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
     }
     assert await res.json() == body
@@ -130,7 +142,11 @@ async def test_api_percent_encoding_arabic(client, rmock):
     assert res.status == 200
     body = {
         'data': {"such": "data"},
-        'links': {},
+        'links': {
+            'next': None,
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
     }
     assert await res.json() == body
@@ -145,7 +161,11 @@ async def test_api_with_unsupported_args(client, rmock):
     assert res.status == 200
     body = {
         'data': {"such": "data"},
-        'links': {},
+        'links': {
+            'next': None,
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 20, 'total': 10}
     }
     assert await res.json() == body
@@ -160,7 +180,11 @@ async def test_api_pagination(client, rmock):
     assert res.status == 200
     body = {
         'data': [{"such": "data"}],
-        'links': {'next': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1'},
+        'links': {
+            'next': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1',
+            'prev': None,
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 1, 'page_size': 1, 'total': 2}
     }
     assert await res.json() == body
@@ -173,7 +197,11 @@ async def test_api_pagination(client, rmock):
     assert res.status == 200
     body = {
         'data': [{"such": "data"}],
-        'links': {'prev': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1'},
+        'links': {
+            'next': None,
+            'prev': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1',
+            'profile': '/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/'
+        },
         'meta': {'page': 2, 'page_size': 1, 'total': 2}
     }
     assert await res.json() == body

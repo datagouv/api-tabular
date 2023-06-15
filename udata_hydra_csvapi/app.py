@@ -61,20 +61,21 @@ async def resource_data(request):
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
 
+    next = build_link_with_page(request.path, query_string, page + 1, page_size)
+    prev = build_link_with_page(request.path, query_string, page - 1, page_size)
     body = {
         'data': response,
-        'links': {},
+        'links': {
+            'profile': f'/api/resources/{resource_id}/profile/',
+            'next': next if page_size + offset < total else None,
+            'prev': prev if page > 1 else None
+        },
         'meta': {
             'page': page,
             'page_size': page_size,
             'total': total
         }
     }
-    if page_size + offset < total:
-        body['links']['next'] = build_link_with_page(request.path, query_string, page + 1, page_size)
-    if page > 1:
-        body['links']['prev'] = build_link_with_page(request.path, query_string, page - 1, page_size)
-
     return web.json_response(body)
 
 
