@@ -1,3 +1,5 @@
 PG_RST_URL = "http://localhost:8080"
+SENTRY_DSN = "https://a96751df4374408b90d027f03ad177ea@errors.data.gouv.fr/23"
 PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 50
+
