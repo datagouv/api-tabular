@@ -16,6 +16,7 @@ class QueryException(web.HTTPException):
 
 
 def handle_exception(status, title, detail, resource_id):
+    event_id = None
     e = Exception(detail)
     if config.SENTRY_DSN:
         with sentry_sdk.push_scope() as scope:
