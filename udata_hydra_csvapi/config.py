@@ -1,6 +1,0 @@
-import os
-
-PG_RST_URL = os.getenv("POSTGREST_ENDPOINT")
-SENTRY_DSN = ""
-PAGE_SIZE_DEFAULT = 20
-PAGE_SIZE_MAX = 50
