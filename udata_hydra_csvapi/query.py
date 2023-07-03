@@ -22,7 +22,7 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(
-                res.status, "Database error", await res.json(), resource["id"]
+                res.status, "Database error", await res.json(), resource.get('id')
             )
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))

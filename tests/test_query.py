@@ -34,7 +34,7 @@ def test_query_build_exact():
 def test_query_build_contains():
     query_str = ["column_name__contains=BIDULE"]
     result = build_sql_query_string(query_str, 50)
-    assert result == "column_name=like.*BIDULE*&limit=50"
+    assert result == "column_name=ilike.*BIDULE*&limit=50"
 
 
 def test_query_build_less():
