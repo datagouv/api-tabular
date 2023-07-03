@@ -13,7 +13,7 @@ def build_sql_query_string(request_arg: list, page_size: int, offset: int = 0) -
             elif normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
             elif normalized_comparator == "contains":
-                sql_query.append(f"{column}=like.*{value}*")
+                sql_query.append(f"{column}=ilike.*{value}*")
             elif normalized_comparator == "less":
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
