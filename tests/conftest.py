@@ -12,7 +12,9 @@ from udata_hydra_csvapi.app import app_factory
 PG_RST_URL = "https://example.com"
 RESOURCE_ID = "60963939-6ada-46bc-9a29-b288b16d969b"
 DATE = "2023-01-01T00:00:00.000000+00:00"
-TABLES_INDEX_PATTERN = re.compile(fr"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$")
+TABLES_INDEX_PATTERN = re.compile(
+    rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
+)
 
 
 @pytest.fixture(autouse=True)
