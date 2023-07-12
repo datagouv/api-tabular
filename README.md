@@ -76,52 +76,71 @@ curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/pr
 ### Data for a resource (ie resource API)
 
 ```shell
-curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?limit=1
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/
 ```
 
 ```json
-[
-  {
-    "__id": 1,
-    "geo_point_2d": "43.58061543292057,1.401751073689455",
-    "geo_shape": {
-      "coordinates": [
-        [
-          1.401751073689455,
-          43.58061543292057
-        ]
-      ],
-      "type": "MultiPoint"
-    },
-    "ins_nom": "BOULODROME LOU BOSC",
-    "ins_complexe_nom_cplmt": "COMPLEXE SPORTIF DU MIRAIL",
-    "ins_codepostal": 31100,
-    "secteur": "Toulouse Ouest",
-    "quartier": 6.3,
-    "acces_libre": null,
-    "ins_nb_equ": 1,
-    "ins_detail_equ": "",
-    "ins_complexe_nom": "",
-    "ins_adresse": "",
-    "ins_commune": "",
-    "acces_public_horaires": null,
-    "acces_club_scol": null,
-    "ins_nom_cplmt": "",
-    "ins_id_install": ""
-  }
-]
+{
+  "data": [
+    {
+      "__id": 1,
+      "geo_point_2d": "43.58061543292057,1.401751073689455",
+      "geo_shape": {
+        "coordinates": [
+          [
+              1.401751073689455,
+              43.58061543292057
+            ]
+          ],
+          "type": "MultiPoint"
+        },
+      "ins_nom": "BOULODROME LOU BOSC",
+      "ins_complexe_nom_cplmt": "COMPLEXE SPORTIF DU MIRAIL",
+      "ins_codepostal": 31100,
+      "secteur": "Toulouse Ouest",
+      "quartier": 6.3,
+      "acces_libre": null,
+      "ins_nb_equ": 1,
+      "ins_detail_equ": "",
+      "ins_complexe_nom": "",
+      "ins_adresse": "",
+      "ins_commune": "",
+      "acces_public_horaires": null,
+      "acces_club_scol": null,
+      "ins_nom_cplmt": "",
+      "ins_id_install": ""
+    }
+  ],
+  "links": {
+    "next": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1",
+    "prev": null,
+    "profile": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"
+  },
+  "meta": {"page": 1, "page_size": 1, "total": 2}
+}
 ```
 
-On this endpoint you can use every neat stuff postgrest provides. Here we only want the `ins_nom` column where it icontains "maurice":
+This endpoint can be queried with the following operators as query string:
 
-```shell
-curl "http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?select=ins_nom&ins_nom=ilike.*maurice*"
+```
+# sort by column
+column_name__sort=asc
+column_name__sort=desc
+
+# contains
+column_name__contains=word
+
+# exacts
+column_name__exact=word
+
+# less
+column_name__less=12
+
+# greater
+column_name__greater=12
 ```
 
-```json
-[
-  {
-    "ins_nom": "BOULODROME MAURICE BECANNE"
-  }
-]
+Pagination is made throught queries with `page` `and page_size`:
+```
+curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?page=2&page_size=30
 ```

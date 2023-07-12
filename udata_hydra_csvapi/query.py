@@ -1,15 +1,7 @@
-import json
-
 from aiohttp import web, ClientSession
-
 from udata_hydra_csvapi import config
-
-
-class QueryException(web.HTTPException):
-    """Re-raise an exception from postgrest as aiohttp exception"""
-    def __init__(self, status, data) -> None:
-        self.status_code = status
-        super().__init__(content_type="application/json", text=json.dumps(data))
+from udata_hydra_csvapi.error import handle_exception
+from udata_hydra_csvapi.utils import process_total
 
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list):
@@ -18,15 +10,20 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list):
     async with session.get(url) as res:
         record = await res.json()
         if not res.ok:
-            raise QueryException(res.status, record)
+            handle_exception(res.status, "Database error", record, resource_id)
         if not record:
             raise web.HTTPNotFound()
         return record[0]
 
 
-async def get_resource_data(session: ClientSession, resource: dict, query_string: str):
-    async with session.get(f"{config.PG_RST_URL}/{resource['parsing_table']}?{query_string}") as res:
+async def get_resource_data(session: ClientSession, resource: dict, sql_query: str):
+    headers = {"Prefer": "count=exact"}
+    url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
+    async with session.get(url, headers=headers) as res:
         if not res.ok:
-            raise QueryException(res.status, await res.json())
-        async for chunk in res.content.iter_chunked(1024):
-            yield chunk
+            handle_exception(
+                res.status, "Database error", await res.json(), resource.get('id')
+            )
+        record = await res.json()
+        total = process_total(res.headers.get("Content-Range"))
+        return record, total
