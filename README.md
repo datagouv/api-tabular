@@ -1,4 +1,4 @@
-# udata-hydra-csvapi
+# Api-tabular
 
 This connects to [udata-hydra](https://github.com/etalab/udata-hydra) and serves the converted CSVs as an API.
 

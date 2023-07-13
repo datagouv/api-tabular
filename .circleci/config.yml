@@ -11,7 +11,7 @@ parameters:
     default: "3.9.15"
   python-module:
     type: string
-    default: "udata_hydra_csvapi"
+    default: "api_tabular"
   publish-branch:
     type: string
     default: "master"
