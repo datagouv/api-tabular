@@ -5,7 +5,7 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from udata_hydra_csvapi import config
-from udata_hydra_csvapi.query import get_resource, get_resource_data
+from udata_hydra_csvapi.query import get_resource, get_resource_data, get_resource_data_streamed
 from udata_hydra_csvapi.utils import build_sql_query_string, build_link_with_page
 from udata_hydra_csvapi.error import QueryException
 
@@ -91,6 +91,31 @@ async def resource_data(request):
         "meta": {"page": page, "page_size": page_size, "total": total},
     }
     return web.json_response(body)
+
+
+@routes.get(r"/api/resources/{rid}/data/csv/")
+async def resource_data_csv(request):
+    resource_id = request.match_info["rid"]
+    query_string = request.query_string.split("&") if request.query_string else []
+
+    try:
+        sql_query = build_sql_query_string(query_string)
+    except ValueError:
+        raise QueryException(400, None, "Invalid query string", "Malformed query")
+
+    resource = await get_resource(
+        request.app["csession"], resource_id, ["parsing_table"]
+    )
+
+    response = web.StreamResponse()
+    response.content_type = "text/csv"
+    await response.prepare(request)
+
+    async for chunk in get_resource_data_streamed(request.app["csession"], resource, sql_query):
+        await response.write(chunk)
+
+    await response.write_eof()
+    return response
 
 
 async def app_factory():
