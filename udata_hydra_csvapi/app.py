@@ -5,7 +5,11 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from udata_hydra_csvapi import config
-from udata_hydra_csvapi.query import get_resource, get_resource_data, get_resource_data_streamed
+from udata_hydra_csvapi.query import (
+    get_resource,
+    get_resource_data,
+    get_resource_data_streamed,
+)
 from udata_hydra_csvapi.utils import build_sql_query_string, build_link_with_page
 from udata_hydra_csvapi.error import QueryException
 
@@ -61,7 +65,9 @@ async def resource_data(request):
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
     if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(400, None, "Invalid query string", "Page size exceeds allowed maximum")
+        raise QueryException(
+            400, None, "Invalid query string", "Page size exceeds allowed maximum"
+        )
     if page > 1:
         offset = page_size * (page - 1)
     else:
@@ -111,7 +117,9 @@ async def resource_data_csv(request):
     response.content_type = "text/csv"
     await response.prepare(request)
 
-    async for chunk in get_resource_data_streamed(request.app["csession"], resource, sql_query):
+    async for chunk in get_resource_data_streamed(
+        request.app["csession"], resource, sql_query
+    ):
         await response.write(chunk)
 
     await response.write_eof()

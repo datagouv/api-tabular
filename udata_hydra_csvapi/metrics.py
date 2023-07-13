@@ -5,7 +5,11 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from udata_hydra_csvapi import config
-from udata_hydra_csvapi.utils import build_sql_query_string, build_link_with_page, process_total
+from udata_hydra_csvapi.utils import (
+    build_sql_query_string,
+    build_link_with_page,
+    process_total,
+)
 from udata_hydra_csvapi.error import QueryException, handle_exception
 
 routes = web.RouteTableDef()
@@ -22,9 +26,7 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
-            handle_exception(
-                res.status, "Database error", await res.json(), None
-            )
+            handle_exception(res.status, "Database error", await res.json(), None)
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))
         return record, total
@@ -35,9 +37,7 @@ async def get_object_data_streamed(session: ClientSession, model: str, sql_query
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
-            handle_exception(
-                res.status, "Database error", await res.json(), None
-            )
+            handle_exception(res.status, "Database error", await res.json(), None)
         async for chunk in res.content.iter_chunked(1024):
             yield chunk
 
@@ -50,7 +50,9 @@ async def metrics_data(request):
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
     if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(400, None, "Invalid query string", "Page size exceeds allowed maximum")
+        raise QueryException(
+            400, None, "Invalid query string", "Page size exceeds allowed maximum"
+        )
     if page > 1:
         offset = page_size * (page - 1)
     else:
@@ -61,9 +63,7 @@ async def metrics_data(request):
     except ValueError:
         raise QueryException(400, None, "Invalid query string", "Malformed query")
 
-    response, total = await get_object_data(
-        request.app["csession"], model, sql_query
-    )
+    response, total = await get_object_data(request.app["csession"], model, sql_query)
 
     next = build_link_with_page(request.path, query_string, page + 1, page_size)
     prev = build_link_with_page(request.path, query_string, page - 1, page_size)
@@ -92,7 +92,9 @@ async def metrics_data_csv(request):
     response.content_type = "text/csv"
     await response.prepare(request)
 
-    async for chunk in get_object_data_streamed(request.app["csession"], model, sql_query):
+    async for chunk in get_object_data_streamed(
+        request.app["csession"], model, sql_query
+    ):
         await response.write(chunk)
 
     return response

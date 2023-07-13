@@ -19,6 +19,22 @@ def test_query_build_sort_asc():
     assert result == "order=column_name.asc&limit=50"
 
 
+def test_query_build_sort_asc_without_limit():
+    query_str = ["column_name__sort=asc"]
+    result = build_sql_query_string(query_str)
+    assert result == "order=column_name.asc"
+
+
+def test_query_build_sort_asc_with_page_in_query():
+    query_str = [
+        "column_name__sort=asc",
+        "page=2",
+        "page_size=20",
+    ]
+    result = build_sql_query_string(query_str)
+    assert result == "order=column_name.asc"
+
+
 def test_query_build_sort_desc():
     query_str = ["column_name__sort=desc"]
     result = build_sql_query_string(query_str, 50)

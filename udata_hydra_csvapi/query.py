@@ -22,20 +22,22 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(
-                res.status, "Database error", await res.json(), resource.get('id')
+                res.status, "Database error", await res.json(), resource.get("id")
             )
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))
         return record, total
 
 
-async def get_resource_data_streamed(session: ClientSession, resource: dict, sql_query: str):
+async def get_resource_data_streamed(
+    session: ClientSession, resource: dict, sql_query: str
+):
     headers = {"Accept": "text/csv"}
     url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(
-                res.status, "Database error", await res.json(), resource.get('id')
+                res.status, "Database error", await res.json(), resource.get("id")
             )
         async for chunk in res.content.iter_chunked(1024):
             yield chunk
