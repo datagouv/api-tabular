@@ -18,7 +18,7 @@ Now you can launch the proxy (ie the app):
 
 ```
 poetry install
-poetry run adev runserver -p8005 udata_hydra_csvapi/app.py
+poetry run adev runserver -p8005 api_tabular/app.py
 ```
 
 And query postgrest via the proxy using a `resource_id`, cf below. Test resource_id is `27d469ff-9908-4b7e-a2e0-9439bb38a395`
