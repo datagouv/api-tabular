@@ -113,8 +113,11 @@ async def resource_data_csv(request):
         request.app["csession"], resource_id, ["parsing_table"]
     )
 
-    response = web.StreamResponse()
-    response.content_type = "text/csv"
+    response_headers = {
+        'Content-Disposition': f'attachment; filename="{resource_id}.csv"',
+        'Content-Type': 'text/csv',
+    }
+    response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
 
     async for chunk in get_resource_data_streamed(

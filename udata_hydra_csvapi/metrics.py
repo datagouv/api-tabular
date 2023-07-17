@@ -88,8 +88,11 @@ async def metrics_data_csv(request):
     except ValueError:
         raise QueryException(400, None, "Invalid query string", "Malformed query")
 
-    response = web.StreamResponse()
-    response.content_type = "text/csv"
+    response_headers = {
+        'Content-Disposition': f'attachment; filename="{model}.csv"',
+        'Content-Type': 'text/csv',
+    }
+    response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
 
     async for chunk in get_object_data_streamed(
