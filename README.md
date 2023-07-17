@@ -1,4 +1,4 @@
-# udata-hydra-csvapi
+# Api-tabular
 
 This connects to [udata-hydra](https://github.com/etalab/udata-hydra) and serves the converted CSVs as an API.
 
@@ -18,7 +18,8 @@ Now you can launch the proxy (ie the app):
 
 ```
 poetry install
-poetry run adev runserver -p8005 udata_hydra_csvapi/app.py
+poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
+poetry run adev runserver -p8005 api_tabular/metrics.py    # Api related to udata's metrics
 ```
 
 And query postgrest via the proxy using a `resource_id`, cf below. Test resource_id is `27d469ff-9908-4b7e-a2e0-9439bb38a395`

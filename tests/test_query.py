@@ -1,4 +1,4 @@
-from udata_hydra_csvapi.utils import build_sql_query_string
+from api_tabular.utils import build_sql_query_string
 
 
 def test_query_build_limit():

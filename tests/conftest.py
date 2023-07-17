@@ -6,8 +6,8 @@ import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
 
-from udata_hydra_csvapi import config
-from udata_hydra_csvapi.app import app_factory
+from api_tabular import config
+from api_tabular.app import app_factory
 
 PG_RST_URL = "https://example.com"
 RESOURCE_ID = "60963939-6ada-46bc-9a29-b288b16d969b"
