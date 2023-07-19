@@ -4,13 +4,9 @@ import sentry_sdk
 from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
-from udata_hydra_csvapi import config
-from udata_hydra_csvapi.utils import (
-    build_sql_query_string,
-    build_link_with_page,
-    process_total,
-)
-from udata_hydra_csvapi.error import QueryException, handle_exception
+from api_tabular import config
+from api_tabular.utils import build_sql_query_string, build_link_with_page, process_total
+from api_tabular.error import QueryException, handle_exception
 
 routes = web.RouteTableDef()
 

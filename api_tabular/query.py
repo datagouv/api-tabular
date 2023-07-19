@@ -1,7 +1,7 @@
 from aiohttp import web, ClientSession
-from udata_hydra_csvapi import config
-from udata_hydra_csvapi.error import handle_exception
-from udata_hydra_csvapi.utils import process_total
+from api_tabular import config
+from api_tabular.error import handle_exception
+from api_tabular.utils import process_total
 
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list):

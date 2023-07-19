@@ -5,7 +5,7 @@ description = "API for CSV converted by udata-hydra"
 authors = ["Etalab <opendatateam@data.gouv.fr>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "udata_hydra_csvapi"}]
+packages = [{include = "api_tabular"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"

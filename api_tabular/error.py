@@ -1,7 +1,7 @@
 import json
 import sentry_sdk
 from aiohttp import web
-from udata_hydra_csvapi import config
+from api_tabular import config
 from typing import Union
 
 
