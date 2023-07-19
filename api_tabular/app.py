@@ -5,7 +5,7 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
-from api_tabular.query import get_resource, get_resource_data
+from api_tabular.query import get_resource, get_resource_data, get_resource_data_streamed
 from api_tabular.utils import build_sql_query_string, build_link_with_page
 from api_tabular.error import QueryException
 
