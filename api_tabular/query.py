@@ -30,9 +30,12 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
 
 
 async def get_resource_data_streamed(
-    session: ClientSession, resource: dict, sql_query: str
+    session: ClientSession,
+    resource: dict,
+    sql_query: str,
+    accept_format: str = "text/csv",
 ):
-    headers = {"Accept": "text/csv"}
+    headers = {"Accept": accept_format}
     url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:

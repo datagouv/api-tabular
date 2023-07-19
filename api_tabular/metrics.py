@@ -5,7 +5,11 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
-from api_tabular.utils import build_sql_query_string, build_link_with_page, process_total
+from api_tabular.utils import (
+    build_sql_query_string,
+    build_link_with_page,
+    process_total,
+)
 from api_tabular.error import QueryException, handle_exception
 
 routes = web.RouteTableDef()
@@ -28,8 +32,10 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
         return record, total
 
 
-async def get_object_data_streamed(session: ClientSession, model: str, sql_query: str):
-    headers = {"Accept": "text/csv"}
+async def get_object_data_streamed(
+    session: ClientSession, model: str, sql_query: str, accept_format: str = "text/csv"
+):
+    headers = {"Accept": accept_format}
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
@@ -85,8 +91,8 @@ async def metrics_data_csv(request):
         raise QueryException(400, None, "Invalid query string", "Malformed query")
 
     response_headers = {
-        'Content-Disposition': f'attachment; filename="{model}.csv"',
-        'Content-Type': 'text/csv',
+        "Content-Disposition": f'attachment; filename="{model}.csv"',
+        "Content-Type": "text/csv",
     }
     response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
