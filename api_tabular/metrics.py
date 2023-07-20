@@ -5,7 +5,11 @@ from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
-from api_tabular.utils import build_sql_query_string, build_link_with_page, process_total
+from api_tabular.utils import (
+    build_sql_query_string,
+    build_link_with_page,
+    process_total,
+)
 from api_tabular.error import QueryException, handle_exception
 
 routes = web.RouteTableDef()
@@ -22,23 +26,35 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
-            handle_exception(
-                res.status, "Database error", await res.json(), None
-            )
+            handle_exception(res.status, "Database error", await res.json(), None)
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))
         return record, total
 
 
+async def get_object_data_streamed(
+    session: ClientSession, model: str, sql_query: str, accept_format: str = "text/csv"
+):
+    headers = {"Accept": accept_format}
+    url = f"{config.PG_RST_URL}/{model}?{sql_query}"
+    async with session.get(url, headers=headers) as res:
+        if not res.ok:
+            handle_exception(res.status, "Database error", await res.json(), None)
+        async for chunk in res.content.iter_chunked(1024):
+            yield chunk
+
+
 @routes.get(r"/api/{model}/data/")
-async def resource_data(request):
+async def metrics_data(request):
     model = request.match_info["model"]
     query_string = request.query_string.split("&") if request.query_string else []
     page = int(request.query.get("page", "1"))
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
     if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(400, None, "Invalid query string", "Page size exceeds allowed maximum")
+        raise QueryException(
+            400, None, "Invalid query string", "Page size exceeds allowed maximum"
+        )
     if page > 1:
         offset = page_size * (page - 1)
     else:
@@ -49,9 +65,7 @@ async def resource_data(request):
     except ValueError:
         raise QueryException(400, None, "Invalid query string", "Malformed query")
 
-    response, total = await get_object_data(
-        request.app["csession"], model, sql_query
-    )
+    response, total = await get_object_data(request.app["csession"], model, sql_query)
 
     next = build_link_with_page(request.path, query_string, page + 1, page_size)
     prev = build_link_with_page(request.path, query_string, page - 1, page_size)
@@ -64,6 +78,31 @@ async def resource_data(request):
         "meta": {"page": page, "page_size": page_size, "total": total},
     }
     return web.json_response(body)
+
+
+@routes.get(r"/api/{model}/data/csv/")
+async def metrics_data_csv(request):
+    model = request.match_info["model"]
+    query_string = request.query_string.split("&") if request.query_string else []
+
+    try:
+        sql_query = build_sql_query_string(query_string)
+    except ValueError:
+        raise QueryException(400, None, "Invalid query string", "Malformed query")
+
+    response_headers = {
+        "Content-Disposition": f'attachment; filename="{model}.csv"',
+        "Content-Type": "text/csv",
+    }
+    response = web.StreamResponse(headers=response_headers)
+    await response.prepare(request)
+
+    async for chunk in get_object_data_streamed(
+        request.app["csession"], model, sql_query
+    ):
+        await response.write(chunk)
+
+    return response
 
 
 async def app_factory():

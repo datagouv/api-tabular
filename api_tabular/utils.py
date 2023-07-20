@@ -1,4 +1,6 @@
-def build_sql_query_string(request_arg: list, page_size: int, offset: int = 0) -> str:
+def build_sql_query_string(
+    request_arg: list, page_size: int = None, offset: int = 0
+) -> str:
     sql_query = []
     for arg in request_arg:
         argument, value = arg.split("=")
@@ -18,7 +20,8 @@ def build_sql_query_string(request_arg: list, page_size: int, offset: int = 0) -
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
                 sql_query.append(f"{column}=gte.{value}")
-    sql_query.append(f"limit={page_size}")
+    if page_size:
+        sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")
     return "&".join(sql_query)
