@@ -10,7 +10,7 @@ from api_tabular.query import (
     get_resource_data,
     get_resource_data_streamed,
 )
-from api_tabular.utils import build_sql_query_string, build_link_with_page
+from api_tabular.utils import build_sql_query_string, build_link_with_page, url_for
 from api_tabular.error import QueryException
 
 routes = web.RouteTableDef()
@@ -22,7 +22,7 @@ sentry_sdk.init(
 )
 
 
-@routes.get(r"/api/resources/{rid}/")
+@routes.get(r"/api/resources/{rid}/", name="meta")
 async def resource_meta(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(
@@ -34,12 +34,12 @@ async def resource_meta(request):
             "url": resource["url"],
             "links": [
                 {
-                    "href": f"/api/resources/{resource_id}/profile/",
+                    "href": url_for(request, 'profile', rid=resource_id, _external=True),
                     "type": "GET",
                     "rel": "profile",
                 },
                 {
-                    "href": f"/api/resources/{resource_id}/data/",
+                    "href": url_for(request, 'data', rid=resource_id, _external=True),
                     "type": "GET",
                     "rel": "data",
                 },
@@ -48,7 +48,7 @@ async def resource_meta(request):
     )
 
 
-@routes.get(r"/api/resources/{rid}/profile/")
+@routes.get(r"/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(
@@ -57,7 +57,7 @@ async def resource_profile(request):
     return web.json_response(resource)
 
 
-@routes.get(r"/api/resources/{rid}/data/")
+@routes.get(r"/api/resources/{rid}/data/", name="data")
 async def resource_data(request):
     resource_id = request.match_info["rid"]
     query_string = request.query_string.split("&") if request.query_string else []
@@ -90,7 +90,7 @@ async def resource_data(request):
     body = {
         "data": response,
         "links": {
-            "profile": f"/api/resources/{resource_id}/profile/",
+            "profile": url_for(request, 'profile', rid=resource_id, _external=True),
             "next": next if page_size + offset < total else None,
             "prev": prev if page > 1 else None,
         },
@@ -99,7 +99,7 @@ async def resource_data(request):
     return web.json_response(body)
 
 
-@routes.get(r"/api/resources/{rid}/data/csv/")
+@routes.get(r"/api/resources/{rid}/data/csv/", name="csv")
 async def resource_data_csv(request):
     resource_id = request.match_info["rid"]
     query_string = request.query_string.split("&") if request.query_string else []
