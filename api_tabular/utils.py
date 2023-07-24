@@ -33,8 +33,8 @@ def process_total(raw_total: str) -> int:
     return int(str_total)
 
 
-def build_link_with_page(path, query_string, page, page_size):
+def build_link_with_page(request, query_string, page, page_size):
     q = [string for string in query_string if not string.startswith("page")]
     q.extend([f"page={page}", f"page_size={page_size}"])
     rebuilt_q = "&".join(q)
-    return f"{path}?{rebuilt_q}"
+    return f"{request.scheme}://{request.host}{request.path}?{rebuilt_q}"
