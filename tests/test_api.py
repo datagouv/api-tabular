@@ -225,7 +225,8 @@ async def test_api_pagination(client, rmock):
     body = {
         "data": [{"such": "data"}],
         "links": {
-            "next": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1",
+            "next": f"http://127.0.0.1:{client.port}"
+                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1",
             "prev": None,
             "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
         },
@@ -246,7 +247,8 @@ async def test_api_pagination(client, rmock):
         "data": [{"such": "data"}],
         "links": {
             "next": None,
-            "prev": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1",
+            "prev": f"http://127.0.0.1:{client.port}"
+                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1",
             "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
         },
         "meta": {"page": 2, "page_size": 1, "total": 2},
