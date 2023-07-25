@@ -1,3 +1,6 @@
+from aiohttp.web_request import Request
+
+
 def build_sql_query_string(
     request_arg: list, page_size: int = None, offset: int = 0
 ) -> str:
@@ -33,8 +36,15 @@ def process_total(raw_total: str) -> int:
     return int(str_total)
 
 
-def build_link_with_page(path, query_string, page, page_size):
+def build_link_with_page(request: Request, query_string: str, page: int, page_size: int):
     q = [string for string in query_string if not string.startswith("page")]
     q.extend([f"page={page}", f"page_size={page_size}"])
     rebuilt_q = "&".join(q)
-    return f"{path}?{rebuilt_q}"
+    return f"{request.scheme}://{request.host}{request.path}?{rebuilt_q}"
+
+
+def url_for(request: Request, route: str, *args, **kwargs):
+    router = request.app.router
+    if kwargs.pop("_external", None):
+        return f"{request.scheme}://{request.host}{router[route].url_for(**kwargs)}"
+    return router[route].url_for(**kwargs)

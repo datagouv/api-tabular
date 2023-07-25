@@ -67,8 +67,8 @@ async def metrics_data(request):
 
     response, total = await get_object_data(request.app["csession"], model, sql_query)
 
-    next = build_link_with_page(request.path, query_string, page + 1, page_size)
-    prev = build_link_with_page(request.path, query_string, page - 1, page_size)
+    next = build_link_with_page(request, query_string, page + 1, page_size)
+    prev = build_link_with_page(request, query_string, page - 1, page_size)
     body = {
         "data": response,
         "links": {
