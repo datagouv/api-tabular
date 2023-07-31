@@ -10,6 +10,7 @@ packages = [{include = "api_tabular"}]
 [tool.poetry.dependencies]
 python = "^3.9"
 aiohttp = "^3.8.4"
+aiohttp-cors = "0.7.0"
 toml = "^0.10.2"
 sentry-sdk = "^1.25.1"
 

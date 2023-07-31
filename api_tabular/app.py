@@ -1,5 +1,6 @@
 import os
 import sentry_sdk
+import aiohttp_cors
 
 from aiohttp import web, ClientSession
 
@@ -140,6 +141,19 @@ async def app_factory():
     app.add_routes(routes)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
+
+    cors = aiohttp_cors.setup(
+        app,
+        defaults={
+            "*": aiohttp_cors.ResourceOptions(
+                    allow_credentials=True,
+                    expose_headers="*",
+                    allow_headers="*"
+                )
+        }
+    )
+    for route in list(app.router.routes()):
+        cors.add(route)
     return app
 
 
