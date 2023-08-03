@@ -33,7 +33,7 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
 
 
 async def get_object_data_streamed(
-    session: ClientSession, model: str, sql_query: str, accept_format: str = "text/csv", batch_size: int = 20000
+    session: ClientSession, model: str, sql_query: str, accept_format: str = "text/csv", batch_size: int = config.BATCH_SIZE
 ):
     headers = {"Accept": accept_format, "Prefer": "count=exact"}
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
