@@ -34,15 +34,24 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
 
 
 async def get_object_data_streamed(
-    session: ClientSession, model: str, sql_query: str, accept_format: str = "text/csv"
+    session: ClientSession,
+    model: str,
+    sql_query: str,
+    accept_format: str = "text/csv",
+    batch_size: int = config.BATCH_SIZE,
 ):
-    headers = {"Accept": accept_format}
+    headers = {"Accept": accept_format, "Prefer": "count=exact"}
     url = f"{config.PG_RST_URL}/{model}?{sql_query}"
-    async with session.get(url, headers=headers) as res:
-        if not res.ok:
-            handle_exception(res.status, "Database error", await res.json(), None)
-        async for chunk in res.content.iter_chunked(1024):
-            yield chunk
+    res = await session.head(f"{url}&limit=1&", headers=headers)
+    total = process_total(res.headers.get("Content-Range"))
+    for i in range(0, total, batch_size):
+        async with session.get(
+            url=f"{url}&limit={batch_size}&offset={i}", headers=headers
+        ) as res:
+            if not res.ok:
+                handle_exception(res.status, "Database error", await res.json(), None)
+            async for chunk in res.content.iter_chunked(1024):
+                yield chunk
 
 
 @routes.get(r"/api/{model}/data/")

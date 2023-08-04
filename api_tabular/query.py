@@ -31,16 +31,20 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
 
 async def get_resource_data_streamed(
     session: ClientSession,
-    resource: dict,
+    model: str,
     sql_query: str,
     accept_format: str = "text/csv",
+    batch_size: int = config.BATCH_SIZE,
 ):
-    headers = {"Accept": accept_format}
-    url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
-    async with session.get(url, headers=headers) as res:
-        if not res.ok:
-            handle_exception(
-                res.status, "Database error", await res.json(), resource.get("id")
-            )
-        async for chunk in res.content.iter_chunked(1024):
-            yield chunk
+    headers = {"Accept": accept_format, "Prefer": "count=exact"}
+    url = f"{config.PG_RST_URL}/{model}?{sql_query}"
+    res = await session.head(f"{url}&limit=1&", headers=headers)
+    total = process_total(res.headers.get("Content-Range"))
+    for i in range(0, total, batch_size):
+        async with session.get(
+            url=f"{url}&limit={batch_size}&offset={i}", headers=headers
+        ) as res:
+            if not res.ok:
+                handle_exception(res.status, "Database error", await res.json(), None)
+            async for chunk in res.content.iter_chunked(1024):
+                yield chunk
