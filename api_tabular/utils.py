@@ -10,12 +10,16 @@ def build_sql_query_string(
         if "__" in argument:
             column, comparator = argument.split("__")
             normalized_comparator = comparator.lower()
+
             if normalized_comparator == "sort":
                 if value == "asc":
-                    sql_query.append(f"order={column}.asc")
+                    sql_query.append(f"order=__id.asc,{column}.asc")
                 elif value == "desc":
-                    sql_query.append(f"order={column}.desc")
-            elif normalized_comparator == "exact":
+                    sql_query.append(f"order=__id.asc,{column}.desc")
+            else:
+                sql_query.append(f"order=__id.asc")
+
+            if normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
             elif normalized_comparator == "contains":
                 sql_query.append(f"{column}=ilike.*{value}*")
