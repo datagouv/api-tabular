@@ -31,7 +31,7 @@ def build_sql_query_string(
     if offset >= 1:
         sql_query.append(f"offset={offset}")
     if not sorted:
-        sql_query.append(f"order=__id.asc")
+        sql_query.append("order=__id.asc")
     return "&".join(sql_query)
 
 
