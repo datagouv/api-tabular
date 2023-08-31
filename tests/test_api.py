@@ -53,9 +53,9 @@ async def test_api_resource_profile_not_found(client, mock_get_resource_empty):
 
 
 async def test_api_resource_data(client, rmock):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?limit=20",
+        f"{PG_RST_URL}/xxx?limit=20&order=__id.asc",
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
     )
@@ -75,9 +75,9 @@ async def test_api_resource_data(client, rmock):
 
 async def test_api_resource_data_with_args(client, rmock):
     args = "page=1"
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?limit=20",
+        f"{PG_RST_URL}/xxx?limit=20&order=__id.asc",
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
     )
@@ -97,9 +97,9 @@ async def test_api_resource_data_with_args(client, rmock):
 
 async def test_api_resource_data_with_args_case(client, rmock):
     args = "COLUM_NAME__EXACT=BIDULE&page=1"
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?COLUM_NAME=eq.BIDULE&limit=20",
+        f"{PG_RST_URL}/xxx?COLUM_NAME=eq.BIDULE&limit=20&order=__id.asc",
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
     )
@@ -119,7 +119,7 @@ async def test_api_resource_data_with_args_case(client, rmock):
 
 async def test_api_resource_data_with_args_error(client, rmock):
     args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
@@ -135,7 +135,7 @@ async def test_api_resource_data_with_args_error(client, rmock):
 
 async def test_api_resource_data_with_page_size_error(client, rmock):
     args = "page=1&page_size=100"
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
@@ -155,8 +155,8 @@ async def test_api_resource_data_not_found(client, mock_get_resource_empty):
 
 
 async def test_api_resource_data_table_error(client, rmock):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
-    rmock.get(f"{PG_RST_URL}/xxx?limit=20", status=502, payload={"such": "error"})
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(f"{PG_RST_URL}/xxx?limit=20&order=__id.asc", status=502, payload={"such": "error"})
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 502
     assert await res.json() == {
@@ -167,9 +167,9 @@ async def test_api_resource_data_table_error(client, rmock):
 
 
 async def test_api_percent_encoding_arabic(client, rmock):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?%D9%85%D9%88%D8%A7%D8%B1%D8%AF=eq.%D9%85%D9%88%D8%A7%D8%B1%D8%AF&limit=20",
+        f"{PG_RST_URL}/xxx?%D9%85%D9%88%D8%A7%D8%B1%D8%AF=eq.%D9%85%D9%88%D8%A7%D8%B1%D8%AF&limit=20&order=__id.asc",
         status=200,
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
@@ -191,9 +191,9 @@ async def test_api_percent_encoding_arabic(client, rmock):
 
 
 async def test_api_with_unsupported_args(client, rmock):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?limit=20",
+        f"{PG_RST_URL}/xxx?limit=20&order=__id.asc",
         status=200,
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
@@ -213,9 +213,9 @@ async def test_api_with_unsupported_args(client, rmock):
 
 
 async def test_api_pagination(client, rmock):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?limit=1",
+        f"{PG_RST_URL}/xxx?limit=1&order=__id.asc",
         status=200,
         payload=[{"such": "data"}],
         headers={"Content-Range": "0-2/2"},
@@ -234,9 +234,9 @@ async def test_api_pagination(client, rmock):
     }
     assert await res.json() == body
 
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"id": "test-id", "parsing_table": "xxx"}])
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PG_RST_URL}/xxx?limit=1&offset=1",
+        f"{PG_RST_URL}/xxx?limit=1&offset=1&order=__id.asc",
         status=200,
         payload=[{"such": "data"}],
         headers={"Content-Range": "0-2/2"},

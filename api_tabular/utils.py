@@ -5,16 +5,19 @@ def build_sql_query_string(
     request_arg: list, page_size: int = None, offset: int = 0
 ) -> str:
     sql_query = []
+    sorted = False
     for arg in request_arg:
         argument, value = arg.split("=")
         if "__" in argument:
             column, comparator = argument.split("__")
             normalized_comparator = comparator.lower()
+
             if normalized_comparator == "sort":
                 if value == "asc":
-                    sql_query.append(f"order={column}.asc")
+                    sql_query.append(f"order={column}.asc,__id.asc")
                 elif value == "desc":
-                    sql_query.append(f"order={column}.desc")
+                    sql_query.append(f"order={column}.desc,__id.asc")
+                sorted = True
             elif normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
             elif normalized_comparator == "contains":
@@ -27,6 +30,8 @@ def build_sql_query_string(
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")
+    if not sorted:
+        sql_query.append("order=__id.asc")
     return "&".join(sql_query)
 
 
