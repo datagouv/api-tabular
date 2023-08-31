@@ -16,13 +16,13 @@ def test_query_build_offset():
 def test_query_build_sort_asc():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == "order=__id.asc,column_name.asc&limit=50"
+    assert result == "order=column_name.asc,__id.asc&limit=50"
 
 
 def test_query_build_sort_asc_without_limit():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str)
-    assert result == "order=__id.asc,column_name.asc"
+    assert result == "order=column_name.asc,__id.asc"
 
 
 def test_query_build_sort_asc_with_page_in_query():
@@ -32,13 +32,13 @@ def test_query_build_sort_asc_with_page_in_query():
         "page_size=20",
     ]
     result = build_sql_query_string(query_str)
-    assert result == "order=__id.asc,column_name.asc"
+    assert result == "order=column_name.asc,__id.asc"
 
 
 def test_query_build_sort_desc():
     query_str = ["column_name__sort=desc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == "order=__id.asc,column_name.desc&limit=50"
+    assert result == "order=column_name.desc,__id.asc&limit=50"
 
 
 def test_query_build_exact():
