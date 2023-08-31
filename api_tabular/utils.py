@@ -14,9 +14,9 @@ def build_sql_query_string(
 
             if normalized_comparator == "sort":
                 if value == "asc":
-                    sql_query.append(f"order=__id.asc,{column}.asc")
+                    sql_query.append(f"order={column}.asc,__id.asc")
                 elif value == "desc":
-                    sql_query.append(f"order=__id.asc,{column}.desc")
+                    sql_query.append(f"order={column}.desc,__id.asc")
                 sorted = True
             elif normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
