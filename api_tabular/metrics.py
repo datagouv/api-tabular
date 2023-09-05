@@ -52,6 +52,7 @@ async def get_object_data_streamed(
                 handle_exception(res.status, "Database error", await res.json(), None)
             async for chunk in res.content.iter_chunked(1024):
                 yield chunk
+                yield b'\n'
 
 
 @routes.get(r"/api/{model}/data/")
