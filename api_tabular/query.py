@@ -26,7 +26,6 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
             )
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))
-        print(res.headers)
         return record, total
 
 
