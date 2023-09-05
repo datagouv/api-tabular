@@ -19,9 +19,6 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list):
 async def get_resource_data(session: ClientSession, resource: dict, sql_query: str):
     headers = {"Prefer": "count=exact"}
     url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
-    print('---------------------------------')
-    print(url)
-    print('---------------------------------')
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(
