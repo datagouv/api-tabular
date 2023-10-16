@@ -17,8 +17,8 @@ class Configurator:
     def configure(self):
         # load default settings
         configuration = toml.load(Path(__file__).parent / "config_default.toml")
-        if "POSTGREST_ENDPOINT" in os.environ:
-            configuration["PG_RST_URL"] = f"http://{os.getenv('POSTGREST_ENDPOINT')}"
+        if "PGREST_ENDPOINT" in os.environ:
+            configuration["PG_RST_URL"] = f"http://{os.getenv('PGREST_ENDPOINT')}"
 
         configuration["PG_RST_URL"]
         # override with local settings
