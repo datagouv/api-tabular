@@ -116,6 +116,11 @@ async def metrics_data_csv(request):
     return response
 
 
+@routes.get(r"/health/")
+async def get_health(request):
+    return web.Response(status=200)
+
+
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
