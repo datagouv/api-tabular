@@ -132,7 +132,7 @@ async def resource_data_csv(request):
 
 @routes.get(r"/health/")
 async def get_health(request):
-    return web.Response(status=200)
+    return web.HTTPOk()
 
 
 async def app_factory():
