@@ -72,3 +72,6 @@ Procfile
 
 # PyCharm
 .idea
+
+# Config
+config.toml

@@ -1,5 +1,6 @@
 PG_RST_URL = "http://localhost:8080"
-SERVER_NAME = 'http://localhost:8005'
+SERVER_NAME = 'localhost:8005'
+SCHEME = 'http'
 SENTRY_DSN = ""
 PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 50
