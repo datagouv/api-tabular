@@ -1,5 +1,7 @@
 import pytest
 
+from api_tabular.utils import external_url
+
 from .conftest import RESOURCE_ID, DATE, PG_RST_URL, TABLES_INDEX_PATTERN
 
 pytestmark = pytest.mark.asyncio
@@ -22,12 +24,12 @@ async def test_api_resource_meta(client, rmock):
         "url": "https://example.com",
         "links": [
             {
-                "href": f"http://127.0.0.1:{client.port}/api/resources/{RESOURCE_ID}/profile/",
+                "href": external_url(f"/api/resources/{RESOURCE_ID}/profile/"),
                 "type": "GET",
                 "rel": "profile",
             },
             {
-                "href": f"http://127.0.0.1:{client.port}/api/resources/{RESOURCE_ID}/data/",
+                "href": external_url(f"/api/resources/{RESOURCE_ID}/data/"),
                 "type": "GET",
                 "rel": "data",
             },
@@ -66,7 +68,7 @@ async def test_api_resource_data(client, rmock):
         "links": {
             "next": None,
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -88,7 +90,7 @@ async def test_api_resource_data_with_args(client, rmock):
         "links": {
             "next": None,
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -110,7 +112,7 @@ async def test_api_resource_data_with_args_case(client, rmock):
         "links": {
             "next": None,
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -183,7 +185,7 @@ async def test_api_percent_encoding_arabic(client, rmock):
         "links": {
             "next": None,
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -205,7 +207,7 @@ async def test_api_with_unsupported_args(client, rmock):
         "links": {
             "next": None,
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -225,10 +227,10 @@ async def test_api_pagination(client, rmock):
     body = {
         "data": [{"such": "data"}],
         "links": {
-            "next": f"http://127.0.0.1:{client.port}"
-                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1",
+            "next": external_url(
+                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1"),
             "prev": None,
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 1, "page_size": 1, "total": 2},
     }
@@ -247,9 +249,9 @@ async def test_api_pagination(client, rmock):
         "data": [{"such": "data"}],
         "links": {
             "next": None,
-            "prev": f"http://127.0.0.1:{client.port}"
-                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1",
-            "profile": f"http://127.0.0.1:{client.port}/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+            "prev": external_url(
+                    "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1"),
+            "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
         },
         "meta": {"page": 2, "page_size": 1, "total": 2},
     }
