@@ -130,6 +130,11 @@ async def resource_data_csv(request):
     return response
 
 
+@routes.get(r"/health/")
+async def get_health(request):
+    return web.HTTPOk()
+
+
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
