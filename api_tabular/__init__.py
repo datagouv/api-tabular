@@ -17,14 +17,20 @@ class Configurator:
     def configure(self):
         # load default settings
         configuration = toml.load(Path(__file__).parent / "config_default.toml")
-        if "PGREST_ENDPOINT" in os.environ:
-            configuration["PG_RST_URL"] = f"http://{os.getenv('PGREST_ENDPOINT')}"
 
-        configuration["PG_RST_URL"]
         # override with local settings
         local_settings = os.environ.get("CSVAPI_SETTINGS", Path.cwd() / "config.toml")
         if Path(local_settings).exists():
             configuration.update(toml.load(local_settings))
+
+        # override with os env settings
+        for config_key in configuration:
+            if config_key in os.environ:
+                configuration[config_key] = os.getenv(config_key)
+
+        # Make sure PGREST_ENDPOINT has a scheme
+        if not configuration["PGREST_ENDPOINT"].startswith("http"):
+            configuration["PGREST_ENDPOINT"] = f"http://{configuration['PGREST_ENDPOINT']}"
 
         self.configuration = configuration
         self.check()

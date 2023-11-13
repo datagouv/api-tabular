@@ -9,7 +9,7 @@ from aioresponses import aioresponses
 from api_tabular import config
 from api_tabular.app import app_factory
 
-PG_RST_URL = "https://example.com"
+PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "60963939-6ada-46bc-9a29-b288b16d969b"
 DATE = "2023-01-01T00:00:00.000000+00:00"
 TABLES_INDEX_PATTERN = re.compile(
@@ -19,7 +19,7 @@ TABLES_INDEX_PATTERN = re.compile(
 
 @pytest.fixture(autouse=True)
 def setup():
-    config.override(PG_RST_URL=PG_RST_URL)
+    config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
 
 
 @pytest.fixture(autouse=True)
