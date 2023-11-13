@@ -171,7 +171,7 @@ async def test_api_resource_data_table_error(client, rmock):
 async def test_api_percent_encoding_arabic(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
     rmock.get(
-        f"{PGREST_ENDPOINT}/xxx?%D9%85%D9%88%D8%A7%D8%B1%D8%AF=eq.%D9%85%D9%88%D8%A7%D8%B1%D8%AF&limit=20&order=__id.asc",
+        f"{PGREST_ENDPOINT}/xxx?%D9%85%D9%88%D8%A7%D8%B1%D8%AF=eq.%D9%85%D9%88%D8%A7%D8%B1%D8%AF&limit=20&order=__id.asc",  # noqa
         status=200,
         payload={"such": "data"},
         headers={"Content-Range": "0-10/10"},
