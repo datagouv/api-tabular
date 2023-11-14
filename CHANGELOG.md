@@ -4,3 +4,4 @@
 - Make URL in links absolute [#7](https://github.com/etalab/api-tabular/pull/7)
 - Add health route [#16](https://github.com/etalab/api-tabular/pull/16)
 - Add SERVER NAME and SCHEME config [#17](https://github.com/etalab/api-tabular/pull/17)
+- Override config with env [#18](https://github.com/etalab/api-tabular/pull/18)

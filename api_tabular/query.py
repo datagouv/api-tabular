@@ -6,7 +6,7 @@ from api_tabular.utils import process_total
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list):
     q = f"select={','.join(columns)}&resource_id=eq.{resource_id}&order=created_at.desc"
-    url = f"{config.PG_RST_URL}/tables_index?{q}"
+    url = f"{config.PGREST_ENDPOINT}/tables_index?{q}"
     async with session.get(url) as res:
         record = await res.json()
         if not res.ok:
@@ -18,7 +18,7 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list):
 
 async def get_resource_data(session: ClientSession, resource: dict, sql_query: str):
     headers = {"Prefer": "count=exact"}
-    url = f"{config.PG_RST_URL}/{resource['parsing_table']}?{sql_query}"
+    url = f"{config.PGREST_ENDPOINT}/{resource['parsing_table']}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(
@@ -36,7 +36,7 @@ async def get_resource_data_streamed(
     accept_format: str = "text/csv",
     batch_size: int = config.BATCH_SIZE,
 ):
-    url = f"{config.PG_RST_URL}/{model['parsing_table']}?{sql_query}"
+    url = f"{config.PGREST_ENDPOINT}/{model['parsing_table']}?{sql_query}"
     res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
     total = process_total(res.headers.get("Content-Range"))
     for i in range(0, total, batch_size):

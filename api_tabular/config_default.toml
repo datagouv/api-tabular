@@ -1,4 +1,4 @@
-PG_RST_URL = "http://localhost:8080"
+PGREST_ENDPOINT = "http://localhost:8080"
 SERVER_NAME = 'localhost:8005'
 SCHEME = 'http'
 SENTRY_DSN = ""

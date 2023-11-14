@@ -24,7 +24,7 @@ sentry_sdk.init(
 
 async def get_object_data(session: ClientSession, model: str, sql_query: str):
     headers = {"Prefer": "count=exact"}
-    url = f"{config.PG_RST_URL}/{model}?{sql_query}"
+    url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
             handle_exception(res.status, "Database error", await res.json(), None)
@@ -41,7 +41,7 @@ async def get_object_data_streamed(
     batch_size: int = config.BATCH_SIZE,
 ):
     headers = {"Accept": accept_format, "Prefer": "count=exact"}
-    url = f"{config.PG_RST_URL}/{model}?{sql_query}"
+    url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
     res = await session.head(f"{url}&limit=1&", headers=headers)
     total = process_total(res.headers.get("Content-Range"))
     for i in range(0, total, batch_size):
