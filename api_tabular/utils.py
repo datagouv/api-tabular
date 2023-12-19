@@ -59,3 +59,162 @@ def url_for(request: Request, route: str, *args, **kwargs):
     if kwargs.pop("_external", None):
         return external_url(router[route].url_for(**kwargs))
     return router[route].url_for(**kwargs)
+
+
+def swagger_parameters(resource_columns):
+    swagger_string = ''
+    for key, value in resource_columns.items():
+        swagger_string = swagger_string + f"""
+        - name: sort ascending {key}
+          in: query
+          required: false
+          description: {key}__sort=asc.
+          schema:
+            type: string
+        - name: sort descending {key}
+          in: query
+          required: false
+          description: {key}__sort=desc.
+          schema:
+            type: string"""
+        if value['python_type'] == 'string':
+            f"""
+        - name: exact {key}
+          in: query
+          required: false
+          description: {key}__exact=value.
+          schema:
+            type: string
+        - name: contains {key}
+          in: query
+          required: false
+          description: {key}__contains=value.
+          schema:
+            type: string"""
+        elif value['python_type'] == 'float':
+            f"""
+        - name: {key} less
+          in: query
+          required: false
+          description: {key}__less=value.
+          schema:
+            type: string
+        - name: {key} greater
+          in: query
+          required: false
+          description: {key}__greater=value.
+          schema:
+            type: string"""
+    return swagger_string
+
+
+def swagger_component(resource_columns):
+    component_string = """
+    components:
+      schemas:
+        Resource:
+          type: object
+          properties:"""
+    for key, value in resource_columns.items():
+        type = 'string'
+        if value['python_type'] == 'float':
+            type = 'integer'
+        component_string = component_string + f"""
+            {key}:
+              type: {type}"""
+    return component_string
+
+
+def build_swagger_file(resource_columns):
+    parameters = swagger_parameters(resource_columns)
+    components = swagger_component(resource_columns)
+    swagger_string = f"""
+    openapi: 3.0.3
+    info:
+      title: Resource data API
+      description: Retrieve data for a specified resource with optional filtering and sorting.
+      version: 1.0.0
+    tags:
+      - name: Data retrieval
+        description: Retrieve data for a specified resource
+    paths:
+      /api/resources/{{rid}}/data/:
+        get:
+          description: Returns resource data based on ID
+          summary: Find resource by ID
+          operationId: getResourceById
+          responses:
+            '200':
+              description: successful operation
+              content:
+                application/json:
+                  schema:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Resource'
+            '400':
+              description: Invalid query string
+            '404':
+              description: Resource not found
+        parameters:
+        - name: rid
+          in: path
+          description: ID of resource to return
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: Specific page.
+          schema:
+            type: string
+        - name: page_size
+          in: query
+          required: false
+          description: Number of results per page.
+          schema:
+            type: string{parameters}
+      /api/resources/{{rid}}/data/csv:
+        get:
+          description: Returns resource data based on ID as a CSV file
+          summary: Find resource by ID in CSV
+          operationId: getResourceByIdCSV
+          responses:
+            '200':
+              description: successful operation
+              content:
+                text/csv: {{}}
+            '400':
+              description: Invalid query string
+            '404':
+              description: Resource not found
+        parameters:
+        - name: rid
+          in: path
+          description: ID of resource to return
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          description: Specific page.
+          schema:
+            type: string
+        - name: page_size
+          in: query
+          required: false
+          description: Number of results per page.
+          schema:
+            type: string{parameters}
+      /health:
+        get:
+          description: Ping endpoint to ensure health of metrics service.
+          summary: Service's health endpoint
+          operationId: getMetricsHealth
+          responses:
+            '200':
+              description: successful operation
+    {components}"""
+    return swagger_string

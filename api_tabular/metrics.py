@@ -2,6 +2,7 @@ import os
 import sentry_sdk
 import aiohttp_cors
 
+from aiohttp_swagger import setup_swagger
 from aiohttp import web, ClientSession
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
@@ -57,6 +58,9 @@ async def get_object_data_streamed(
 
 @routes.get(r"/api/{model}/data/")
 async def metrics_data(request):
+    """
+    Retrieve metric data for a specified model with optional filtering and sorting.
+    """
     model = request.match_info["model"]
     query_string = request.query_string.split("&") if request.query_string else []
     page = int(request.query.get("page", "1"))
@@ -70,7 +74,6 @@ async def metrics_data(request):
         offset = page_size * (page - 1)
     else:
         offset = 0
-
     try:
         sql_query = build_sql_query_string(query_string, page_size, offset)
     except ValueError:
@@ -145,6 +148,9 @@ async def app_factory():
     )
     for route in list(app.router.routes()):
         cors.add(route)
+
+    setup_swagger(app, swagger_url="/api/doc", ui_version=3, swagger_from_file="metrics_swagger.yaml")
+
     return app
 
 

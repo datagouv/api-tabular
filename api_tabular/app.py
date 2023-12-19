@@ -11,7 +11,7 @@ from api_tabular.query import (
     get_resource_data,
     get_resource_data_streamed,
 )
-from api_tabular.utils import build_sql_query_string, build_link_with_page, url_for
+from api_tabular.utils import build_sql_query_string, build_link_with_page, url_for, build_swagger_file
 from api_tabular.error import QueryException
 
 routes = web.RouteTableDef()
@@ -56,6 +56,16 @@ async def resource_profile(request):
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
     return web.json_response(resource)
+
+
+@routes.get(r"/api/resources/{rid}/swagger/", name="swagger")
+async def resource_profile(request):
+    resource_id = request.match_info["rid"]
+    resource = await get_resource(
+        request.app["csession"], resource_id, ["profile:csv_detective"]
+    )
+    swagger_string = build_swagger_file(resource['profile']['columns'])
+    return web.Response(body=swagger_string)
 
 
 @routes.get(r"/api/resources/{rid}/data/", name="data")
