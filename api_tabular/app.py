@@ -59,12 +59,12 @@ async def resource_profile(request):
 
 
 @routes.get(r"/api/resources/{rid}/swagger/", name="swagger")
-async def resource_profile(request):
+async def resource_swagger(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
-    swagger_string = build_swagger_file(resource['profile']['columns'])
+    swagger_string = build_swagger_file(resource['profile']['columns'], resource_id)
     return web.Response(body=swagger_string)
 
 

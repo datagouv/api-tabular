@@ -1,3 +1,4 @@
+import yaml
 from aiohttp.web_request import Request
 
 from api_tabular import config
@@ -62,159 +63,260 @@ def url_for(request: Request, route: str, *args, **kwargs):
 
 
 def swagger_parameters(resource_columns):
-    swagger_string = ''
+    parameters_list = [
+        {
+            'name': 'rid',
+            'in': 'path',
+            'description': 'ID of resource to return',
+            'required': 'true',
+            'schema': {
+                'type': 'string'
+            }
+        },
+        {
+            'name': 'page',
+            'in': 'query',
+            'description': 'Specific page',
+            'required': 'false',
+            'schema': {
+                'type': 'string'
+            }
+        },
+        {
+            'name': 'page_size',
+            'in': 'query',
+            'description': 'Number of results per page',
+            'required': 'false',
+            'schema': {
+                'type': 'string'
+            }
+        }
+    ]
     for key, value in resource_columns.items():
-        swagger_string = swagger_string + f"""
-        - name: sort ascending {key}
-          in: query
-          required: false
-          description: {key}__sort=asc.
-          schema:
-            type: string
-        - name: sort descending {key}
-          in: query
-          required: false
-          description: {key}__sort=desc.
-          schema:
-            type: string"""
+        parameters_list.extend(
+            [
+                {
+                    'name': f'sort ascending {key}',
+                    'in': 'query',
+                    'description': f'{key}__sort=asc.',
+                    'required': 'false',
+                    'schema': {
+                        'type': 'string'
+                    }
+                },
+                {
+                    'name': f'sort descending {key}',
+                    'in': 'query',
+                    'description': f'{key}__sort=desc.',
+                    'required': 'false',
+                    'schema': {
+                        'type': 'string'
+                    }
+                }
+            ]
+        )
         if value['python_type'] == 'string':
-            f"""
-        - name: exact {key}
-          in: query
-          required: false
-          description: {key}__exact=value.
-          schema:
-            type: string
-        - name: contains {key}
-          in: query
-          required: false
-          description: {key}__contains=value.
-          schema:
-            type: string"""
+            parameters_list.extend(
+                [
+                    {
+                        'name': f'exact {key}',
+                        'in': 'query',
+                        'description': f'{key}__exact=value.',
+                        'required': 'false',
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                    {
+                        'name': f'contains {key}',
+                        'in': 'query',
+                        'description': f'{key}__contains=value.',
+                        'required': 'false',
+                        'schema': {
+                            'type': 'string'
+                        }
+                    }
+                ]
+            )
         elif value['python_type'] == 'float':
-            f"""
-        - name: {key} less
-          in: query
-          required: false
-          description: {key}__less=value.
-          schema:
-            type: string
-        - name: {key} greater
-          in: query
-          required: false
-          description: {key}__greater=value.
-          schema:
-            type: string"""
-    return swagger_string
+            parameters_list.extend(
+                [
+                    {
+                        'name': f'{key} less',
+                        'in': 'query',
+                        'description': f'{key}__less=value.',
+                        'required': 'false',
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                    {
+                        'name': f'{key} greater',
+                        'in': 'query',
+                        'description': f'{key}__greater=value.',
+                        'required': 'false',
+                        'schema': {
+                            'type': 'string'
+                        }
+                    }
+                ]
+            )
+    return parameters_list
 
 
 def swagger_component(resource_columns):
-    component_string = """
-    components:
-      schemas:
-        Resource:
-          type: object
-          properties:"""
+    resource_prop_dict = {}
     for key, value in resource_columns.items():
         type = 'string'
         if value['python_type'] == 'float':
             type = 'integer'
-        component_string = component_string + f"""
-            {key}:
-              type: {type}"""
-    return component_string
+        resource_prop_dict.update({
+            f'{key}': {
+                'type': f'{type}'
+            }
+        })
+    component_dict = {
+        'schemas': {
+            'ResourceProfile': {
+                'type': 'object',
+                'properties': {}
+            },
+            'ResourceData': {
+                'type': 'object',
+                'properties': {
+                    'data': {
+                        'type': 'array',
+                        'items': {
+                            '$ref': '#/components/schemas/Resource'
+                        }
+                    },
+                    'link': {
+                        'type': 'object',
+                        'properties': {
+                            'profile': {
+                                'description': 'Link to the profile endpoint of the resource',
+                                'type': 'string'
+                            },
+                            'next': {
+                                'description': 'Pagination link to the next page of the resource data',
+                                'type': 'string'
+                            },
+                            'prev': {
+                                'description': 'Pagination link to the previous page of the resource data',
+                                'type': 'string'
+                            }
+                        }
+                    }
+                }
+            },
+            'Resource': {
+                'type': 'object',
+                'properties': resource_prop_dict
+            }
+        }
+    }
+    return component_dict
 
 
-def build_swagger_file(resource_columns):
-    parameters = swagger_parameters(resource_columns)
-    components = swagger_component(resource_columns)
-    swagger_string = f"""
-    openapi: 3.0.3
-    info:
-      title: Resource data API
-      description: Retrieve data for a specified resource with optional filtering and sorting.
-      version: 1.0.0
-    tags:
-      - name: Data retrieval
-        description: Retrieve data for a specified resource
-    paths:
-      /api/resources/{{rid}}/data/:
-        get:
-          description: Returns resource data based on ID
-          summary: Find resource by ID
-          operationId: getResourceById
-          responses:
-            '200':
-              description: successful operation
-              content:
-                application/json:
-                  schema:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Resource'
-            '400':
-              description: Invalid query string
-            '404':
-              description: Resource not found
-        parameters:
-        - name: rid
-          in: path
-          description: ID of resource to return
-          required: true
-          schema:
-            type: string
-        - name: page
-          in: query
-          required: false
-          description: Specific page.
-          schema:
-            type: string
-        - name: page_size
-          in: query
-          required: false
-          description: Number of results per page.
-          schema:
-            type: string{parameters}
-      /api/resources/{{rid}}/data/csv:
-        get:
-          description: Returns resource data based on ID as a CSV file
-          summary: Find resource by ID in CSV
-          operationId: getResourceByIdCSV
-          responses:
-            '200':
-              description: successful operation
-              content:
-                text/csv: {{}}
-            '400':
-              description: Invalid query string
-            '404':
-              description: Resource not found
-        parameters:
-        - name: rid
-          in: path
-          description: ID of resource to return
-          required: true
-          schema:
-            type: string
-        - name: page
-          in: query
-          required: false
-          description: Specific page.
-          schema:
-            type: string
-        - name: page_size
-          in: query
-          required: false
-          description: Number of results per page.
-          schema:
-            type: string{parameters}
-      /health:
-        get:
-          description: Ping endpoint to ensure health of metrics service.
-          summary: Service's health endpoint
-          operationId: getMetricsHealth
-          responses:
-            '200':
-              description: successful operation
-    {components}"""
-    return swagger_string
+def build_swagger_file(resource_columns, rid):
+    parameters_list = swagger_parameters(resource_columns)
+    component_dict = swagger_component(resource_columns)
+    swagger_dict = {
+        'openapi': '3.0.3',
+        'info': {
+            'title': 'Resource data API',
+            'description': 'Retrieve data for a specified resource with optional filtering and sorting.',
+            'version': '1.0.0'
+        },
+        'tags': {
+            'name': 'Data retrieval',
+            'description': 'Retrieve data for a specified resource'
+        },
+        'paths': {
+            f'/api/resources/{rid}/profile/': {
+                'get': {
+                    'description': 'Returns resource profile.',
+                    'summary': 'Find resource profile',
+                    'operationId': 'getResourceProfile',
+                    'responses': {
+                        '200': {
+                            'description': 'successful operation',
+                            'content': {
+                                'application/json': {
+                                    'schema': {
+                                        '$ref': '#/components/schemas/ResourceProfile'
+                                    }
+                                }
+                            }
+                        },
+                        '404': {
+                            'description': 'Resource not found'
+                        }
+                    }
+                }
+            },
+            f'/api/resources/{rid}/data/': {
+                'get': {
+                    'description': 'Returns resource data based on ID.',
+                    'summary': 'Find resource by ID',
+                    'operationId': 'getResourceById',
+                    'responses': {
+                        '200': {
+                            'description': 'successful operation',
+                            'content': {
+                                'application/json': {
+                                    'schema': {
+                                        '$ref': '#/components/schemas/ResourceData'
+                                    }
+                                }
+                            }
+                        },
+                        '400': {
+                            'description': 'Invalid query string'
+                        },
+                        '404': {
+                            'description': 'Resource not found'
+                        }
+                    }
+                },
+                'parameters': parameters_list
+            },
+            f'/api/resources/{rid}/data/csv': {
+                'get': {
+                    'description': 'Returns resource data based on ID as a CSV file.',
+                    'summary': 'Find resource by ID in CSV',
+                    'operationId': 'getResourceByIdCSV',
+                    'responses': {
+                        '200': {
+                            'description': 'successful operation',
+                            'content': {
+                                'text/csv': {}
+                            }
+                        },
+                        '400': {
+                            'description': 'Invalid query string'
+                        },
+                        '404': {
+                            'description': 'Resource not found'
+                        }
+                    }
+                },
+                'parameters': parameters_list
+            },
+            '/health': {
+                'get': {
+                    'description': 'Ping endpoint to ensure health of metrics service.',
+                    'summary': 'Service\'s health endpoint',
+                    'operationId': 'getMetricsHealth',
+                    'responses': {
+                        '200': {
+                            'description': 'successful operation'
+                        }
+                    }
+                }
+            }
+        },
+        'components': component_dict
+    }
+    return yaml.dump(swagger_dict)
+
