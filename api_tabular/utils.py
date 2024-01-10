@@ -177,9 +177,86 @@ def swagger_component(resource_columns):
         })
     component_dict = {
         'schemas': {
+            'MetaResourceInfo': {
+                'type': 'object',
+                'properties': {
+                    'created_at': {
+                        'description': 'creation date of the resource',
+                        'type': 'string'
+                    },
+                    'url': {
+                        'description': 'Link to the resource file',
+                        'type': 'string'
+                    },
+                    'links': {
+                        'description': 'Links to the different endpoints of the resource',
+                        'type': 'array',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'href': {
+                                    'description': 'Link to the endpoint of the resource',
+                                    'type': 'string'
+                                },
+                                'type': {
+                                    'description': 'Http method to use to query the href',
+                                    'type': 'string'
+                                },
+                                'rel': {
+                                    'description': '',
+                                    'type': 'string'
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             'ResourceProfile': {
                 'type': 'object',
-                'properties': {}
+                'properties': {
+                    'header': {
+                        'type': 'object'
+                    },
+                    'columns': {
+                        'type': 'object'
+                    },
+                    'formats': {
+                        'type': 'object'
+                    },
+                    'profile': {
+                        'type': 'object'
+                    },
+                    'encoding': {
+                        'type': 'string'
+                    },
+                    'separator': {
+                        'type': 'string'
+                    },
+                    'categorical': {
+                        'type': 'object'
+                    },
+                    'total_lines': {
+                        'type': 'integer'
+                    },
+                    'nb_duplicates': {
+                        'type': 'integer'
+                    },
+                    'columns_fields': {
+                        'type': 'object'
+                    },
+                    'columns_labls': {
+                        'type': 'object'
+                    },
+                    'header_row_idx': {
+                        'type': 'integer'
+                    },
+                    'heading_columns': {
+                        'type': 'integer'
+                    },
+                    'trailing_columns': {
+                        'type': 'integer'
+                    }
+                }
             },
             'ResourceData': {
                 'type': 'object',
@@ -204,6 +281,23 @@ def swagger_component(resource_columns):
                             'prev': {
                                 'description': 'Pagination link to the previous page of the resource data',
                                 'type': 'string'
+                            }
+                        }
+                    },
+                    'meta': {
+                        'type': 'object',
+                        'properties': {
+                            'page': {
+                                'description': 'Current page',
+                                'type': 'integer'
+                            },
+                            'page_size': {
+                                'description': 'Number of results per page',
+                                'type': 'integer'
+                            },
+                            'total': {
+                                'description': 'Total number of results',
+                                'type': 'integer'
                             }
                         }
                     }
@@ -233,6 +327,28 @@ def build_swagger_file(resource_columns, rid):
             'description': 'Retrieve data for a specified resource'
         },
         'paths': {
+            f'/api/resources/{rid}/': {
+                'get': {
+                    'description': 'Meta information on resource.',
+                    'summary': 'Meta information',
+                    'operationId': 'getMetaResourceInfo',
+                    'responses': {
+                        '200': {
+                            'description': 'successful operation',
+                            'content': {
+                                'application/json': {
+                                    'schema': {
+                                        '$ref': '#/components/schemas/MetaResourceInfo'
+                                    }
+                                }
+                            }
+                        },
+                        '404': {
+                            'description': 'Resource not found'
+                        }
+                    }
+                }
+            },
             f'/api/resources/{rid}/profile/': {
                 'get': {
                     'description': 'Returns resource profile.',
