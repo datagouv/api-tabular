@@ -68,7 +68,7 @@ def swagger_parameters(resource_columns):
             'name': 'rid',
             'in': 'path',
             'description': 'ID of resource to return',
-            'required': 'true',
+            'required': True,
             'schema': {
                 'type': 'string'
             }
@@ -77,7 +77,7 @@ def swagger_parameters(resource_columns):
             'name': 'page',
             'in': 'query',
             'description': 'Specific page',
-            'required': 'false',
+            'required': False,
             'schema': {
                 'type': 'string'
             }
@@ -86,7 +86,7 @@ def swagger_parameters(resource_columns):
             'name': 'page_size',
             'in': 'query',
             'description': 'Number of results per page',
-            'required': 'false',
+            'required': False,
             'schema': {
                 'type': 'string'
             }
@@ -99,7 +99,7 @@ def swagger_parameters(resource_columns):
                     'name': f'sort ascending {key}',
                     'in': 'query',
                     'description': f'{key}__sort=asc.',
-                    'required': 'false',
+                    'required': False,
                     'schema': {
                         'type': 'string'
                     }
@@ -108,7 +108,7 @@ def swagger_parameters(resource_columns):
                     'name': f'sort descending {key}',
                     'in': 'query',
                     'description': f'{key}__sort=desc.',
-                    'required': 'false',
+                    'required': False,
                     'schema': {
                         'type': 'string'
                     }
@@ -122,7 +122,7 @@ def swagger_parameters(resource_columns):
                         'name': f'exact {key}',
                         'in': 'query',
                         'description': f'{key}__exact=value.',
-                        'required': 'false',
+                        'required': False,
                         'schema': {
                             'type': 'string'
                         }
@@ -131,7 +131,7 @@ def swagger_parameters(resource_columns):
                         'name': f'contains {key}',
                         'in': 'query',
                         'description': f'{key}__contains=value.',
-                        'required': 'false',
+                        'required': False,
                         'schema': {
                             'type': 'string'
                         }
@@ -145,7 +145,7 @@ def swagger_parameters(resource_columns):
                         'name': f'{key} less',
                         'in': 'query',
                         'description': f'{key}__less=value.',
-                        'required': 'false',
+                        'required': False,
                         'schema': {
                             'type': 'string'
                         }
@@ -154,7 +154,7 @@ def swagger_parameters(resource_columns):
                         'name': f'{key} greater',
                         'in': 'query',
                         'description': f'{key}__greater=value.',
-                        'required': 'false',
+                        'required': False,
                         'schema': {
                             'type': 'string'
                         }
