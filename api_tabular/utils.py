@@ -421,7 +421,7 @@ def build_swagger_file(resource_columns, rid):
             },
             '/health': {
                 'get': {
-                    'description': 'Ping endpoint to ensure health of metrics service.',
+                    'description': 'Ping endpoint to ensure health of api service.',
                     'summary': 'Service\'s health endpoint',
                     'operationId': 'getMetricsHealth',
                     'responses': {
