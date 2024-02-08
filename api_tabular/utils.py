@@ -293,7 +293,7 @@ def build_swagger_file(resource_columns, rid):
                     }
                 },
                 'parameters': parameters_list
-            }g
+            }
         },
         'components': component_dict
     }
