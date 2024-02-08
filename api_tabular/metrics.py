@@ -149,7 +149,7 @@ async def app_factory():
     for route in list(app.router.routes()):
         cors.add(route)
 
-    setup_swagger(app, swagger_url="/api/doc", ui_version=3, swagger_from_file="metrics_swagger.yaml")
+    setup_swagger(app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="metrics_swagger.yaml")
 
     return app
 

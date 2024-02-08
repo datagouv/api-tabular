@@ -1,0 +1,111 @@
+openapi: 3.0.3
+info:
+  title: Resource data API
+  description: Retrieve data for resources with optional filtering and sorting.
+  version: 1.0.0
+tags:
+  - name: Data retrieval
+    description: Retrieve data for resources
+paths:
+  /api/resources/{rid}/profile/:
+    get:
+      description: Returns resource profile.
+      summary: Find resource profile
+      operationId: getResourceProfile
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceProfile'
+        404:
+          description: Resource not found
+  /api/resources/{rid}/:
+    get:
+      description: Meta information on resource
+      summary: Meta information
+      operationId: getMetaResourceInfo
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaResourceInfo'
+        404:
+          description: Resource not found
+  /api/resources/{rid}/swagger/:
+    get:
+      description: Dynamic swagger for a specific resource
+      summary: Dynamic swagger
+      operationId: getMetaResourceInfo
+      responses:
+        200:
+          description: YAML formated dynamic swagger
+        404:
+          description: Resource not found
+  /health/:
+    get:
+      description: Ping endpoint to ensure health of metrics service.
+      summary: Service's health endpoint
+      operationId: getMetricsHealth
+      responses:
+        '200':
+          description: successful operation
+components:
+  ResourceProfile:
+    type: object,
+    properties:
+      header:
+        type: object
+      columns:
+        type: object
+      formats:
+        type: object
+      profile:
+        type: object
+      encoding:
+        type: string
+      separator:
+        type: string
+      categorical:
+        type: object
+      total_lines:
+        type: integer
+      nb_duplicates:
+        type: integer
+      columns_fields:
+        type: object
+      columns_labls:
+        type: object
+      header_row_idx:
+        type: integer
+      heading_columns:
+        type: integer
+      trailing_columns:
+        type: integer
+  MetaResourceInfo:
+    type: object,
+    properties:
+    created_at:
+      description: creation date of the resource,
+      type: string
+    url':
+      description: Link to the resource file,
+      type: string
+    links:
+      description: Links to the different endpoints of the resource
+      type: array
+      items:
+        type: object
+        properties:
+          href:
+            description: Link to the endpoint of the resource
+            type: string
+          type:
+            description: Http method to use to query the href
+            type: string
+          rel:
+            description:
+            type: string

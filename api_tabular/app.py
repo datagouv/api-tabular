@@ -3,6 +3,7 @@ import sentry_sdk
 import aiohttp_cors
 
 from aiohttp import web, ClientSession
+from aiohttp_swagger import setup_swagger
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
@@ -169,6 +170,9 @@ async def app_factory():
     )
     for route in list(app.router.routes()):
         cors.add(route)
+
+    setup_swagger(app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="ressource_app_swagger.yaml")
+
     return app
 
 
