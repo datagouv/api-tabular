@@ -1,0 +1,166 @@
+openapi: 3.0.3
+info:
+  title: Metrics data API
+  description: Retrieve metric data with optional filtering and sorting.
+  version: 1.0.0
+tags:
+  - name: Metrics data retrieval
+    description: Retrieve metric data
+paths:
+  /api/{model}/data/:
+    get:
+      description: Retrieve metric data for a specified model.
+      summary: Find metrics by model
+      operationId: getMetricsByModel
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metrics'
+        '400':
+          description: Invalid query string
+        '404':
+          description: Model not found
+    parameters:
+    - name: model
+      in: path
+      description: Type of object to get metrics of
+      required: true
+      schema:
+        type: string
+    - name: page
+      in: query
+      required: false
+      description: Specific page.
+      schema:
+        type: string
+    - name: page_size
+      in: query
+      required: false
+      description: Number of results per page.
+      schema:
+        type: string
+    - name: sort ascending
+      in: query
+      required: false
+      description: column__sort=asc
+      schema:
+        type: string
+    - name: sort descending
+      in: query
+      required: false
+      description: column__sort=desc
+      schema:
+        type: string
+    - name: exact
+      in: query
+      required: false
+      description: column__exact=value
+      schema:
+        type: string
+    - name: contains
+      in: query
+      required: false
+      description: column__contains=value
+      schema:
+        type: string
+    - name: less
+      in: query
+      required: false
+      description: column__less=value
+      schema:
+        type: string
+    - name: greater
+      in: query
+      required: false
+      description: column__greater=value
+      schema:
+        type: string
+  /api/{model}/data/csv/:
+    get:
+      description: Retrieve metric data for a specified model as a CSV file.
+      summary: Find metrics by model as CSV
+      operationId: getMetricsByModelCSV
+      responses:
+        '200':
+          description: successful operation
+          content:
+            text/csv: {}
+        '400':
+          description: Invalid query string
+        '404':
+          description: Model not found
+    parameters:
+    - name: model
+      in: path
+      description: Type of object to get metrics of
+      required: true
+      schema:
+        type: string
+    - name: page
+      in: query
+      required: false
+      description: Specific page.
+      schema:
+        type: string
+    - name: page_size
+      in: query
+      required: false
+      description: Number of results per page.
+      schema:
+        type: string
+    - name: sort ascending
+      in: query
+      required: false
+      description: column__sort=asc
+      schema:
+        type: string
+    - name: sort descending
+      in: query
+      required: false
+      description: column__sort=desc
+      schema:
+        type: string
+    - name: exact
+      in: query
+      required: false
+      description: column__exact=value
+      schema:
+        type: string
+    - name: contains
+      in: query
+      required: false
+      description: column__contains=value
+      schema:
+        type: string
+    - name: less
+      in: query
+      required: false
+      description: column__less=value
+      schema:
+        type: string
+    - name: greater
+      in: query
+      required: false
+      description: column__greater=value
+      schema:
+        type: string
+  /health/:
+    get:
+      description: Ping endpoint to ensure health of metrics service.
+      summary: Service's health endpoint
+      operationId: getMetricsHealth
+      responses:
+        '200':
+          description: successful operation
+components:
+  schemas:
+    Metrics:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string

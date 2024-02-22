@@ -3,6 +3,7 @@ import sentry_sdk
 import aiohttp_cors
 
 from aiohttp import web, ClientSession
+from aiohttp_swagger import setup_swagger
 
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
@@ -11,7 +12,7 @@ from api_tabular.query import (
     get_resource_data,
     get_resource_data_streamed,
 )
-from api_tabular.utils import build_sql_query_string, build_link_with_page, url_for
+from api_tabular.utils import build_sql_query_string, build_link_with_page, url_for, build_swagger_file
 from api_tabular.error import QueryException
 
 routes = web.RouteTableDef()
@@ -56,6 +57,16 @@ async def resource_profile(request):
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
     return web.json_response(resource)
+
+
+@routes.get(r"/api/resources/{rid}/swagger/", name="swagger")
+async def resource_swagger(request):
+    resource_id = request.match_info["rid"]
+    resource = await get_resource(
+        request.app["csession"], resource_id, ["profile:csv_detective"]
+    )
+    swagger_string = build_swagger_file(resource['profile']['columns'], resource_id)
+    return web.Response(body=swagger_string)
 
 
 @routes.get(r"/api/resources/{rid}/data/", name="data")
@@ -159,6 +170,9 @@ async def app_factory():
     )
     for route in list(app.router.routes()):
         cors.add(route)
+
+    setup_swagger(app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="ressource_app_swagger.yaml")
+
     return app
 
 
