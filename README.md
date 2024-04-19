@@ -1,10 +1,10 @@
 # Api-tabular
 
-This connects to [udata-hydra](https://github.com/datagouv/hydra) and serves the converted CSVs as an API.
+This connects to [hydra](https://github.com/datagouv/hydra) and serves the converted CSVs as an API.
 
 ## Run locally
 
-Start [udata-hydra](https://github.com/datagouv/hydra) via `docker compose`.
+Start [hydra](https://github.com/datagouv/hydra) via `docker compose`.
 
 Launch this project:
 
