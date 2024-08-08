@@ -46,7 +46,12 @@ curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/
       "href": "/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/",
       "type": "GET",
       "rel": "data"
-    }
+    },
+    {
+      "href": "/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/swagger/",
+      "type": "GET",
+      "rel": "swagger"
+    },
   ]
 }
 ```
@@ -113,35 +118,36 @@ curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/da
     }
   ],
   "links": {
+    "profile": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/",
+    "swagger": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/",
     "next": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1",
-    "prev": null,
-    "profile": "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"
+    "prev": null
   },
-  "meta": {"page": 1, "page_size": 1, "total": 2}
+  "meta": {"page": 1, "page_size": 20, "total": 21777}
 }
 ```
 
-This endpoint can be queried with the following operators as query string:
+This endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column):
 
 ```
 # sort by column
 column_name__sort=asc
 column_name__sort=desc
 
-# contains
-column_name__contains=word
-
 # exacts
 column_name__exact=word
 
-# less
+# contains (for strings only)
+column_name__contains=word
+
+# less (for numbers only)
 column_name__less=12
 
-# greater
+# greater (for numbers only)
 column_name__greater=12
 ```
 
-Pagination is made throught queries with `page` `and page_size`:
+Pagination is made through queries with `page` and `page_size`:
 ```
 curl http://localhost:8005/api/resources/27d469ff-9908-4b7e-a2e0-9439bb38a395/data/?page=2&page_size=30
 ```
