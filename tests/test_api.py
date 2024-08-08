@@ -33,6 +33,11 @@ async def test_api_resource_meta(client, rmock):
                 "type": "GET",
                 "rel": "data",
             },
+            {
+                "href": external_url(f"/api/resources/{RESOURCE_ID}/swagger/"),
+                "type": "GET",
+                "rel": "swagger",
+            },
         ],
     }
 
@@ -69,6 +74,7 @@ async def test_api_resource_data(client, rmock):
             "next": None,
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -91,6 +97,7 @@ async def test_api_resource_data_with_args(client, rmock):
             "next": None,
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -113,6 +120,7 @@ async def test_api_resource_data_with_args_case(client, rmock):
             "next": None,
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -186,6 +194,7 @@ async def test_api_percent_encoding_arabic(client, rmock):
             "next": None,
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -208,6 +217,7 @@ async def test_api_with_unsupported_args(client, rmock):
             "next": None,
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 20, "total": 10},
     }
@@ -231,6 +241,7 @@ async def test_api_pagination(client, rmock):
                     "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=2&page_size=1"),
             "prev": None,
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 1, "page_size": 1, "total": 2},
     }
@@ -252,6 +263,7 @@ async def test_api_pagination(client, rmock):
             "prev": external_url(
                     "/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/data/?page=1&page_size=1"),
             "profile": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/profile/"),
+            "swagger": external_url("/api/resources/60963939-6ada-46bc-9a29-b288b16d969b/swagger/"),
         },
         "meta": {"page": 2, "page_size": 1, "total": 2},
     }
