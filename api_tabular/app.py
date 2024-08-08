@@ -45,6 +45,11 @@ async def resource_meta(request):
                     "type": "GET",
                     "rel": "data",
                 },
+                {
+                    "href": url_for(request, 'swagger', rid=resource_id, _external=True),
+                    "type": "GET",
+                    "rel": "swagger",
+                },
             ],
         }
     )
@@ -103,6 +108,7 @@ async def resource_data(request):
         "data": response,
         "links": {
             "profile": url_for(request, 'profile', rid=resource_id, _external=True),
+            "swagger": url_for(request, 'swagger', rid=resource_id, _external=True),
             "next": next if page_size + offset < total else None,
             "prev": prev if page > 1 else None,
         },

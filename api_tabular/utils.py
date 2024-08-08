@@ -65,15 +65,6 @@ def url_for(request: Request, route: str, *args, **kwargs):
 def swagger_parameters(resource_columns):
     parameters_list = [
         {
-            'name': 'rid',
-            'in': 'path',
-            'description': 'ID of resource to return',
-            'required': True,
-            'schema': {
-                'type': 'string'
-            }
-        },
-        {
             'name': 'page',
             'in': 'query',
             'description': 'Specific page',
@@ -90,70 +81,74 @@ def swagger_parameters(resource_columns):
             'schema': {
                 'type': 'string'
             }
-        }
+        },
     ]
+    # expected python types are: string, float, bool, date, datetime, json
+    # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
+    # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
-        parameters_list.extend(
-            [
-                {
-                    'name': f'sort ascending {key}',
-                    'in': 'query',
-                    'description': f'{key}__sort=asc.',
-                    'required': False,
-                    'schema': {
-                        'type': 'string'
-                    }
-                },
-                {
-                    'name': f'sort descending {key}',
-                    'in': 'query',
-                    'description': f'{key}__sort=desc.',
-                    'required': False,
-                    'schema': {
-                        'type': 'string'
-                    }
-                }
-            ]
-        )
-        if value['python_type'] == 'string':
+        if value['python_type'] != 'json':
             parameters_list.extend(
                 [
                     {
-                        'name': f'exact {key}',
+                        'name': f'{key}__exact=value',
                         'in': 'query',
-                        'description': f'{key}__exact=value.',
+                        'description': f'Exact match in column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'
                         }
                     },
                     {
-                        'name': f'contains {key}',
+                        'name': f'{key}__sort=asc',
                         'in': 'query',
-                        'description': f'{key}__contains=value.',
+                        'description': f'Sort ascending on column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'
                         }
-                    }
+                    },
+                    {
+                        'name': f'{key}__sort=desc',
+                        'in': 'query',
+                        'description': f'Sort descending on column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
                 ]
             )
-        elif value['python_type'] == 'float':
+        if value['python_type'] in ['string', 'json']:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key} less',
+                        'name': f'{key}__contains=value',
                         'in': 'query',
-                        'description': f'{key}__less=value.',
+                        'description': f'String contains in column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                ]
+            )
+        elif value['python_type'] in ['int', 'float']:
+            parameters_list.extend(
+                [
+                    {
+                        'name': f'{key}__less=value',
+                        'in': 'query',
+                        'description': f'Less than in column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'
                         }
                     },
                     {
-                        'name': f'{key} greater',
+                        'name': f'{key}__greater=value',
                         'in': 'query',
-                        'description': f'{key}__greater=value.',
+                        'description': f'Greater than in column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'
@@ -169,7 +164,11 @@ def swagger_component(resource_columns):
     for key, value in resource_columns.items():
         type = 'string'
         if value['python_type'] == 'float':
+            type = 'number'
+        elif value['python_type'] == 'int':
             type = 'integer'
+        elif value['python_type'] == 'bool':
+            type = 'boolean'
         resource_prop_dict.update({
             f'{key}': {
                 'type': f'{type}'
@@ -241,16 +240,16 @@ def build_swagger_file(resource_columns, rid):
             'description': 'Retrieve data for a specified resource with optional filtering and sorting.',
             'version': '1.0.0'
         },
-        'tags': {
+        'tags': [{
             'name': 'Data retrieval',
-            'description': 'Retrieve data for a specified resource'
-        },
+            'description': 'Retrieve data for a specified resource',
+        }],
         'paths': {
             f'/api/resources/{rid}/data/': {
                 'get': {
-                    'description': 'Returns resource data based on ID.',
-                    'summary': 'Find resource by ID',
-                    'operationId': 'getResourceById',
+                    'description': 'Returns resource data based on ID as JSON, each row is a dictionnary.',
+                    'summary': 'Get resource data from its ID',
+                    'operationId': 'getResourceDataFromId',
                     'responses': {
                         '200': {
                             'description': 'successful operation',
@@ -275,8 +274,8 @@ def build_swagger_file(resource_columns, rid):
             f'/api/resources/{rid}/data/csv/': {
                 'get': {
                     'description': 'Returns resource data based on ID as a CSV file.',
-                    'summary': 'Find resource by ID in CSV',
-                    'operationId': 'getResourceByIdCSV',
+                    'summary': 'Get resource data from its ID in CSV format',
+                    'operationId': 'getResourceDataFromIdCSV',
                     'responses': {
                         '200': {
                             'description': 'successful operation',
