@@ -140,11 +140,17 @@ column_name__exact=word
 # contains (for strings only)
 column_name__contains=word
 
-# less (for numbers only)
+# less
 column_name__less=12
 
-# greater (for numbers only)
+# greater
 column_name__greater=12
+
+# strictly less
+column_name__strictlyless=12
+
+# strictly greater
+column_name__strictlygreater=12
 ```
 
 Pagination is made through queries with `page` and `page_size`:
