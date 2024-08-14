@@ -137,7 +137,7 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
-        elif value['python_type'] in ['int', 'float']:
+        elif value['python_type'] not in ['json', 'bool']:
             parameters_list.extend(
                 [
                     {
