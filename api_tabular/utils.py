@@ -123,7 +123,7 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
-        if value['python_type'] in ['string', 'json']:
+        if value['python_type'] in ['string', 'date', 'datetime', 'json']:
             parameters_list.extend(
                 [
                     {
