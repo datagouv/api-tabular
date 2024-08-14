@@ -1,11 +1,8 @@
 import pytest
 import csv
 import json
-import os
 
-from api_tabular.utils import external_url
-
-from .conftest import RESOURCE_ID, DATE, PGREST_ENDPOINT, TABLES_INDEX_PATTERN
+from .conftest import RESOURCE_ID, TABLES_INDEX_PATTERN
 
 pytestmark = pytest.mark.asyncio
 
