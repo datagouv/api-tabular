@@ -157,6 +157,24 @@ def swagger_parameters(resource_columns):
                         'schema': {
                             'type': 'string'
                         }
+                    },
+                    {
+                        'name': f'{key}__strictlyless=value',
+                        'in': 'query',
+                        'description': f'Strictly less than in column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                    {
+                        'name': f'{key}__strictlygreater=value',
+                        'in': 'query',
+                        'description': f'Strictly greater than in column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
                     }
                 ]
             )
