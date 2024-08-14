@@ -29,6 +29,10 @@ def build_sql_query_string(
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
                 sql_query.append(f"{column}=gte.{value}")
+            elif normalized_comparator == "strictlyless":
+                sql_query.append(f"{column}=lt.{value}")
+            elif normalized_comparator == "strictlygreater":
+                sql_query.append(f"{column}=gt.{value}")
     if page_size:
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
