@@ -47,6 +47,12 @@ def test_query_build_exact():
     assert result == "column_name=eq.BIDULE&limit=50&order=__id.asc"
 
 
+def test_query_build_differs():
+    query_str = ["column_name__differs=BIDULE"]
+    result = build_sql_query_string(query_str, 50)
+    assert result == "column_name=neq.BIDULE&limit=50&order=__id.asc"
+
+
 def test_query_build_contains():
     query_str = ["column_name__contains=BIDULE"]
     result = build_sql_query_string(query_str, 50)

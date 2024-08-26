@@ -4,13 +4,13 @@ from aiohttp.web_request import Request
 from api_tabular import config
 
 TYPE_POSSIBILITIES = {
-    "string": ["compare", "contains", "exact", "sort"],
-    "float": ["compare", "exact", "sort"],
-    "int": ["compare", "exact", "sort"],
-    "bool": ["exact", "sort"],
-    "date": ["compare", "contains", "exact", "sort"],
-    "datetime": ["compare", "contains", "exact", "sort"],
-    "json": ["contains"],
+    "string": ["compare", "contains", "differs", "exact", "sort"],
+    "float": ["compare", "differs", "exact", "sort"],
+    "int": ["compare", "differs", "exact", "sort"],
+    "bool": ["differs", "exact", "sort"],
+    "date": ["compare", "contains", "differs", "exact", "sort"],
+    "datetime": ["compare", "contains", "differs", "exact", "sort"],
+    "json": ["contains", "exact"],
 }
 
 MAP_TYPES = {
@@ -40,6 +40,8 @@ def build_sql_query_string(
                 sorted = True
             elif normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
+            elif normalized_comparator == "differs":
+                sql_query.append(f"{column}=neq.{value}")
             elif normalized_comparator == "contains":
                 sql_query.append(f"{column}=ilike.*{value}*")
             elif normalized_comparator == "less":
@@ -115,6 +117,20 @@ def swagger_parameters(resource_columns):
                         'name': f'{key}__exact=value',
                         'in': 'query',
                         'description': f'Exact match in column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                ]
+            )
+        if "differs" in TYPE_POSSIBILITIES[value['python_type']]:
+            parameters_list.extend(
+                [
+                    {
+                        'name': f'{key}__differs=value',
+                        'in': 'query',
+                        'description': f'Differs from in column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'

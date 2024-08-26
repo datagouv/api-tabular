@@ -119,8 +119,11 @@ This endpoint can be queried with the following operators as query string (repla
 column_name__sort=asc
 column_name__sort=desc
 
-# exacts
+# exact value
 column_name__exact=word
+
+# differs
+column_name__differs=word
 
 # contains (for strings only)
 column_name__contains=word
