@@ -3,6 +3,16 @@ from aiohttp.web_request import Request
 
 from api_tabular import config
 
+TYPE_POSSIBILITIES = {
+    "string": ["compare", "contains", "exact", "sort"],
+    "float": ["compare", "exact", "sort"],
+    "int": ["compare", "exact", "sort"],
+    "bool": ["exact", "sort"],
+    "date": ["compare", "contains", "exact", "sort"],
+    "datetime": ["compare", "contains", "exact", "sort"],
+    "json": ["contains"],
+}
+
 
 def build_sql_query_string(
     request_arg: list, page_size: int = None, offset: int = 0
@@ -87,11 +97,11 @@ def swagger_parameters(resource_columns):
             }
         },
     ]
-    # expected python types are: string, float, bool, date, datetime, json
+    # expected python types are: string, float, int, bool, date, datetime, json
     # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
-        if value['python_type'] != 'json':
+        if "exact" in TYPE_POSSIBILITIES[value['python_type']]:
             parameters_list.extend(
                 [
                     {
@@ -103,6 +113,11 @@ def swagger_parameters(resource_columns):
                             'type': 'string'
                         }
                     },
+                ]
+            )
+        if "sort" in TYPE_POSSIBILITIES[value['python_type']]:
+            parameters_list.extend(
+                [
                     {
                         'name': f'{key}__sort=asc',
                         'in': 'query',
@@ -123,7 +138,7 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
-        if value['python_type'] in ['string', 'date', 'datetime', 'json']:
+        if "contains" in TYPE_POSSIBILITIES[value['python_type']]:
             parameters_list.extend(
                 [
                     {
@@ -137,7 +152,7 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
-        elif value['python_type'] not in ['json', 'bool']:
+        if "compare" in TYPE_POSSIBILITIES[value['python_type']]:
             parameters_list.extend(
                 [
                     {
