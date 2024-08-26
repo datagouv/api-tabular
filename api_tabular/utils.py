@@ -29,9 +29,9 @@ def build_sql_query_string(
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
                 sql_query.append(f"{column}=gte.{value}")
-            elif normalized_comparator == "strictlyless":
+            elif normalized_comparator == "strictly_less":
                 sql_query.append(f"{column}=lt.{value}")
-            elif normalized_comparator == "strictlygreater":
+            elif normalized_comparator == "strictly_greater":
                 sql_query.append(f"{column}=gt.{value}")
     if page_size:
         sql_query.append(f"limit={page_size}")
@@ -159,7 +159,7 @@ def swagger_parameters(resource_columns):
                         }
                     },
                     {
-                        'name': f'{key}__strictlyless=value',
+                        'name': f'{key}__strictly_less=value',
                         'in': 'query',
                         'description': f'Strictly less than in column: {key}',
                         'required': False,
@@ -168,7 +168,7 @@ def swagger_parameters(resource_columns):
                         }
                     },
                     {
-                        'name': f'{key}__strictlygreater=value',
+                        'name': f'{key}__strictly_greater=value',
                         'in': 'query',
                         'description': f'Strictly greater than in column: {key}',
                         'required': False,
