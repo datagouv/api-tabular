@@ -35,7 +35,7 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
 ```json
 {
   "created_at": "2023-04-21T22:54:22.043492+00:00",
-  "url": "https://data.gouv.fr/datastes/example/resources/fake.csv",
+  "url": "https://data.gouv.fr/datasets/example/resources/fake.csv",
   "links": [
     {
       "href": "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/",
