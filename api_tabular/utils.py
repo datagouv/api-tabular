@@ -4,13 +4,13 @@ from aiohttp.web_request import Request
 from api_tabular import config
 
 TYPE_POSSIBILITIES = {
-    "string": ["compare", "contains", "differs", "exact", "sort"],
-    "float": ["compare", "differs", "exact", "sort"],
-    "int": ["compare", "differs", "exact", "sort"],
-    "bool": ["differs", "exact", "sort"],
-    "date": ["compare", "contains", "differs", "exact", "sort"],
-    "datetime": ["compare", "contains", "differs", "exact", "sort"],
-    "json": ["contains", "exact"],
+    "string": ["compare", "contains", "differs", "exact", "in", "sort"],
+    "float": ["compare", "differs", "exact", "in", "sort"],
+    "int": ["compare", "differs", "exact", "in", "sort"],
+    "bool": ["differs", "exact", "in", "sort"],
+    "date": ["compare", "contains", "differs", "exact", "in", "sort"],
+    "datetime": ["compare", "contains", "differs", "exact", "in", "sort"],
+    "json": ["contains", "exact", "in"],
 }
 
 MAP_TYPES = {
@@ -44,6 +44,8 @@ def build_sql_query_string(
                 sql_query.append(f"{column}=neq.{value}")
             elif normalized_comparator == "contains":
                 sql_query.append(f"{column}=ilike.*{value}*")
+            elif normalized_comparator == "in":
+                sql_query.append(f"{column}=in.{value}")
             elif normalized_comparator == "less":
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
@@ -131,6 +133,20 @@ def swagger_parameters(resource_columns):
                         'name': f'{key}__differs=value',
                         'in': 'query',
                         'description': f'Differs from in column: {key}',
+                        'required': False,
+                        'schema': {
+                            'type': 'string'
+                        }
+                    },
+                ]
+            )
+        if "in" in TYPE_POSSIBILITIES[value['python_type']]:
+            parameters_list.extend(
+                [
+                    {
+                        'name': f'{key}__in=(value1,value2,...)',
+                        'in': 'query',
+                        'description': f'Value in list in column: {key}',
                         'required': False,
                         'schema': {
                             'type': 'string'

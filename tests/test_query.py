@@ -59,6 +59,12 @@ def test_query_build_contains():
     assert result == "column_name=ilike.*BIDULE*&limit=50&order=__id.asc"
 
 
+def test_query_build_in():
+    query_str = ["column_name__in=(value1,value2,value3)"]
+    result = build_sql_query_string(query_str, 50)
+    assert result == "column_name=in.(value1,value2,value3)&limit=50&order=__id.asc"
+
+
 def test_query_build_less():
     query_str = ["column_name__less=12"]
     result = build_sql_query_string(query_str, 50, 12)

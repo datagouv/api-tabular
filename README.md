@@ -120,25 +120,28 @@ column_name__sort=asc
 column_name__sort=desc
 
 # exact value
-column_name__exact=word
+column_name__exact=value
 
 # differs
-column_name__differs=word
+column_name__differs=value
 
 # contains (for strings only)
-column_name__contains=word
+column_name__contains=value
+
+# in (value in list)
+column_name__in=(value1,value2,value3)
 
 # less
-column_name__less=12
+column_name__less=value
 
 # greater
-column_name__greater=12
+column_name__greater=value
 
 # strictly less
-column_name__strictly_less=12
+column_name__strictly_less=value
 
 # strictly greater
-column_name__strictly_greater=12
+column_name__strictly_greater=value
 ```
 
 For instance:
