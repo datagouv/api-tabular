@@ -13,6 +13,13 @@ TYPE_POSSIBILITIES = {
     "json": ["contains"],
 }
 
+MAP_TYPES = {
+    # defaults to "string"
+    "bool": "boolean",
+    "int": "integer",
+    "float": "number",
+}
+
 
 def build_sql_query_string(
     request_arg: list, page_size: int = None, offset: int = 0
@@ -199,13 +206,7 @@ def swagger_parameters(resource_columns):
 def swagger_component(resource_columns):
     resource_prop_dict = {}
     for key, value in resource_columns.items():
-        type = 'string'
-        if value['python_type'] == 'float':
-            type = 'number'
-        elif value['python_type'] == 'int':
-            type = 'integer'
-        elif value['python_type'] == 'bool':
-            type = 'boolean'
+        type = MAP_TYPES.get(value['python_type'], 'string')
         resource_prop_dict.update({
             f'{key}': {
                 'type': f'{type}'
