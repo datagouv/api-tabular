@@ -366,4 +366,4 @@ def build_swagger_file(resource_columns, rid):
         },
         'components': component_dict
     }
-    return yaml.dump(swagger_dict)
+    return yaml.dump(swagger_dict, allow_unicode=True)
