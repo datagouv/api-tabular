@@ -45,7 +45,7 @@ def build_sql_query_string(
             elif normalized_comparator == "contains":
                 sql_query.append(f"{column}=ilike.*{value}*")
             elif normalized_comparator == "in":
-                sql_query.append(f"{column}=in.{value}")
+                sql_query.append(f"{column}=in.({value})")
             elif normalized_comparator == "less":
                 sql_query.append(f"{column}=lte.{value}")
             elif normalized_comparator == "greater":
@@ -144,7 +144,7 @@ def swagger_parameters(resource_columns):
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__in=(value1,value2,...)',
+                        'name': f'{key}__in=value1,value2,...',
                         'in': 'query',
                         'description': f'Value in list in column: {key}',
                         'required': False,

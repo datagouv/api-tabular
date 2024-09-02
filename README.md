@@ -129,7 +129,7 @@ column_name__differs=value
 column_name__contains=value
 
 # in (value in list)
-column_name__in=(value1,value2,value3)
+column_name__in=value1,value2,value3
 
 # less
 column_name__less=value

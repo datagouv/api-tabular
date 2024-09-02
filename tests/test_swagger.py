@@ -41,7 +41,7 @@ async def test_swagger_content(client, rmock):
                 if p == "sort":
                     value = "asc"
                 elif p == "in":
-                    value = "(value1,value2,...)"
+                    value = "value1,value2,..."
                 for _p in _params:
                     if f'{c}__{_p}={value}' not in params:
                         raise ValueError(f'{c}__{_p} is missing in {output} output')

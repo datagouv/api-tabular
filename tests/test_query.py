@@ -60,7 +60,7 @@ def test_query_build_contains():
 
 
 def test_query_build_in():
-    query_str = ["column_name__in=(value1,value2,value3)"]
+    query_str = ["column_name__in=value1,value2,value3"]
     result = build_sql_query_string(query_str, 50)
     assert result == "column_name=in.(value1,value2,value3)&limit=50&order=__id.asc"
 
