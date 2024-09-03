@@ -10,7 +10,7 @@ from api_tabular import config
 from api_tabular.app import app_factory
 
 PGREST_ENDPOINT = "https://example.com"
-RESOURCE_ID = "60963939-6ada-46bc-9a29-b288b16d969b"
+RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 DATE = "2023-01-01T00:00:00.000000+00:00"
 TABLES_INDEX_PATTERN = re.compile(
     rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
