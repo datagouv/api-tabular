@@ -1,8 +1,10 @@
 import json
+from typing import Union
+
 import sentry_sdk
 from aiohttp import web
+
 from api_tabular import config
-from typing import Union
 
 
 class QueryException(web.HTTPException):
@@ -10,15 +12,11 @@ class QueryException(web.HTTPException):
 
     def __init__(self, status, error_code, title, detail) -> None:
         self.status_code = status
-        error_body = {
-            "errors": [{"code": error_code, "title": title, "detail": detail}]
-        }
+        error_body = {"errors": [{"code": error_code, "title": title, "detail": detail}]}
         super().__init__(content_type="application/json", text=json.dumps(error_body))
 
 
-def handle_exception(
-    status: int, title: str, detail: Union[str, dict], resource_id: str = None
-):
+def handle_exception(status: int, title: str, detail: Union[str, dict], resource_id: str = None):
     event_id = None
     e = Exception(detail)
     if config.SENTRY_DSN:

@@ -2,7 +2,7 @@ import pytest
 
 from api_tabular.utils import external_url
 
-from .conftest import RESOURCE_ID, DATE, PGREST_ENDPOINT, TABLES_INDEX_PATTERN
+from .conftest import DATE, PGREST_ENDPOINT, RESOURCE_ID, TABLES_INDEX_PATTERN
 
 pytestmark = pytest.mark.asyncio
 
@@ -166,13 +166,13 @@ async def test_api_resource_data_not_found(client, mock_get_resource_empty):
 
 async def test_api_resource_data_table_error(client, rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}])
-    rmock.get(f"{PGREST_ENDPOINT}/xxx?limit=20&order=__id.asc", status=502, payload={"such": "error"})
+    rmock.get(
+        f"{PGREST_ENDPOINT}/xxx?limit=20&order=__id.asc", status=502, payload={"such": "error"}
+    )
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 502
     assert await res.json() == {
-        "errors": [
-            {"code": None, "detail": {"such": "error"}, "title": "Database error"}
-        ]
+        "errors": [{"code": None, "detail": {"such": "error"}, "title": "Database error"}]
     }
 
 
@@ -238,7 +238,8 @@ async def test_api_pagination(client, rmock):
         "data": [{"such": "data"}],
         "links": {
             "next": external_url(
-                    "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=1"),
+                "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=1"
+            ),
             "prev": None,
             "profile": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/"),
             "swagger": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/"),
@@ -261,7 +262,8 @@ async def test_api_pagination(client, rmock):
         "links": {
             "next": None,
             "prev": external_url(
-                    "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=1&page_size=1"),
+                "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=1&page_size=1"
+            ),
             "profile": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/"),
             "swagger": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/"),
         },

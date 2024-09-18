@@ -41,7 +41,13 @@ js-built
 /udata/static/
 /jsdoc/
 *.rdb
+
+# Python packaging
+.ruff_cache
 venv
+.venv
+.python-version
+uv.lock
 
 # Installer logs
 pip-log.txt

@@ -1,18 +1,18 @@
 import os
-import sentry_sdk
+
 import aiohttp_cors
-
+import sentry_sdk
+from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
-from aiohttp import web, ClientSession
-
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
+
 from api_tabular import config
+from api_tabular.error import QueryException, handle_exception
 from api_tabular.utils import (
-    build_sql_query_string,
     build_link_with_page,
+    build_sql_query_string,
     process_total,
 )
-from api_tabular.error import QueryException, handle_exception
 
 routes = web.RouteTableDef()
 
@@ -46,14 +46,12 @@ async def get_object_data_streamed(
     res = await session.head(f"{url}&limit=1&", headers=headers)
     total = process_total(res.headers.get("Content-Range"))
     for i in range(0, total, batch_size):
-        async with session.get(
-            url=f"{url}&limit={batch_size}&offset={i}", headers=headers
-        ) as res:
+        async with session.get(url=f"{url}&limit={batch_size}&offset={i}", headers=headers) as res:
             if not res.ok:
                 handle_exception(res.status, "Database error", await res.json(), None)
             async for chunk in res.content.iter_chunked(1024):
                 yield chunk
-            yield b'\n'
+            yield b"\n"
 
 
 @routes.get(r"/api/{model}/data/")
@@ -67,9 +65,7 @@ async def metrics_data(request):
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
     if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(
-            400, None, "Invalid query string", "Page size exceeds allowed maximum"
-        )
+        raise QueryException(400, None, "Invalid query string", "Page size exceeds allowed maximum")
     if page > 1:
         offset = page_size * (page - 1)
     else:
@@ -111,9 +107,7 @@ async def metrics_data_csv(request):
     response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
 
-    async for chunk in get_object_data_streamed(
-        request.app["csession"], model, sql_query
-    ):
+    async for chunk in get_object_data_streamed(request.app["csession"], model, sql_query):
         await response.write(chunk)
 
     return response
@@ -140,16 +134,16 @@ async def app_factory():
         app,
         defaults={
             "*": aiohttp_cors.ResourceOptions(
-                    allow_credentials=True,
-                    expose_headers="*",
-                    allow_headers="*"
-                )
-        }
+                allow_credentials=True, expose_headers="*", allow_headers="*"
+            )
+        },
     )
     for route in list(app.router.routes()):
         cors.add(route)
 
-    setup_swagger(app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="metrics_swagger.yaml")
+    setup_swagger(
+        app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="metrics_swagger.yaml"
+    )
 
     return app
 
