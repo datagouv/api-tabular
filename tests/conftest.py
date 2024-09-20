@@ -2,7 +2,6 @@ import re
 
 import pytest
 import pytest_asyncio
-
 from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
 

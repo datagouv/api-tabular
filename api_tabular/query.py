@@ -1,4 +1,5 @@
-from aiohttp import web, ClientSession
+from aiohttp import ClientSession, web
+
 from api_tabular import config
 from api_tabular.error import handle_exception
 from api_tabular.utils import process_total
@@ -21,9 +22,7 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
     url = f"{config.PGREST_ENDPOINT}/{resource['parsing_table']}?{sql_query}"
     async with session.get(url, headers=headers) as res:
         if not res.ok:
-            handle_exception(
-                res.status, "Database error", await res.json(), resource.get("id")
-            )
+            handle_exception(res.status, "Database error", await res.json(), resource.get("id"))
         record = await res.json()
         total = process_total(res.headers.get("Content-Range"))
         return record, total
@@ -47,4 +46,4 @@ async def get_resource_data_streamed(
                 handle_exception(res.status, "Database error", await res.json(), None)
             async for chunk in res.content.iter_chunked(1024):
                 yield chunk
-            yield b'\n'
+            yield b"\n"

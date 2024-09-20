@@ -21,9 +21,7 @@ MAP_TYPES = {
 }
 
 
-def build_sql_query_string(
-    request_arg: list, page_size: int = None, offset: int = 0
-) -> str:
+def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
     sql_query = []
     sorted = False
     for arg in request_arg:
@@ -90,146 +88,122 @@ def url_for(request: Request, route: str, *args, **kwargs):
 def swagger_parameters(resource_columns):
     parameters_list = [
         {
-            'name': 'page',
-            'in': 'query',
-            'description': 'Specific page',
-            'required': False,
-            'schema': {
-                'type': 'string'
-            }
+            "name": "page",
+            "in": "query",
+            "description": "Specific page",
+            "required": False,
+            "schema": {"type": "string"},
         },
         {
-            'name': 'page_size',
-            'in': 'query',
-            'description': 'Number of results per page',
-            'required': False,
-            'schema': {
-                'type': 'string'
-            }
+            "name": "page_size",
+            "in": "query",
+            "description": "Number of results per page",
+            "required": False,
+            "schema": {"type": "string"},
         },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
     # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
-        if "exact" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "exact" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__exact=value',
-                        'in': 'query',
-                        'description': f'Exact match in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__exact=value",
+                        "in": "query",
+                        "description": f"Exact match in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                 ]
             )
-        if "differs" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "differs" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__differs=value',
-                        'in': 'query',
-                        'description': f'Differs from in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__differs=value",
+                        "in": "query",
+                        "description": f"Differs from in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                 ]
             )
-        if "in" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "in" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__in=value1,value2,...',
-                        'in': 'query',
-                        'description': f'Value in list in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__in=value1,value2,...",
+                        "in": "query",
+                        "description": f"Value in list in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                 ]
             )
-        if "sort" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "sort" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__sort=asc',
-                        'in': 'query',
-                        'description': f'Sort ascending on column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__sort=asc",
+                        "in": "query",
+                        "description": f"Sort ascending on column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                     {
-                        'name': f'{key}__sort=desc',
-                        'in': 'query',
-                        'description': f'Sort descending on column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__sort=desc",
+                        "in": "query",
+                        "description": f"Sort descending on column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                 ]
             )
-        if "contains" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "contains" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__contains=value',
-                        'in': 'query',
-                        'description': f'String contains in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__contains=value",
+                        "in": "query",
+                        "description": f"String contains in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                 ]
             )
-        if "compare" in TYPE_POSSIBILITIES[value['python_type']]:
+        if "compare" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        'name': f'{key}__less=value',
-                        'in': 'query',
-                        'description': f'Less than in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__less=value",
+                        "in": "query",
+                        "description": f"Less than in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                     {
-                        'name': f'{key}__greater=value',
-                        'in': 'query',
-                        'description': f'Greater than in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__greater=value",
+                        "in": "query",
+                        "description": f"Greater than in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                     {
-                        'name': f'{key}__strictly_less=value',
-                        'in': 'query',
-                        'description': f'Strictly less than in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
+                        "name": f"{key}__strictly_less=value",
+                        "in": "query",
+                        "description": f"Strictly less than in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
                     },
                     {
-                        'name': f'{key}__strictly_greater=value',
-                        'in': 'query',
-                        'description': f'Strictly greater than in column: {key}',
-                        'required': False,
-                        'schema': {
-                            'type': 'string'
-                        }
-                    }
+                        "name": f"{key}__strictly_greater=value",
+                        "in": "query",
+                        "description": f"Strictly greater than in column: {key}",
+                        "required": False,
+                        "schema": {"type": "string"},
+                    },
                 ]
             )
     return parameters_list
@@ -238,63 +212,45 @@ def swagger_parameters(resource_columns):
 def swagger_component(resource_columns):
     resource_prop_dict = {}
     for key, value in resource_columns.items():
-        type = MAP_TYPES.get(value['python_type'], 'string')
-        resource_prop_dict.update({
-            f'{key}': {
-                'type': f'{type}'
-            }
-        })
+        type = MAP_TYPES.get(value["python_type"], "string")
+        resource_prop_dict.update({f"{key}": {"type": f"{type}"}})
     component_dict = {
-        'schemas': {
-            'ResourceData': {
-                'type': 'object',
-                'properties': {
-                    'data': {
-                        'type': 'array',
-                        'items': {
-                            '$ref': '#/components/schemas/Resource'
-                        }
+        "schemas": {
+            "ResourceData": {
+                "type": "object",
+                "properties": {
+                    "data": {"type": "array", "items": {"$ref": "#/components/schemas/Resource"}},
+                    "link": {
+                        "type": "object",
+                        "properties": {
+                            "profile": {
+                                "description": "Link to the profile endpoint of the resource",
+                                "type": "string",
+                            },
+                            "next": {
+                                "description": "Pagination link to the next page of the resource data",
+                                "type": "string",
+                            },
+                            "prev": {
+                                "description": "Pagination link to the previous page of the resource data",
+                                "type": "string",
+                            },
+                        },
                     },
-                    'link': {
-                        'type': 'object',
-                        'properties': {
-                            'profile': {
-                                'description': 'Link to the profile endpoint of the resource',
-                                'type': 'string'
+                    "meta": {
+                        "type": "object",
+                        "properties": {
+                            "page": {"description": "Current page", "type": "integer"},
+                            "page_size": {
+                                "description": "Number of results per page",
+                                "type": "integer",
                             },
-                            'next': {
-                                'description': 'Pagination link to the next page of the resource data',
-                                'type': 'string'
-                            },
-                            'prev': {
-                                'description': 'Pagination link to the previous page of the resource data',
-                                'type': 'string'
-                            }
-                        }
+                            "total": {"description": "Total number of results", "type": "integer"},
+                        },
                     },
-                    'meta': {
-                        'type': 'object',
-                        'properties': {
-                            'page': {
-                                'description': 'Current page',
-                                'type': 'integer'
-                            },
-                            'page_size': {
-                                'description': 'Number of results per page',
-                                'type': 'integer'
-                            },
-                            'total': {
-                                'description': 'Total number of results',
-                                'type': 'integer'
-                            }
-                        }
-                    }
-                }
+                },
             },
-            'Resource': {
-                'type': 'object',
-                'properties': resource_prop_dict
-            }
+            "Resource": {"type": "object", "properties": resource_prop_dict},
         }
     }
     return component_dict
@@ -304,66 +260,53 @@ def build_swagger_file(resource_columns, rid):
     parameters_list = swagger_parameters(resource_columns)
     component_dict = swagger_component(resource_columns)
     swagger_dict = {
-        'openapi': '3.0.3',
-        'info': {
-            'title': 'Resource data API',
-            'description': 'Retrieve data for a specified resource with optional filtering and sorting.',
-            'version': '1.0.0'
+        "openapi": "3.0.3",
+        "info": {
+            "title": "Resource data API",
+            "description": "Retrieve data for a specified resource with optional filtering and sorting.",
+            "version": "1.0.0",
         },
-        'tags': [{
-            'name': 'Data retrieval',
-            'description': 'Retrieve data for a specified resource',
-        }],
-        'paths': {
-            f'/api/resources/{rid}/data/': {
-                'get': {
-                    'description': 'Returns resource data based on ID as JSON, each row is a dictionnary.',
-                    'summary': 'Get resource data from its ID',
-                    'operationId': 'getResourceDataFromId',
-                    'responses': {
-                        '200': {
-                            'description': 'successful operation',
-                            'content': {
-                                'application/json': {
-                                    'schema': {
-                                        '$ref': '#/components/schemas/ResourceData'
-                                    }
-                                }
-                            }
-                        },
-                        '400': {
-                            'description': 'Invalid query string'
-                        },
-                        '404': {
-                            'description': 'Resource not found'
-                        }
-                    }
-                },
-                'parameters': parameters_list
-            },
-            f'/api/resources/{rid}/data/csv/': {
-                'get': {
-                    'description': 'Returns resource data based on ID as a CSV file.',
-                    'summary': 'Get resource data from its ID in CSV format',
-                    'operationId': 'getResourceDataFromIdCSV',
-                    'responses': {
-                        '200': {
-                            'description': 'successful operation',
-                            'content': {
-                                'text/csv': {}
-                            }
-                        },
-                        '400': {
-                            'description': 'Invalid query string'
-                        },
-                        '404': {
-                            'description': 'Resource not found'
-                        }
-                    }
-                },
-                'parameters': parameters_list
+        "tags": [
+            {
+                "name": "Data retrieval",
+                "description": "Retrieve data for a specified resource",
             }
+        ],
+        "paths": {
+            f"/api/resources/{rid}/data/": {
+                "get": {
+                    "description": "Returns resource data based on ID as JSON, each row is a dictionnary.",
+                    "summary": "Get resource data from its ID",
+                    "operationId": "getResourceDataFromId",
+                    "responses": {
+                        "200": {
+                            "description": "successful operation",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/ResourceData"}
+                                }
+                            },
+                        },
+                        "400": {"description": "Invalid query string"},
+                        "404": {"description": "Resource not found"},
+                    },
+                },
+                "parameters": parameters_list,
+            },
+            f"/api/resources/{rid}/data/csv/": {
+                "get": {
+                    "description": "Returns resource data based on ID as a CSV file.",
+                    "summary": "Get resource data from its ID in CSV format",
+                    "operationId": "getResourceDataFromIdCSV",
+                    "responses": {
+                        "200": {"description": "successful operation", "content": {"text/csv": {}}},
+                        "400": {"description": "Invalid query string"},
+                        "404": {"description": "Resource not found"},
+                    },
+                },
+                "parameters": parameters_list,
+            },
         },
-        'components': component_dict
+        "components": component_dict,
     }
     return yaml.dump(swagger_dict, allow_unicode=True)
