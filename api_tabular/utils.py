@@ -1,3 +1,5 @@
+from typing import Optional
+
 import yaml
 from aiohttp.web_request import Request
 
@@ -61,10 +63,12 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
     return "&".join(sql_query)
 
 
-def process_total(raw_total: str) -> int:
+def process_total(raw_total: Optional[str]) -> Optional[int]:
     # The raw total looks like this: '0-49/21777'
-    _, str_total = raw_total.split("/")
-    return int(str_total)
+    if raw_total:
+        _, str_total = raw_total.split("/")
+        return int(str_total)
+    return None
 
 
 def external_url(url):
