@@ -1,5 +1,6 @@
 import yaml
 from aiohttp.web_request import Request
+from aiohttp.web_response import Response
 
 from api_tabular import config
 
@@ -61,8 +62,10 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
     return "&".join(sql_query)
 
 
-def process_total(raw_total: str) -> int:
-    # The raw total looks like this: '0-49/21777'
+def process_total(res: Response) -> int:
+    # the Content-Range looks like this: '0-49/21777'
+    # see https://docs.postgrest.org/en/stable/references/api/pagination_count.html
+    raw_total = res.headers.get("Content-Range")
     _, str_total = raw_total.split("/")
     return int(str_total)
 

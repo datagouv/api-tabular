@@ -24,7 +24,7 @@ async def get_resource_data(session: ClientSession, resource: dict, sql_query: s
         if not res.ok:
             handle_exception(res.status, "Database error", await res.json(), resource.get("id"))
         record = await res.json()
-        total = process_total(res.headers.get("Content-Range"))
+        total = process_total(res)
         return record, total
 
 
@@ -37,7 +37,9 @@ async def get_resource_data_streamed(
 ):
     url = f"{config.PGREST_ENDPOINT}/{model['parsing_table']}?{sql_query}"
     res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
-    total = process_total(res.headers.get("Content-Range"))
+    if not res.ok:
+        handle_exception(res.status, "Database error", await res.json(), None)
+    total = process_total(res)
     for i in range(0, total, batch_size):
         async with session.get(
             url=f"{url}&limit={batch_size}&offset={i}", headers={"Accept": accept_format}
