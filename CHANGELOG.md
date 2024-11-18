@@ -7,3 +7,4 @@
 - Override config with env [#18](https://github.com/etalab/api-tabular/pull/18)
 - Improve swagger and add new filters [#23](https://github.com/datagouv/api-tabular/pull/23)
 - Fix error in `process_total` using `Content-Range` when the DB response is not valid [#27](https://github.com/datagouv/api-tabular/pull/27)
+- Update CI to build in Python 3.11 instead of Python 3.9, update deprecated CI [#29](https://github.com/datagouv/api-tabular/pull/29)
