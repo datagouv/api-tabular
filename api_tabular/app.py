@@ -85,7 +85,7 @@ async def resource_data(request):
             400,
             None,
             "Invalid query string",
-            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}"
+            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
         )
     if page > 1:
         offset = page_size * (page - 1)
