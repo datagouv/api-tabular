@@ -1109,3 +1109,82 @@ ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca05e530b5
 -- PostgreSQL database dump complete
 --
 
+
+
+--
+-- Name: a6311c164ebfb165ddc828ded; Type: TABLE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE TABLE "csvapi".a6311c164ebfb165ddc828ded (
+    __id integer NOT NULL,
+    "Titre de l'œuvre" integer,
+    "nom.de.colonne" integer,
+    "%dès_àccênts?" integer,
+    "nom ""propre""" integer,
+    "date/de\naissance" integer,
+    "[nom peu] commun]" integer,
+    "avec__des!" integer
+);
+
+
+ALTER TABLE "csvapi".a6311c164ebfb165ddc828ded OWNER TO "csvapi";
+
+--
+-- Name: a6311c164ebfb165ddc828ded___id_seq; Type: SEQUENCE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE SEQUENCE "csvapi".a6311c164ebfb165ddc828ded___id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "csvapi".a6311c164ebfb165ddc828ded___id_seq OWNER TO "csvapi";
+
+--
+-- Name: a6311c164ebfb165ddc828ded___id_seq; Type: SEQUENCE OWNED BY; Schema: csvapi; Owner: csvapi
+--
+
+ALTER SEQUENCE "csvapi".a6311c164ebfb165ddc828ded___id_seq OWNED BY "csvapi".a6311c164ebfb165ddc828ded.__id;
+
+
+--
+-- Name: a6311c164ebfb165ddc828ded __id; Type: DEFAULT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded ALTER COLUMN __id SET DEFAULT nextval('"csvapi".a6311c164ebfb165ddc828ded___id_seq'::regclass);
+
+
+--
+-- Data for Name: a6311c164ebfb165ddc828ded; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
+--
+
+COPY "csvapi".a6311c164ebfb165ddc828ded (__id, "Titre de l'œuvre", "nom.de.colonne", "%dès_àccênts?", "nom ""propre""", "date/de\naissance", "[nom peu] commun]", "avec__des!") FROM stdin;
+1	10	20	30	40	50	60	70
+2	11	21	31	41	51	61	71
+3	12	22	32	42	52	62	72
+4	13	23	33	43	53	63	73
+\.
+
+
+--
+-- Name: a6311c164ebfb165ddc828ded___id_seq; Type: SEQUENCE SET; Schema: csvapi; Owner: csvapi
+--
+
+SELECT pg_catalog.setval('"csvapi".a6311c164ebfb165ddc828ded___id_seq', 21777, true);
+
+
+--
+-- Name: a6311c164ebfb165ddc828ded a6311c164ebfb165ddc828ded_pkey; Type: CONSTRAINT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded
+    ADD CONSTRAINT a6311c164ebfb165ddc828ded_pkey PRIMARY KEY (__id);
+
+
+--
+-- PostgreSQL database dump complete
+--

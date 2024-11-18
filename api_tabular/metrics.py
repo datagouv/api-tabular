@@ -67,7 +67,12 @@ async def metrics_data(request):
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
     if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(400, None, "Invalid query string", "Page size exceeds allowed maximum")
+        raise QueryException(
+            400,
+            None,
+            "Invalid query string",
+            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
+        )
     if page > 1:
         offset = page_size * (page - 1)
     else:

@@ -28,8 +28,11 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
     for arg in request_arg:
         argument, value = arg.split("=")
         if "__" in argument:
-            column, comparator = argument.split("__")
+            *column_split, comparator = argument.split("__")
             normalized_comparator = comparator.lower()
+            # handling headers with "__" and special characters
+            # we're escaping the " because they are the encapsulators of the label
+            column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
 
             if normalized_comparator == "sort":
                 if value == "asc":
