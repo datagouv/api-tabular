@@ -1,4 +1,8 @@
+# Changelog
+
 ## Current (in progress)
+
+## 0.2.0 (2024-11-18)
 
 - Add endpoint to stream a CSV response [#5](https://github.com/etalab/api-tabular/pull/5)
 - Make URL in links absolute [#7](https://github.com/etalab/api-tabular/pull/7)
@@ -10,3 +14,5 @@
 - Update CI to build in Python 3.11 instead of Python 3.9, update deprecated CI [#29](https://github.com/datagouv/api-tabular/pull/29)
 - Better handling of columns with special characters [#30](https://github.com/etalab/api-tabular/pull/30)
 - Update deprecated Sentry methods [#28](https://github.com/datagouv/api-tabular/pull/28)
+
+## 0.1.0
