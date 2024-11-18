@@ -1,6 +1,7 @@
 import pytest
 
 from api_tabular.utils import external_url
+from api_tabular import config
 
 from .conftest import DATE, PGREST_ENDPOINT, RESOURCE_ID, TABLES_INDEX_PATTERN
 
@@ -152,7 +153,7 @@ async def test_api_resource_data_with_page_size_error(client, rmock):
         "errors": [
             {
                 "code": None,
-                "detail": "Page size exceeds allowed maximum",
+                "detail": f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
                 "title": "Invalid query string",
             }
         ]
