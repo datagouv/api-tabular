@@ -35,5 +35,5 @@ lint = { extend-select = ["I"], ignore = ["F401"] } # ["I"] is to also sort impo
 line-length = 100
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
