@@ -63,7 +63,8 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
 
 
 def process_total(res: Response) -> int:
-    # The raw total looks like this: '0-49/21777'
+    # the Content-Range looks like this: '0-49/21777'
+    # see https://docs.postgrest.org/en/stable/references/api/pagination_count.html
     raw_total = res.headers.get("Content-Range")
     _, str_total = raw_total.split("/")
     return int(str_total)
