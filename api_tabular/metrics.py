@@ -30,7 +30,7 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
         if not res.ok:
             handle_exception(res.status, "Database error", await res.json(), None)
         record = await res.json()
-        total = process_total(res.headers.get("Content-Range"))
+        total = process_total(res)
         return record, total
 
 
@@ -44,7 +44,9 @@ async def get_object_data_streamed(
     headers = {"Accept": accept_format, "Prefer": "count=exact"}
     url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
     res = await session.head(f"{url}&limit=1&", headers=headers)
-    total = process_total(res.headers.get("Content-Range"))
+    if not res.ok:
+        handle_exception(res.status, "Database error", await res.json(), None)
+    total = process_total(res)
     for i in range(0, total, batch_size):
         async with session.get(url=f"{url}&limit={batch_size}&offset={i}", headers=headers) as res:
             if not res.ok:

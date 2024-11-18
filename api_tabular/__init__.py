@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-import toml
+import tomllib
 
 
 class Configurator:
@@ -15,12 +15,14 @@ class Configurator:
 
     def configure(self):
         # load default settings
-        configuration = toml.load(Path(__file__).parent / "config_default.toml")
+        with open(Path(__file__).parent / "config_default.toml", "rb") as f:
+            configuration = tomllib.load(f)
 
         # override with local settings
         local_settings = os.environ.get("CSVAPI_SETTINGS", Path.cwd() / "config.toml")
         if Path(local_settings).exists():
-            configuration.update(toml.load(local_settings))
+            with open(local_settings, "rb") as f:
+                configuration.update(tomllib.load(f))
 
         # override with os env settings
         for config_key in configuration:
