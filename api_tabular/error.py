@@ -3,8 +3,6 @@ import json
 import sentry_sdk
 from aiohttp import web
 
-from api_tabular import config
-
 
 class QueryException(web.HTTPException):
     """Re-raise an exception from postgrest as aiohttp exception"""
@@ -15,15 +13,20 @@ class QueryException(web.HTTPException):
         super().__init__(content_type="application/json", text=json.dumps(error_body))
 
 
-def handle_exception(status: int, title: str, detail: str | dict, resource_id: str = None):
+def handle_exception(
+    status: int, title: str, detail: str | dict, resource_id: str | None = None
+):
     event_id = None
     e = Exception(detail)
-    if config.SENTRY_DSN:
-        with sentry_sdk.push_scope() as scope:
-            scope.set_extra("status", status)
-            scope.set_extra("title", title)
-            scope.set_extra("detail", detail)
+    if sentry_sdk.Hub.current.client:
+        with sentry_sdk.new_scope() as scope:
+            sentry_tags: dict = {
+                "status": status,
+                "title": title,
+                "detail": detail,
+            }
             if resource_id:
-                scope.set_extra("resource_id", resource_id)
+                sentry_tags["resource_id"] = resource_id
+            scope.set_tags(sentry_tags)
             event_id = sentry_sdk.capture_exception(e)
     raise QueryException(status, event_id, title, detail)
