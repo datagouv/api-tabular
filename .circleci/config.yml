@@ -93,7 +93,7 @@ jobs:
       - persist_to_workspace:
           root: .
           paths:
-            - .update-ci
+            - .
 
   publish:
     docker:
