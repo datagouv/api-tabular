@@ -24,9 +24,9 @@ You can now access the raw postgrest API on http://localhost:8080.
 Now you can launch the proxy (ie the app):
 
 ```shell
-poetry install
-poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-poetry run adev runserver -p8005 api_tabular/metrics.py    # Api related to udata's metrics
+uv sync
+uv run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
+uv run adev runserver -p8005 api_tabular/metrics.py    # Api related to udata's metrics
 ```
 
 And query postgrest via the proxy using a `resource_id`, cf below. Test resource_id is `aaaaaaaa-1111-bbbb-2222-cccccccccccc`
@@ -257,7 +257,7 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
 This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and format code before each commit.
 Please install it with:
 ```shell
-poetry run pre-commit install
+uv run pre-commit install
 ```
 
 ### Lint and format code
@@ -265,7 +265,7 @@ poetry run pre-commit install
 To lint, format and sort imports, this repository uses [Ruff](https://astral.sh/ruff/).
 You can run the following command to lint and format the code:
 ```shell
-poetry run ruff check --fix && poetry run ruff format
+uv run ruff check --fix && uv run ruff format
 ```
 
 ### Releases
