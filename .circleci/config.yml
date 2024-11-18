@@ -53,12 +53,15 @@ jobs:
       - run:
           name: Update version in pyproject.toml
           command: |
+            # Extract the current version from pyproject.toml
+            CURRENT_VERSION=$(grep -oP '^version = "\K[^"]+' pyproject.toml)
+
             if [[ $CIRCLE_TAG ]]; then
                 VERSION=$CIRCLE_TAG
             elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
-                VERSION=$(uv version -s).$CIRCLE_BUILD_NUM
+                VERSION=${CURRENT_VERSION%.*}.$CIRCLE_BUILD_NUM
             else
-                VERSION=$(uv version -s).$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
+                VERSION=${CURRENT_VERSION%.*}.$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
             fi
 
             # Update the version in pyproject.toml
