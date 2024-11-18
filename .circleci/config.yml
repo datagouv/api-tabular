@@ -26,18 +26,54 @@ jobs:
           command: export BASE_BRANCH=$(base_branch)
       - restore_cache:
           keys:
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
+            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "uv.lock" }}
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
       - run:
-          name: Install python dependencies
+          name: Install uv
           command: |
-            poetry config virtualenvs.in-project true
-            poetry install
+            python -m pip install --upgrade pip
+            pip install uv
+      - run:
+          name: Install python dependencies
+          command: uv sync
       - save_cache:
-          key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
+          key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "uv.lock" }}
           paths:
-            - .venv
+            - .uv
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+
+  set_version:
+    docker:
+      - image: cimg/python:<< pipeline.parameters.python-version >>
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Update version in pyproject.toml
+          command: |
+            if [[ $CIRCLE_TAG ]]; then
+                VERSION=$CIRCLE_TAG
+            elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
+                VERSION=$(uv version -s).$CIRCLE_BUILD_NUM
+            else
+                VERSION=$(uv version -s).$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
+            fi
+
+            # Update the version in pyproject.toml
+            sed -i "s/^version = \".*\"$/version = \"$VERSION\"/" pyproject.toml
+
+            # Display updated pyproject.toml for debugging
+            cat pyproject.toml | grep version
+
+            # Commit the updated file
+            git config user.name "CircleCI Bot"
+            git config user.email "circleci@example.com"
+            git add pyproject.toml
+            git commit -m "CI: Update version to $VERSION" || echo "No changes to commit."
       - persist_to_workspace:
           root: .
           paths:
@@ -54,8 +90,8 @@ jobs:
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
           # ruff format --check . : check code formatting without fixing (to fix, remove --check)
           command: |
-            poetry run ruff check --select I .
-            poetry run ruff format --check .
+            uv run ruff check --select I .
+            uv run ruff format --check .
 
   tests:
     docker:
@@ -66,7 +102,7 @@ jobs:
       - run:
           name: Run tests
           command: |
-            poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            uv run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
@@ -77,35 +113,8 @@ jobs:
       - attach_workspace:
           at: .
       - run:
-          name: Set the version number
-          command: |
-            if [[ $CIRCLE_TAG ]]; then
-                export PACKAGE_VERSION=$CIRCLE_TAG
-            elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
-                # for main branches, can't add the commit hash since it's not a valid format for publishing
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM
-            else
-                # for feature branches, add the commit hash
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
-            fi
-            # Display some debug info
-            echo "Building a wheel release with version $PACKAGE_VERSION, build number: $CIRCLE_BUILD_NUM, commit hash: ${CIRCLE_SHA1:0:7}, tag: $CIRCLE_TAG."
-            # Save the version number in a file
-            echo "export PACKAGE_VERSION=\"$PACKAGE_VERSION\"" >> .env_vars
-      - run:
           name: Build a distributable package
-          command: |
-            # Get the version number
-            source .env_vars
-            # Build a wheel release
-            if [[ $CIRCLE_TAG ]]; then
-                # This is a tagged release, version has been handled upstream
-                poetry build
-            else
-                # Relies on a dev version like "1.2.1.dev" by default
-                poetry version $PACKAGE_VERSION
-                poetry build
-            fi
+          command: uv build
       - store_artifacts:
           path: dist
       - persist_to_workspace:
@@ -122,7 +131,7 @@ jobs:
       - run:
           name: Publish on PyPI
           command: |
-            poetry publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}" --no-interaction
+            uv publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}"
 
 workflows:
   build:
@@ -131,15 +140,21 @@ workflows:
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - lint:
+      - set_version:
           requires:
             - install
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
+      - lint:
+          requires:
+            - set_version
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
       - tests:
           requires:
-            - install
+            - set_version
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
