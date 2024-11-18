@@ -1,7 +1,7 @@
 import pytest
 
-from api_tabular.utils import external_url
 from api_tabular import config
+from api_tabular.utils import external_url
 
 from .conftest import DATE, PGREST_ENDPOINT, RESOURCE_ID, TABLES_INDEX_PATTERN
 
