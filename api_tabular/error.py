@@ -13,9 +13,7 @@ class QueryException(web.HTTPException):
         super().__init__(content_type="application/json", text=json.dumps(error_body))
 
 
-def handle_exception(
-    status: int, title: str, detail: str | dict, resource_id: str | None = None
-):
+def handle_exception(status: int, title: str, detail: str | dict, resource_id: str | None = None):
     event_id = None
     e = Exception(detail)
     if sentry_sdk.Hub.current.client:
