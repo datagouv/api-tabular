@@ -150,7 +150,7 @@ async def get_health(request):
     current_time = datetime.now(timezone.utc)
     uptime_seconds = (current_time - start_time).total_seconds()
     return web.json_response(
-        {"status": "ok", "version": await get_app_version(), "uptime_seconds": uptime_seconds}
+        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
     )
 
 
@@ -183,7 +183,6 @@ async def app_factory():
         app,
         swagger_url=config.DOC_PATH,
         ui_version=3,
-        api_version=app["app_version"],
         swagger_from_file="ressource_app_swagger.yaml",
     )
 
