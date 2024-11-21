@@ -1,3 +1,4 @@
+import tomllib
 import yaml
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
@@ -20,6 +21,18 @@ MAP_TYPES = {
     "int": "integer",
     "float": "number",
 }
+
+
+async def get_app_version() -> str:
+    """Parse pyproject.toml and return the version or an error."""
+    try:
+        with open("pyproject.toml", "rb") as f:
+            pyproject = tomllib.load(f)
+        return pyproject.get("tool", {}).get("poetry", {}).get("version", "unknown")
+    except FileNotFoundError:
+        return "unknown (pyproject.toml not found)"
+    except Exception as e:
+        return f"unknown ({str(e)})"
 
 
 def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
