@@ -23,16 +23,16 @@ MAP_TYPES = {
 }
 
 
-async def get_app_version():
+async def get_app_version() -> str:
     """Parse pyproject.toml and return the version or an error."""
     try:
         with open("pyproject.toml", "rb") as f:
             pyproject = tomllib.load(f)
         return pyproject.get("tool", {}).get("poetry", {}).get("version", "unknown")
     except FileNotFoundError:
-        return {"error": "unknown (pyproject.toml not found)"}
+        return "unknown (pyproject.toml not found)"
     except Exception as e:
-        return {"error": f"unknown ({str(e)})"}
+        return f"unknown ({str(e)})"
 
 
 def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
