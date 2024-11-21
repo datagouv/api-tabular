@@ -1,5 +1,9 @@
 # Changelog
 
+## Current (in progress)
+
+- Nothing yet
+
 ## 0.2.1 (2024-11-21)
 
 - Add healthcheck endpoint [#33](https://github.com/datagouv/api-tabular/pull/33)
