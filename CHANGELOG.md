@@ -2,6 +2,8 @@
 
 ## Current (in progress)
 
+- Add healthcheck endpoint [#33](https://github.com/datagouv/api-tabular/pull/33)
+
 ## 0.2.0 (2024-11-18)
 
 - Add endpoint to stream a CSV response [#5](https://github.com/etalab/api-tabular/pull/5)
