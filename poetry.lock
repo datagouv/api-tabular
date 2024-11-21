@@ -246,18 +246,15 @@ tests = ["cloudpickle", "hypothesis", "mypy (>=1.11.1)", "pympler", "pytest (>=4
 tests-mypy = ["mypy (>=1.11.1)", "pytest-mypy-plugins"]
 
 [[package]]
-name = "bumpr"
-version = "0.3.8"
+name = "bumpx"
+version = "0.3.10"
 description = "Version bumper and Python package releaser"
 optional = false
-python-versions = ">=3.7,<4.0"
+python-versions = "<4.0,>=3.9"
 files = [
-    {file = "bumpr-0.3.8-py3-none-any.whl", hash = "sha256:1cdfe40b618d97ee3af07f74b3983c0bc5c68a369cc317995259e241438b93a6"},
-    {file = "bumpr-0.3.8.tar.gz", hash = "sha256:6bfdda629f7816012c0e3dcaca54b6228e25b2159956049639b329389f0348ad"},
+    {file = "bumpx-0.3.10-py3-none-any.whl", hash = "sha256:90fa97d8f19b6c3db77f453bbcb649d519303a45165fc8b623a96e182d3a8336"},
+    {file = "bumpx-0.3.10.tar.gz", hash = "sha256:3139185d3b9c7ae6cd45edb9a51e18b6f2673c69137508fb0230353f99c0dae6"},
 ]
-
-[package.extras]
-doc = ["mkdocs (>=1.2.3,<2.0.0)", "mkdocs-include-markdown-plugin (>=3.2.3,<4.0.0)", "mkdocs-material (>=7.3.5,<8.0.0)", "mkdocstrings (>=0.16.2,<0.17.0)"]
 
 [[package]]
 name = "certifi"
@@ -1200,4 +1197,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "13207880aaddef25f128483cd2e5db3c6b1af2ec4a46810b474f3de6c8d6bc26"
+content-hash = "f7cfc0f1ae28036ba1cc22d760f2a3e3967c46d21933437f6ff5ebc38de76dd3"

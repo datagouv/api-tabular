@@ -208,3 +208,7 @@ You can run the following command to lint and format the code:
 ```shell
 poetry run ruff check --fix && poetry run ruff format
 ```
+
+### Releases
+
+The release process uses [bump'X](https://github.com/datagouv/bumpx).
