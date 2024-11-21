@@ -47,7 +47,6 @@ js-built
 venv
 .venv
 .python-version
-uv.lock
 
 # Installer logs
 pip-log.txt
