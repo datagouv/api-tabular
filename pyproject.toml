@@ -17,7 +17,7 @@ sentry-sdk = "^2.13.0"
 [tool.poetry.group.dev.dependencies]
 aiohttp-devtools = "^1.0.post0"
 aioresponses = "^0.7.4"
-bumpr = "^0.3.8"
+bumpx = "^0.3.10"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.20.3"
 ruff = "^0.6.5"
