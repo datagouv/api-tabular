@@ -1,3 +1,4 @@
+from collections import defaultdict
 import tomllib
 import yaml
 from aiohttp.web_request import Request
@@ -6,13 +7,13 @@ from aiohttp.web_response import Response
 from api_tabular import config
 
 TYPE_POSSIBILITIES = {
-    "string": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "float": ["compare", "differs", "exact", "in", "sort"],
-    "int": ["compare", "differs", "exact", "in", "sort"],
-    "bool": ["differs", "exact", "in", "sort"],
-    "date": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "datetime": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "json": ["contains", "exact", "in"],
+    "string": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "float": ["compare", "differs", "exact", "in", "sort", "groupby", "count", "avg", "max", "min", "sum"],
+    "int": ["compare", "differs", "exact", "in", "sort", "groupby", "count", "avg", "max", "min", "sum"],
+    "bool": ["differs", "exact", "in", "sort", "groupby", "count"],
+    "date": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "datetime": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "json": ["contains", "exact", "in", "groupby", "count"],
 }
 
 MAP_TYPES = {
@@ -20,6 +21,15 @@ MAP_TYPES = {
     "bool": "boolean",
     "int": "integer",
     "float": "number",
+}
+
+MAP_OPERATORS = {
+    "groupby": "group by values",
+    "count": "count values",
+    "avg": "mean",
+    "min": "minimum",
+    "max": "maximum",
+    "sum": "sum",
 }
 
 
@@ -37,45 +47,86 @@ async def get_app_version() -> str:
 
 def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
     sql_query = []
+    aggregators = defaultdict(list)
     sorted = False
     for arg in request_arg:
-        argument, value = arg.split("=")
-        if "__" in argument:
-            *column_split, comparator = argument.split("__")
-            normalized_comparator = comparator.lower()
-            # handling headers with "__" and special characters
-            # we're escaping the " because they are the encapsulators of the label
-            column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
-
-            if normalized_comparator == "sort":
-                q = f"order={column}.{value}"
-                if column != '"__id"':
-                    q += ',"__id".asc'
-                sql_query.append(q)
-                sorted = True
-            elif normalized_comparator == "exact":
-                sql_query.append(f"{column}=eq.{value}")
-            elif normalized_comparator == "differs":
-                sql_query.append(f"{column}=neq.{value}")
-            elif normalized_comparator == "contains":
-                sql_query.append(f"{column}=ilike.*{value}*")
-            elif normalized_comparator == "in":
-                sql_query.append(f"{column}=in.({value})")
-            elif normalized_comparator == "less":
-                sql_query.append(f"{column}=lte.{value}")
-            elif normalized_comparator == "greater":
-                sql_query.append(f"{column}=gte.{value}")
-            elif normalized_comparator == "strictly_less":
-                sql_query.append(f"{column}=lt.{value}")
-            elif normalized_comparator == "strictly_greater":
-                sql_query.append(f"{column}=gt.{value}")
+        _split = arg.split("=")
+        # filters are expected to have the syntax `<column_name>__<operator>=<value>`
+        if len(_split) == 2:
+            _filter, _sorted = add_filter(*_split)
+            if _filter:
+                sorted = sorted or _sorted
+                sql_query.append(_filter)
+        # aggregators are expected to have the syntax `<column_name>__<operator>`
+        elif len(_split) == 1:
+            column, operator = add_aggregator(_split[0])
+            if column:
+                aggregators[operator].append(column)
+    if aggregators:
+        agg_query = "select="
+        for operator in aggregators:
+            if operator == "groupby":
+                agg_query += f"{','.join(aggregators[operator])},"
+            else:
+                for column in aggregators[operator]:
+                    # aggregated columns are named `<column_name>__<operator>`
+                    # we pop the heading and trailing " that were added upstream
+                    # and put them around the new column name
+                    agg_query += f'"{column[1:-1]}__{operator}":{column}.{operator}(),'
+        # we pop the trailing comma (it's always there, by construction)
+        sql_query.append(agg_query[:-1])
     if page_size:
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")
-    if not sorted:
+    if not sorted and not aggregators:
         sql_query.append("order=__id.asc")
     return "&".join(sql_query)
+
+
+def get_column_and_operator(argument):
+    *column_split, comparator = argument.split("__")
+    normalized_comparator = comparator.lower()
+    # handling headers with "__" and special characters
+    # we're escaping the " because they are the encapsulators of the label
+    column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
+    return column, normalized_comparator
+
+
+def add_filter(argument: str, value: str) -> tuple[str, bool]:
+    if "__" in argument:
+        column, normalized_comparator = get_column_and_operator(argument)
+        if normalized_comparator == "sort":
+            q = f"order={column}.{value}"
+            if column != '"__id"':
+                q += ',"__id".asc'
+            return q, True
+        elif normalized_comparator == "exact":
+            return f"{column}=eq.{value}", False
+        elif normalized_comparator == "differs":
+            return f"{column}=neq.{value}", False
+        elif normalized_comparator == "contains":
+            return f"{column}=ilike.*{value}*", False
+        elif normalized_comparator == "in":
+            return f"{column}=in.({value})", False
+        elif normalized_comparator == "less":
+            return f"{column}=lte.{value}", False
+        elif normalized_comparator == "greater":
+            return f"{column}=gte.{value}", False
+        elif normalized_comparator == "strictly_less":
+            return f"{column}=lt.{value}", False
+        elif normalized_comparator == "strictly_greater":
+            return f"{column}=gt.{value}", False
+    return None, False
+
+
+def add_aggregator(argument):
+    operator = None
+    if "__" in argument:
+        column, operator = get_column_and_operator(argument)
+    if operator in ["avg", "count", "max", "min", "sum", "groupby"]:
+        return column, operator
+    return None, None
 
 
 def process_total(res: Response) -> int:
@@ -225,6 +276,19 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
+        for op in MAP_OPERATORS:
+            if op in TYPE_POSSIBILITIES[value["python_type"]]:
+                parameters_list.extend(
+                    [
+                        {
+                            "name": f"{key}__{op}",
+                            "in": "query",
+                            "description": f"Performs `{MAP_OPERATORS[op]}` operation in column: {key}",
+                            "required": False,
+                            "schema": {"type": "string"},
+                        },
+                    ]
+                )
     return parameters_list
 
 
