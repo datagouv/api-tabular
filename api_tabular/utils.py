@@ -48,10 +48,10 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
             column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
 
             if normalized_comparator == "sort":
-                if value == "asc":
-                    sql_query.append(f"order={column}.asc,__id.asc")
-                elif value == "desc":
-                    sql_query.append(f"order={column}.desc,__id.asc")
+                q = f"order={column}.{value}"
+                if column != '"__id"':
+                    q += ',"__id".asc'
+                sql_query.append(q)
                 sorted = True
             elif normalized_comparator == "exact":
                 sql_query.append(f"{column}=eq.{value}")
