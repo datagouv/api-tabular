@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Optional
 
 import tomllib
 import yaml
@@ -145,7 +146,7 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
     return "&".join(sql_query)
 
 
-def get_column_and_operator(argument):
+def get_column_and_operator(argument: str) -> tuple[str, str]:
     *column_split, comparator = argument.split("__")
     normalized_comparator = comparator.lower()
     # handling headers with "__" and special characters
@@ -154,7 +155,7 @@ def get_column_and_operator(argument):
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str) -> tuple[str, bool]:
+def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
@@ -181,7 +182,7 @@ def add_filter(argument: str, value: str) -> tuple[str, bool]:
     return None, False
 
 
-def add_aggregator(argument):
+def add_aggregator(argument: str) -> tuple[str, str]:
     operator = None
     if "__" in argument:
         column, operator = get_column_and_operator(argument)
@@ -198,25 +199,25 @@ def process_total(res: Response) -> int:
     return int(str_total)
 
 
-def external_url(url):
+def external_url(url) -> str:
     return f"{config.SCHEME}://{config.SERVER_NAME}{url}"
 
 
-def build_link_with_page(request: Request, query_string: str, page: int, page_size: int):
+def build_link_with_page(request: Request, query_string: str, page: int, page_size: int) -> str:
     q = [string for string in query_string if not string.startswith("page")]
     q.extend([f"page={page}", f"page_size={page_size}"])
     rebuilt_q = "&".join(q)
     return external_url(f"{request.path}?{rebuilt_q}")
 
 
-def url_for(request: Request, route: str, *args, **kwargs):
+def url_for(request: Request, route: str, *args, **kwargs) -> str:
     router = request.app.router
     if kwargs.pop("_external", None):
         return external_url(router[route].url_for(**kwargs))
     return router[route].url_for(**kwargs)
 
 
-def swagger_parameters(resource_columns):
+def swagger_parameters(resource_columns: dict) -> list:
     parameters_list = [
         {
             "name": "page",
@@ -305,7 +306,7 @@ def swagger_parameters(resource_columns):
     return parameters_list
 
 
-def swagger_component(resource_columns):
+def swagger_component(resource_columns: dict) -> dict:
     resource_prop_dict = {}
     for key, value in resource_columns.items():
         type = MAP_TYPES.get(value["python_type"], "string")
@@ -352,7 +353,7 @@ def swagger_component(resource_columns):
     return component_dict
 
 
-def build_swagger_file(resource_columns, rid):
+def build_swagger_file(resource_columns: dict, rid: str) -> str:
     parameters_list = swagger_parameters(resource_columns)
     component_dict = swagger_component(resource_columns)
     swagger_dict = {
