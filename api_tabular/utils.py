@@ -13,7 +13,7 @@ TYPE_POSSIBILITIES = {
     "bool": ["differs", "exact", "in", "sort", "groupby", "count"],
     "date": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
     "datetime": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
-    "json": ["contains", "exact", "in", "groupby", "count"],
+    "json": ["contains", "differs", "exact", "in", "groupby", "count"],
 }
 
 MAP_TYPES = {
@@ -23,13 +23,47 @@ MAP_TYPES = {
     "float": "number",
 }
 
-MAP_OPERATORS = {
-    "groupby": "group by values",
-    "count": "count values",
-    "avg": "mean",
-    "min": "minimum",
-    "max": "maximum",
-    "sum": "sum",
+OPERATORS_DESCRIPTIONS = {
+    "exact": {
+        "name": "{}__exact=value",
+        "description": "Exact match in column: {}",
+    },
+    "differs": {
+        "name": "{}__differs=value",
+        "description": "Differs from in column: {}",
+    },
+    "contains": {
+        "name": "{}__contains=value",
+        "description": "String contains in column: {}",
+    },
+    "in": {
+        "name": "{}__in=value1,value2,...",
+        "description": "Value in list in column: {}",
+    },
+    "groupby": {
+        "name": "{}__groupby",
+        "description": "Performs `group by values` operation in column: {}",
+    },
+    "count": {
+        "name": "{}__count",
+        "description": "Performs `count values` operation in column: {}",
+    },
+    "avg": {
+        "name": "{}__avg",
+        "description": "Performs `mean` operation in column: {}",
+    },
+    "min": {
+        "name": "{}__min",
+        "description": "Performs `minimum` operation in column: {}",
+    },
+    "max": {
+        "name": "{}__max",
+        "description": "Performs `maximum` operation in column: {}",
+    },
+    "sum": {
+        "name": "{}__sum",
+        "description": "Performs `sum` operation in column: {}",
+    },
 }
 
 
@@ -176,42 +210,19 @@ def swagger_parameters(resource_columns):
     # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
-        if "exact" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__exact=value",
-                        "in": "query",
-                        "description": f"Exact match in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "differs" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__differs=value",
-                        "in": "query",
-                        "description": f"Differs from in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "in" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__in=value1,value2,...",
-                        "in": "query",
-                        "description": f"Value in list in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
+        for op in OPERATORS_DESCRIPTIONS:
+            if op in TYPE_POSSIBILITIES[value["python_type"]]:
+                parameters_list.extend(
+                    [
+                        {
+                            "name": OPERATORS_DESCRIPTIONS[op]["name"].format(key),
+                            "in": "query",
+                            "description": OPERATORS_DESCRIPTIONS[op]["description"].format(key),
+                            "required": False,
+                            "schema": {"type": "string"},
+                        },
+                    ]
+                )
         if "sort" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
@@ -226,18 +237,6 @@ def swagger_parameters(resource_columns):
                         "name": f"{key}__sort=desc",
                         "in": "query",
                         "description": f"Sort descending on column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "contains" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__contains=value",
-                        "in": "query",
-                        "description": f"String contains in column: {key}",
                         "required": False,
                         "schema": {"type": "string"},
                     },
@@ -276,19 +275,6 @@ def swagger_parameters(resource_columns):
                     },
                 ]
             )
-        for op in MAP_OPERATORS:
-            if op in TYPE_POSSIBILITIES[value["python_type"]]:
-                parameters_list.extend(
-                    [
-                        {
-                            "name": f"{key}__{op}",
-                            "in": "query",
-                            "description": f"Performs `{MAP_OPERATORS[op]}` operation in column: {key}",
-                            "required": False,
-                            "schema": {"type": "string"},
-                        },
-                    ]
-                )
     return parameters_list
 
 
