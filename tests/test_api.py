@@ -138,7 +138,7 @@ async def test_api_resource_data_with_args_error(client, rmock):
             {
                 "code": None,
                 "title": "Invalid query string",
-                "detail": "Malformed query: argument 'TESTCOLUM_NAME__EXACT=BIDULEpage=1' could not be parsed"
+                "detail": "Malformed query: argument 'TESTCOLUM_NAME__EXACT=BIDULEpage=1' could not be parsed",
             }
         ]
     }
@@ -217,7 +217,7 @@ async def test_api_with_unsupported_args(client, rmock):
             {
                 "code": None,
                 "title": "Invalid query string",
-                "detail": "Malformed query: argument 'limit=1' could not be parsed"
+                "detail": "Malformed query: argument 'limit=1' could not be parsed",
             },
         ],
     }
