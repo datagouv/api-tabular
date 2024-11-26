@@ -1,4 +1,5 @@
 from collections import defaultdict
+
 import tomllib
 import yaml
 from aiohttp.web_request import Request
@@ -8,8 +9,32 @@ from api_tabular import config
 
 TYPE_POSSIBILITIES = {
     "string": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
-    "float": ["compare", "differs", "exact", "in", "sort", "groupby", "count", "avg", "max", "min", "sum"],
-    "int": ["compare", "differs", "exact", "in", "sort", "groupby", "count", "avg", "max", "min", "sum"],
+    "float": [
+        "compare",
+        "differs",
+        "exact",
+        "in",
+        "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
+    ],
+    "int": [
+        "compare",
+        "differs",
+        "exact",
+        "in",
+        "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
+    ],
     "bool": ["differs", "exact", "in", "sort", "groupby", "count"],
     "date": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
     "datetime": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
@@ -135,7 +160,7 @@ def add_filter(argument: str, value: str) -> tuple[str, bool]:
         if normalized_comparator == "sort":
             q = f"order={column}.{value}"
             if column != '"__id"':
-                q += ',__id.asc'
+                q += ",__id.asc"
             return q, True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False

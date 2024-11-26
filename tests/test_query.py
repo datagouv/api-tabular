@@ -108,8 +108,11 @@ def test_query_aggregators():
     select = [_ for _ in results if "select" in _]
     assert len(select) == 1
     params = select[0].replace("select=", "").split(",")
-    assert all(_ in params for _ in [
-        '"column_name"',
-        '"column_name__min":"column_name".min()',
-        '"column_name__avg":"column_name".avg()',
-    ])
+    assert all(
+        _ in params
+        for _ in [
+            '"column_name"',
+            '"column_name__min":"column_name".min()',
+            '"column_name__avg":"column_name".avg()',
+        ]
+    )
