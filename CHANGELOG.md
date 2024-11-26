@@ -2,7 +2,7 @@
 
 ## Current (in progress)
 
-- Nothing yet
+- Handle queries with aggregators [#35](https://github.com/datagouv/api-tabular/pull/35)
 
 ## 0.2.1 (2024-11-21)
 
