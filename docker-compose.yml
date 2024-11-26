@@ -2,7 +2,7 @@ version: '3'
 
 services:
   postgrest:
-    image: "postgrest/postgrest:v10.1.2"
+    image: "postgrest/postgrest:v12.2.3"
     environment:
       # connect to hydra database-csv
       - PGRST_DB_URI=postgres://csvapi:csvapi@postgres-test:5432/csvapi
@@ -10,6 +10,7 @@ services:
       - PGRST_SERVER_PORT=8080
       - PGRST_DB_ANON_ROLE=csvapi
       - PGRST_DB_SCHEMA=csvapi
+      - PGRST_DB_AGGREGATES_ENABLED=true
     ports:
       - 8080:8080
   postgres-test:

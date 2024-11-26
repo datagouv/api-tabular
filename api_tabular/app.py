@@ -96,8 +96,8 @@ async def resource_data(request):
 
     try:
         sql_query = build_sql_query_string(query_string, page_size, offset)
-    except ValueError:
-        raise QueryException(400, None, "Invalid query string", "Malformed query")
+    except ValueError as e:
+        raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
 
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)

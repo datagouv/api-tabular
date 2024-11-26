@@ -112,7 +112,7 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
 }
 ```
 
-This endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column):
+This endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameter):
 
 ```
 # sort by column
@@ -142,7 +142,26 @@ column_name__strictly_less=value
 
 # strictly greater
 column_name__strictly_greater=value
+
+# group by values
+column_name__groupby
+
+# count values
+column_name__count
+
+# mean / average
+column_name__avg
+
+# minimum
+column_name__min
+
+# maximum
+column_name__max
+
+# sum
+column_name__sum
 ```
+> NB : passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
 For instance:
 ```shell
@@ -182,6 +201,31 @@ returns
     "page_size": 20,
     "total": 2
   }
+}
+```
+
+With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
+```shell
+curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?decompte__groupby&birth__less=1996&score__avg
+```
+i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, grouped by `decompte`, returns
+```json
+{
+    "data": [
+        {
+            "decompte": 55,
+            "score__avg": 0.7123333333333334
+        },
+        {
+            "decompte": 27,
+            "score__avg": 0.6068888888888889
+        },
+        {
+            "decompte": 23,
+            "score__avg": 0.4603333333333334
+        },
+        ...
+    ]
 }
 ```
 

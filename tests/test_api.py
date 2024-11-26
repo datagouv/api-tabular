@@ -137,8 +137,8 @@ async def test_api_resource_data_with_args_error(client, rmock):
         "errors": [
             {
                 "code": None,
-                "detail": "Malformed query",
                 "title": "Invalid query string",
+                "detail": "Malformed query: argument 'TESTCOLUM_NAME__EXACT=BIDULEpage=1' could not be parsed",
             }
         ]
     }
@@ -211,16 +211,15 @@ async def test_api_with_unsupported_args(client, rmock):
         headers={"Content-Range": "0-10/10"},
     )
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?limit=1&select=numnum")
-    assert res.status == 200
+    assert res.status == 400
     body = {
-        "data": {"such": "data"},
-        "links": {
-            "next": None,
-            "prev": None,
-            "profile": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/"),
-            "swagger": external_url("/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/"),
-        },
-        "meta": {"page": 1, "page_size": 20, "total": 10},
+        "errors": [
+            {
+                "code": None,
+                "title": "Invalid query string",
+                "detail": "Malformed query: argument 'limit=1' could not be parsed",
+            },
+        ],
     }
     assert await res.json() == body
 

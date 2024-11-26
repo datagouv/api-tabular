@@ -49,5 +49,8 @@ async def test_swagger_content(client, rmock):
                 elif p == "in":
                     value = "value1,value2,..."
                 for _p in _params:
-                    if f"{c}__{_p}={value}" not in params:
+                    if (
+                        f"{c}__{_p}={value}" not in params  # filters
+                        and f"{c}__{_p}" not in params  # aggregators
+                    ):
                         raise ValueError(f"{c}__{_p} is missing in {output} output")
