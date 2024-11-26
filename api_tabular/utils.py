@@ -96,6 +96,8 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
             column, operator = add_aggregator(_split[0])
             if column:
                 aggregators[operator].append(column)
+        else:
+            raise ValueError
     if aggregators:
         agg_query = "select="
         for operator in aggregators:
@@ -133,7 +135,7 @@ def add_filter(argument: str, value: str) -> tuple[str, bool]:
         if normalized_comparator == "sort":
             q = f"order={column}.{value}"
             if column != '"__id"':
-                q += ',"__id".asc'
+                q += ',__id.asc'
             return q, True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False
