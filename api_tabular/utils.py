@@ -123,7 +123,7 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
             if column:
                 aggregators[operator].append(column)
         else:
-            raise ValueError
+            raise ValueError(f"argument '{arg}' could not be parsed")
     if aggregators:
         agg_query = "select="
         for operator in aggregators:
@@ -155,7 +155,7 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
+def add_filter(argument: str, value: str) -> tuple[str, bool]:
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
@@ -177,7 +177,7 @@ def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
             return f"{column}=lt.{value}", False
         elif normalized_comparator == "strictly_greater":
             return f"{column}=gt.{value}", False
-    return None, False
+    raise ValueError(f"argument '{argument}' could not be parsed")
 
 
 def add_aggregator(argument: str) -> tuple[str, str]:
@@ -186,7 +186,7 @@ def add_aggregator(argument: str) -> tuple[str, str]:
         column, operator = get_column_and_operator(argument)
     if operator in ["avg", "count", "max", "min", "sum", "groupby"]:
         return column, operator
-    return None, None
+    raise ValueError(f"argument '{argument}' could not be parsed")
 
 
 def process_total(res: Response) -> int:
