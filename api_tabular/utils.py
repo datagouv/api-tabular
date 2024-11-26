@@ -160,8 +160,6 @@ def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
             q = f"order={column}.{value}"
-            if column != '"__id"':
-                q += ",__id.asc"
             return q, True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False
