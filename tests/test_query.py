@@ -1,3 +1,5 @@
+import pytest
+
 from api_tabular.utils import build_sql_query_string
 
 
@@ -16,13 +18,13 @@ def test_query_build_offset():
 def test_query_build_sort_asc():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == 'order="column_name".asc,__id.asc&limit=50'
+    assert result == 'order="column_name".asc&limit=50'
 
 
 def test_query_build_sort_asc_without_limit():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc,__id.asc'
+    assert result == 'order="column_name".asc'
 
 
 def test_query_build_sort_asc_with_page_in_query():
@@ -32,13 +34,13 @@ def test_query_build_sort_asc_with_page_in_query():
         "page_size=20",
     ]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc,__id.asc'
+    assert result == 'order="column_name".asc'
 
 
 def test_query_build_sort_desc():
     query_str = ["column_name__sort=desc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == 'order="column_name".desc,__id.asc&limit=50'
+    assert result == 'order="column_name".desc&limit=50'
 
 
 def test_query_build_exact():
@@ -92,8 +94,8 @@ def test_query_build_multiple():
 
 def test_query_build_multiple_with_unknown():
     query_str = ["select=numnum"]
-    result = build_sql_query_string(query_str, 50)
-    assert result == "limit=50&order=__id.asc"
+    with pytest.raises(ValueError):
+        build_sql_query_string(query_str, 50)
 
 
 def test_query_aggregators():

@@ -155,7 +155,9 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str) -> tuple[str, bool]:
+def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
+    if argument in ["page", "page_size"]:  # processed differently
+        return None, False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
@@ -177,7 +179,7 @@ def add_filter(argument: str, value: str) -> tuple[str, bool]:
             return f"{column}=lt.{value}", False
         elif normalized_comparator == "strictly_greater":
             return f"{column}=gt.{value}", False
-    raise ValueError(f"argument '{argument}' could not be parsed")
+    raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
 def add_aggregator(argument: str) -> tuple[str, str]:
