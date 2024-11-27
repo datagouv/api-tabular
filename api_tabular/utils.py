@@ -259,7 +259,9 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
         for op in OPERATORS_DESCRIPTIONS:
-            if not is_aggregation_allowed(resource_id) and OPERATORS_DESCRIPTIONS[op].get("is_aggregator"):
+            if not is_aggregation_allowed(resource_id) and OPERATORS_DESCRIPTIONS[op].get(
+                "is_aggregator"
+            ):
                 continue
             if op in TYPE_POSSIBILITIES[value["python_type"]]:
                 parameters_list.extend(
