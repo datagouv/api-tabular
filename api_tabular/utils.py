@@ -69,28 +69,38 @@ OPERATORS_DESCRIPTIONS = {
     "groupby": {
         "name": "{}__groupby",
         "description": "Performs `group by values` operation in column: {}",
+        "is_aggregator": True,
     },
     "count": {
         "name": "{}__count",
         "description": "Performs `count values` operation in column: {}",
+        "is_aggregator": True,
     },
     "avg": {
         "name": "{}__avg",
         "description": "Performs `mean` operation in column: {}",
+        "is_aggregator": True,
     },
     "min": {
         "name": "{}__min",
         "description": "Performs `minimum` operation in column: {}",
+        "is_aggregator": True,
     },
     "max": {
         "name": "{}__max",
         "description": "Performs `maximum` operation in column: {}",
+        "is_aggregator": True,
     },
     "sum": {
         "name": "{}__sum",
         "description": "Performs `sum` operation in column: {}",
+        "is_aggregator": True,
     },
 }
+
+
+def is_aggregation_allowed(resource_id: str):
+    return resource_id in config.ALLOW_AGGREGATION
 
 
 async def get_app_version() -> str:
@@ -105,7 +115,12 @@ async def get_app_version() -> str:
         return f"unknown ({str(e)})"
 
 
-def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
+def build_sql_query_string(
+    request_arg: list,
+    resource_id: Optional[str] = None,
+    page_size: int = None,
+    offset: int = 0,
+) -> str:
     sql_query = []
     aggregators = defaultdict(list)
     sorted = False
@@ -125,6 +140,11 @@ def build_sql_query_string(request_arg: list, page_size: int = None, offset: int
         else:
             raise ValueError(f"argument '{arg}' could not be parsed")
     if aggregators:
+        if resource_id and not is_aggregation_allowed(resource_id):
+            raise PermissionError(
+                f"Aggregation parameters `{'`, `'.join(aggregators.keys())}` "
+                f"are not allowed for resource '{resource_id}'"
+            )
         agg_query = "select="
         for operator in aggregators:
             if operator == "groupby":
@@ -217,7 +237,7 @@ def url_for(request: Request, route: str, *args, **kwargs) -> str:
     return router[route].url_for(**kwargs)
 
 
-def swagger_parameters(resource_columns: dict) -> list:
+def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
     parameters_list = [
         {
             "name": "page",
@@ -239,6 +259,8 @@ def swagger_parameters(resource_columns: dict) -> list:
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
         for op in OPERATORS_DESCRIPTIONS:
+            if not is_aggregation_allowed(resource_id) and OPERATORS_DESCRIPTIONS[op].get("is_aggregator"):
+                continue
             if op in TYPE_POSSIBILITIES[value["python_type"]]:
                 parameters_list.extend(
                     [
@@ -354,7 +376,7 @@ def swagger_component(resource_columns: dict) -> dict:
 
 
 def build_swagger_file(resource_columns: dict, rid: str) -> str:
-    parameters_list = swagger_parameters(resource_columns)
+    parameters_list = swagger_parameters(resource_columns, rid)
     component_dict = swagger_component(resource_columns)
     swagger_dict = {
         "openapi": "3.0.3",
