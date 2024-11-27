@@ -1,3 +1,5 @@
+import pytest
+
 from api_tabular.utils import build_sql_query_string
 
 
@@ -16,13 +18,13 @@ def test_query_build_offset():
 def test_query_build_sort_asc():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == 'order="column_name".asc,__id.asc&limit=50'
+    assert result == 'order="column_name".asc&limit=50'
 
 
 def test_query_build_sort_asc_without_limit():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc,__id.asc'
+    assert result == 'order="column_name".asc'
 
 
 def test_query_build_sort_asc_with_page_in_query():
@@ -32,13 +34,13 @@ def test_query_build_sort_asc_with_page_in_query():
         "page_size=20",
     ]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc,__id.asc'
+    assert result == 'order="column_name".asc'
 
 
 def test_query_build_sort_desc():
     query_str = ["column_name__sort=desc"]
     result = build_sql_query_string(query_str, 50)
-    assert result == 'order="column_name".desc,__id.asc&limit=50'
+    assert result == 'order="column_name".desc&limit=50'
 
 
 def test_query_build_exact():
@@ -92,5 +94,27 @@ def test_query_build_multiple():
 
 def test_query_build_multiple_with_unknown():
     query_str = ["select=numnum"]
-    result = build_sql_query_string(query_str, 50)
-    assert result == "limit=50&order=__id.asc"
+    with pytest.raises(ValueError):
+        build_sql_query_string(query_str, 50)
+
+
+def test_query_aggregators():
+    query_str = [
+        "column_name__groupby",
+        "column_name__min",
+        "column_name__avg",
+    ]
+    results = build_sql_query_string(query_str, 50).split("&")
+    assert "limit=50" in results
+    assert "order=__id.asc" not in results  # no sort if aggregators
+    select = [_ for _ in results if "select" in _]
+    assert len(select) == 1
+    params = select[0].replace("select=", "").split(",")
+    assert all(
+        _ in params
+        for _ in [
+            '"column_name"',
+            '"column_name__min":"column_name".min()',
+            '"column_name__avg":"column_name".avg()',
+        ]
+    )

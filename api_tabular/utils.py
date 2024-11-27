@@ -1,3 +1,6 @@
+from collections import defaultdict
+from typing import Optional
+
 import tomllib
 import yaml
 from aiohttp.web_request import Request
@@ -6,13 +9,37 @@ from aiohttp.web_response import Response
 from api_tabular import config
 
 TYPE_POSSIBILITIES = {
-    "string": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "float": ["compare", "differs", "exact", "in", "sort"],
-    "int": ["compare", "differs", "exact", "in", "sort"],
-    "bool": ["differs", "exact", "in", "sort"],
-    "date": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "datetime": ["compare", "contains", "differs", "exact", "in", "sort"],
-    "json": ["contains", "exact", "in"],
+    "string": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "float": [
+        "compare",
+        "differs",
+        "exact",
+        "in",
+        "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
+    ],
+    "int": [
+        "compare",
+        "differs",
+        "exact",
+        "in",
+        "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
+    ],
+    "bool": ["differs", "exact", "in", "sort", "groupby", "count"],
+    "date": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "datetime": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "json": ["contains", "differs", "exact", "in", "groupby", "count"],
 }
 
 MAP_TYPES = {
@@ -20,6 +47,49 @@ MAP_TYPES = {
     "bool": "boolean",
     "int": "integer",
     "float": "number",
+}
+
+OPERATORS_DESCRIPTIONS = {
+    "exact": {
+        "name": "{}__exact=value",
+        "description": "Exact match in column: {}",
+    },
+    "differs": {
+        "name": "{}__differs=value",
+        "description": "Differs from in column: {}",
+    },
+    "contains": {
+        "name": "{}__contains=value",
+        "description": "String contains in column: {}",
+    },
+    "in": {
+        "name": "{}__in=value1,value2,...",
+        "description": "Value in list in column: {}",
+    },
+    "groupby": {
+        "name": "{}__groupby",
+        "description": "Performs `group by values` operation in column: {}",
+    },
+    "count": {
+        "name": "{}__count",
+        "description": "Performs `count values` operation in column: {}",
+    },
+    "avg": {
+        "name": "{}__avg",
+        "description": "Performs `mean` operation in column: {}",
+    },
+    "min": {
+        "name": "{}__min",
+        "description": "Performs `minimum` operation in column: {}",
+    },
+    "max": {
+        "name": "{}__max",
+        "description": "Performs `maximum` operation in column: {}",
+    },
+    "sum": {
+        "name": "{}__sum",
+        "description": "Performs `sum` operation in column: {}",
+    },
 }
 
 
@@ -37,45 +107,88 @@ async def get_app_version() -> str:
 
 def build_sql_query_string(request_arg: list, page_size: int = None, offset: int = 0) -> str:
     sql_query = []
+    aggregators = defaultdict(list)
     sorted = False
     for arg in request_arg:
-        argument, value = arg.split("=")
-        if "__" in argument:
-            *column_split, comparator = argument.split("__")
-            normalized_comparator = comparator.lower()
-            # handling headers with "__" and special characters
-            # we're escaping the " because they are the encapsulators of the label
-            column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
-
-            if normalized_comparator == "sort":
-                if value == "asc":
-                    sql_query.append(f"order={column}.asc,__id.asc")
-                elif value == "desc":
-                    sql_query.append(f"order={column}.desc,__id.asc")
-                sorted = True
-            elif normalized_comparator == "exact":
-                sql_query.append(f"{column}=eq.{value}")
-            elif normalized_comparator == "differs":
-                sql_query.append(f"{column}=neq.{value}")
-            elif normalized_comparator == "contains":
-                sql_query.append(f"{column}=ilike.*{value}*")
-            elif normalized_comparator == "in":
-                sql_query.append(f"{column}=in.({value})")
-            elif normalized_comparator == "less":
-                sql_query.append(f"{column}=lte.{value}")
-            elif normalized_comparator == "greater":
-                sql_query.append(f"{column}=gte.{value}")
-            elif normalized_comparator == "strictly_less":
-                sql_query.append(f"{column}=lt.{value}")
-            elif normalized_comparator == "strictly_greater":
-                sql_query.append(f"{column}=gt.{value}")
+        _split = arg.split("=")
+        # filters are expected to have the syntax `<column_name>__<operator>=<value>`
+        if len(_split) == 2:
+            _filter, _sorted = add_filter(*_split)
+            if _filter:
+                sorted = sorted or _sorted
+                sql_query.append(_filter)
+        # aggregators are expected to have the syntax `<column_name>__<operator>`
+        elif len(_split) == 1:
+            column, operator = add_aggregator(_split[0])
+            if column:
+                aggregators[operator].append(column)
+        else:
+            raise ValueError(f"argument '{arg}' could not be parsed")
+    if aggregators:
+        agg_query = "select="
+        for operator in aggregators:
+            if operator == "groupby":
+                agg_query += f"{','.join(aggregators[operator])},"
+            else:
+                for column in aggregators[operator]:
+                    # aggregated columns are named `<column_name>__<operator>`
+                    # we pop the heading and trailing " that were added upstream
+                    # and put them around the new column name
+                    agg_query += f'"{column[1:-1]}__{operator}":{column}.{operator}(),'
+        # we pop the trailing comma (it's always there, by construction)
+        sql_query.append(agg_query[:-1])
     if page_size:
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")
-    if not sorted:
+    if not sorted and not aggregators:
         sql_query.append("order=__id.asc")
     return "&".join(sql_query)
+
+
+def get_column_and_operator(argument: str) -> tuple[str, str]:
+    *column_split, comparator = argument.split("__")
+    normalized_comparator = comparator.lower()
+    # handling headers with "__" and special characters
+    # we're escaping the " because they are the encapsulators of the label
+    column = '"{}"'.format("__".join(column_split).replace('"', '\\"'))
+    return column, normalized_comparator
+
+
+def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
+    if argument in ["page", "page_size"]:  # processed differently
+        return None, False
+    if "__" in argument:
+        column, normalized_comparator = get_column_and_operator(argument)
+        if normalized_comparator == "sort":
+            q = f"order={column}.{value}"
+            return q, True
+        elif normalized_comparator == "exact":
+            return f"{column}=eq.{value}", False
+        elif normalized_comparator == "differs":
+            return f"{column}=neq.{value}", False
+        elif normalized_comparator == "contains":
+            return f"{column}=ilike.*{value}*", False
+        elif normalized_comparator == "in":
+            return f"{column}=in.({value})", False
+        elif normalized_comparator == "less":
+            return f"{column}=lte.{value}", False
+        elif normalized_comparator == "greater":
+            return f"{column}=gte.{value}", False
+        elif normalized_comparator == "strictly_less":
+            return f"{column}=lt.{value}", False
+        elif normalized_comparator == "strictly_greater":
+            return f"{column}=gt.{value}", False
+    raise ValueError(f"argument '{argument}={value}' could not be parsed")
+
+
+def add_aggregator(argument: str) -> tuple[str, str]:
+    operator = None
+    if "__" in argument:
+        column, operator = get_column_and_operator(argument)
+    if operator in ["avg", "count", "max", "min", "sum", "groupby"]:
+        return column, operator
+    raise ValueError(f"argument '{argument}' could not be parsed")
 
 
 def process_total(res: Response) -> int:
@@ -86,25 +199,25 @@ def process_total(res: Response) -> int:
     return int(str_total)
 
 
-def external_url(url):
+def external_url(url) -> str:
     return f"{config.SCHEME}://{config.SERVER_NAME}{url}"
 
 
-def build_link_with_page(request: Request, query_string: str, page: int, page_size: int):
+def build_link_with_page(request: Request, query_string: str, page: int, page_size: int) -> str:
     q = [string for string in query_string if not string.startswith("page")]
     q.extend([f"page={page}", f"page_size={page_size}"])
     rebuilt_q = "&".join(q)
     return external_url(f"{request.path}?{rebuilt_q}")
 
 
-def url_for(request: Request, route: str, *args, **kwargs):
+def url_for(request: Request, route: str, *args, **kwargs) -> str:
     router = request.app.router
     if kwargs.pop("_external", None):
         return external_url(router[route].url_for(**kwargs))
     return router[route].url_for(**kwargs)
 
 
-def swagger_parameters(resource_columns):
+def swagger_parameters(resource_columns: dict) -> list:
     parameters_list = [
         {
             "name": "page",
@@ -125,42 +238,19 @@ def swagger_parameters(resource_columns):
     # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
     # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
     for key, value in resource_columns.items():
-        if "exact" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__exact=value",
-                        "in": "query",
-                        "description": f"Exact match in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "differs" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__differs=value",
-                        "in": "query",
-                        "description": f"Differs from in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "in" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__in=value1,value2,...",
-                        "in": "query",
-                        "description": f"Value in list in column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
+        for op in OPERATORS_DESCRIPTIONS:
+            if op in TYPE_POSSIBILITIES[value["python_type"]]:
+                parameters_list.extend(
+                    [
+                        {
+                            "name": OPERATORS_DESCRIPTIONS[op]["name"].format(key),
+                            "in": "query",
+                            "description": OPERATORS_DESCRIPTIONS[op]["description"].format(key),
+                            "required": False,
+                            "schema": {"type": "string"},
+                        },
+                    ]
+                )
         if "sort" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
@@ -175,18 +265,6 @@ def swagger_parameters(resource_columns):
                         "name": f"{key}__sort=desc",
                         "in": "query",
                         "description": f"Sort descending on column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                ]
-            )
-        if "contains" in TYPE_POSSIBILITIES[value["python_type"]]:
-            parameters_list.extend(
-                [
-                    {
-                        "name": f"{key}__contains=value",
-                        "in": "query",
-                        "description": f"String contains in column: {key}",
                         "required": False,
                         "schema": {"type": "string"},
                     },
@@ -228,7 +306,7 @@ def swagger_parameters(resource_columns):
     return parameters_list
 
 
-def swagger_component(resource_columns):
+def swagger_component(resource_columns: dict) -> dict:
     resource_prop_dict = {}
     for key, value in resource_columns.items():
         type = MAP_TYPES.get(value["python_type"], "string")
@@ -275,7 +353,7 @@ def swagger_component(resource_columns):
     return component_dict
 
 
-def build_swagger_file(resource_columns, rid):
+def build_swagger_file(resource_columns: dict, rid: str) -> str:
     parameters_list = swagger_parameters(resource_columns)
     component_dict = swagger_component(resource_columns)
     swagger_dict = {
