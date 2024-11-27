@@ -78,9 +78,9 @@ async def metrics_data(request):
     else:
         offset = 0
     try:
-        sql_query = build_sql_query_string(query_string, page_size, offset)
-    except ValueError:
-        raise QueryException(400, None, "Invalid query string", "Malformed query")
+        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
+    except ValueError as e:
+        raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
 
     response, total = await get_object_data(request.app["csession"], model, sql_query)
 
@@ -104,8 +104,8 @@ async def metrics_data_csv(request):
 
     try:
         sql_query = build_sql_query_string(query_string)
-    except ValueError:
-        raise QueryException(400, None, "Invalid query string", "Malformed query")
+    except ValueError as e:
+        raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
 
     response_headers = {
         "Content-Disposition": f'attachment; filename="{model}.csv"',
