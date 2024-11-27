@@ -78,7 +78,7 @@ async def metrics_data(request):
     else:
         offset = 0
     try:
-        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
+        sql_query = build_sql_query_string(query_string, page_size=page_size, offset=offset)
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
 
