@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from api_tabular import config
-from api_tabular.utils import TYPE_POSSIBILITIES, OPERATORS_DESCRIPTIONS
+from api_tabular.utils import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
 
 from .conftest import RESOURCE_ID, TABLES_INDEX_PATTERN
 
