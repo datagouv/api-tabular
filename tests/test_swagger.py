@@ -4,7 +4,8 @@ import json
 import pytest
 import yaml
 
-from api_tabular.utils import TYPE_POSSIBILITIES
+from api_tabular import config
+from api_tabular.utils import TYPE_POSSIBILITIES, OPERATORS_DESCRIPTIONS
 
 from .conftest import RESOURCE_ID, TABLES_INDEX_PATTERN
 
@@ -17,7 +18,16 @@ async def test_swagger_endpoint(client, rmock):
     assert res.status == 200
 
 
-async def test_swagger_content(client, rmock):
+@pytest.mark.parametrize(
+    "allow_aggregation",
+    [
+        False,
+        True,
+    ],
+)
+async def test_swagger_content(client, rmock, allow_aggregation):
+    if allow_aggregation:
+        config.override(ALLOW_AGGREGATION=[RESOURCE_ID])
     with open("db/sample.csv", newline="") as csvfile:
         spamreader = csv.reader(csvfile, delimiter=",", quotechar='"')
         # getting the csv-detective output in the test file
@@ -49,8 +59,12 @@ async def test_swagger_content(client, rmock):
                 elif p == "in":
                     value = "value1,value2,..."
                 for _p in _params:
-                    if (
-                        f"{c}__{_p}={value}" not in params  # filters
-                        and f"{c}__{_p}" not in params  # aggregators
-                    ):
-                        raise ValueError(f"{c}__{_p} is missing in {output} output")
+                    if allow_aggregation:
+                        if (
+                            f"{c}__{_p}={value}" not in params  # filters
+                            and f"{c}__{_p}" not in params  # aggregators
+                        ):
+                            raise ValueError(f"{c}__{_p} is missing in {output} output")
+                    elif not OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator"):
+                        if f"{c}__{_p}={value}" not in params:  # filters
+                            raise ValueError(f"{c}__{_p} is missing in {output} output")
