@@ -161,6 +161,9 @@ column_name__max
 # sum
 column_name__sum
 ```
+
+> /!\ WARNING: aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file.
+
 > NB : passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
 For instance:
