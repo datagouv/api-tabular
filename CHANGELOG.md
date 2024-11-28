@@ -1,5 +1,9 @@
 # Changelog
 
+## Current (in progress)
+
+- Nothing yet
+
 ## 0.2.2 (2024-11-28)
 
 - Handle queries with aggregators [#35](https://github.com/datagouv/api-tabular/pull/35)
