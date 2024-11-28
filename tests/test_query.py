@@ -108,9 +108,9 @@ def test_query_build_multiple_with_unknown():
         True,
     ],
 )
-def test_query_aggregators(allow_aggregation):
+def test_query_aggregators(allow_aggregation, mocker):
     if allow_aggregation:
-        config.override(ALLOW_AGGREGATION=[RESOURCE_ID])
+        mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
     query_str = [
         "column_name__groupby",
         "column_name__min",
