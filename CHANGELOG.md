@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Handle queries with aggregators [#35](https://github.com/datagouv/api-tabular/pull/35)
+- Restrain aggregators to list of specific resources [#36](https://github.com/datagouv/api-tabular/pull/36)
 
 ## 0.2.1 (2024-11-21)
 

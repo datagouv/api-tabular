@@ -95,10 +95,11 @@ async def resource_data(request):
         offset = 0
 
     try:
-        sql_query = build_sql_query_string(query_string, page_size, offset)
+        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
-
+    except PermissionError as e:
+        raise QueryException(403, None, "Unauthorized parameters", str(e))
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
 
@@ -123,9 +124,11 @@ async def resource_data_csv(request):
     query_string = request.query_string.split("&") if request.query_string else []
 
     try:
-        sql_query = build_sql_query_string(query_string)
+        sql_query = build_sql_query_string(query_string, resource_id)
     except ValueError:
         raise QueryException(400, None, "Invalid query string", "Malformed query")
+    except PermissionError as e:
+        raise QueryException(403, None, "Unauthorized parameters", str(e))
 
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
 
