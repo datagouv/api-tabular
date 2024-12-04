@@ -19,6 +19,7 @@ from api_tabular.utils import (
     build_sql_query_string,
     build_swagger_file,
     get_app_version,
+    get_postgrest_version,
     url_for,
 )
 
@@ -153,7 +154,12 @@ async def get_health(request):
     current_time = datetime.now(timezone.utc)
     uptime_seconds = (current_time - start_time).total_seconds()
     return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
+        {
+            "status": "ok",
+            "version": request.app["app_version"],
+            "postgrest_version": await get_postgrest_version(),
+            "uptime_seconds": uptime_seconds,
+        },
     )
 
 
