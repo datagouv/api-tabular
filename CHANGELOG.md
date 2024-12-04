@@ -2,7 +2,7 @@
 
 ## Current (in progress)
 
-- Nothing yet
+- Add PostgREST version in health endpoint [#37](https://github.com/datagouv/api-tabular/pull/37)
 
 ## 0.2.2 (2024-11-28)
 
