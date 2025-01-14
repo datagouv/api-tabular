@@ -30,10 +30,16 @@ jobs:
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
       - run:
+          name: Install Poetry 2.0.1 locally
+          command: |
+            python3 -m venv .venv
+            .venv/bin/pip install poetry==2.0.1
+            ln -s .venv/bin/poetry poetry-binary
+      - run:
           name: Install python dependencies
           command: |
-            poetry config virtualenvs.in-project true
-            poetry install
+            ./poetry-binary config virtualenvs.in-project true
+            ./poetry-binary install
       - save_cache:
           key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
           paths:
@@ -54,8 +60,8 @@ jobs:
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
           # ruff format --check . : check code formatting without fixing (to fix, remove --check)
           command: |
-            poetry run ruff check --select I .
-            poetry run ruff format --check .
+            ./poetry-binary run ruff check --select I .
+            ./poetry-binary run ruff format --check .
 
   tests:
     docker:
@@ -66,7 +72,7 @@ jobs:
       - run:
           name: Run tests
           command: |
-            poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            ./poetry-binary run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
@@ -100,11 +106,11 @@ jobs:
             # Build a wheel release
             if [[ $CIRCLE_TAG ]]; then
                 # This is a tagged release, version has been handled upstream
-                poetry build
+                ./poetry-binary build
             else
                 # Relies on a dev version like "1.2.1.dev" by default
-                poetry version $PACKAGE_VERSION
-                poetry build
+                ./poetry-binary version $PACKAGE_VERSION
+                ./poetry-binary build
             fi
       - store_artifacts:
           path: dist
@@ -125,7 +131,7 @@ jobs:
             poetry publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}" --no-interaction
 
 workflows:
-  build:
+  build-test-deploy:
     jobs:
       - install:
           filters:
