@@ -1,7 +1,7 @@
+import tomllib
 from collections import defaultdict
 from typing import Optional
 
-import tomllib
 import yaml
 from aiohttp import ClientSession
 from aiohttp.web_request import Request

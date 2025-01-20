@@ -4,7 +4,6 @@ import json
 import pytest
 import yaml
 
-from api_tabular import config
 from api_tabular.utils import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
 
 from .conftest import RESOURCE_ID, TABLES_INDEX_PATTERN
@@ -43,7 +42,7 @@ async def test_swagger_content(client, rmock, allow_aggregation, mocker):
 
     for output in ["json", "csv"]:
         params = swagger_dict["paths"][
-            f'/api/resources/{RESOURCE_ID}/data/{"" if output == "json" else "csv/"}'
+            f"/api/resources/{RESOURCE_ID}/data/{'' if output == 'json' else 'csv/'}"
         ]["parameters"]
         params = [p["name"] for p in params]
         for c in columns:

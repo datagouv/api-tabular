@@ -2,6 +2,13 @@
 
 This connects to [hydra](https://github.com/datagouv/hydra) and serves the converted CSVs as an API.
 
+## Dependencies
+
+- Python >= 3.11
+- [Poetry](https://python-poetry.org/) >= 2.0.0
+- [hydra](https://github.com/datagouv/hydra)
+- [postgrest](https://github.com/PostgREST/postgrest)
+
 ## Run locally
 
 Start [hydra](https://github.com/datagouv/hydra) via `docker compose`.
