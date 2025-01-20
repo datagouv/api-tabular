@@ -26,6 +26,11 @@ dev = [
     "ruff>=0.6.5",
 ]
 
+[tool.poetry]
+packages = [
+    { include = "api_tabular" }
+]
+
 [tool.ruff]
 lint = { extend-select = ["I"], ignore = ["F401"] } # ["I"] is to also sort imports with an isort rule # TODO: remove ignore F401 later
 line-length = 100
