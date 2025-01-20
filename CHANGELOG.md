@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Add PostgREST version in health endpoint [#37](https://github.com/datagouv/api-tabular/pull/37)
+- Use a standard `pyproject.toml` file [#38](https://github.com/datagouv/api-tabular/pull/38)
 
 ## 0.2.2 (2024-11-28)
 
