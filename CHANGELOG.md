@@ -5,6 +5,7 @@
 - Remove PostgREST version in health endpoint [#43](https://github.com/datagouv/api-tabular/pull/43)
 - Better health endpoint [#45](https://github.com/datagouv/api-tabular/pull/45) [#46](https://github.com/datagouv/api-tabular/pull/46)
 - Use indexes from resources_exceptions table to allow operations or not [#44](https://github.com/datagouv/api-tabular/pull/44)
+- Use a standard `pyproject.toml` file [#38](https://github.com/datagouv/api-tabular/pull/38)
 
 ## 0.2.4 (2025-03-20)
 
