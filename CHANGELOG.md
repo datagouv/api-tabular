@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Add PostgREST version in health endpoint [#37](https://github.com/datagouv/api-tabular/pull/37)
+- Cast env configs as expected [#39](https://github.com/datagouv/api-tabular/pull/39)
 
 ## 0.2.2 (2024-11-28)
 
