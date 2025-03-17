@@ -30,7 +30,9 @@ def test_default_config():
 
 @mock.patch("builtins.open", mock_open_with_custom_config_toml)
 def test_custom_config_file_override():
-    config = Configurator()
+    with mock.patch.object(Path, "exists") as mock_exists:
+        mock_exists.return_value = True
+        config = Configurator()
 
     assert config.PAGE_SIZE_MAX == 200
 
