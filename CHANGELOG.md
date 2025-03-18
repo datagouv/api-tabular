@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Add PostgREST version in health endpoint [#37](https://github.com/datagouv/api-tabular/pull/37)
+- Fix pagination and total for aggregation queries [#41](https://github.com/datagouv/api-tabular/pull/41)
 
 ## 0.2.2 (2024-11-28)
 
