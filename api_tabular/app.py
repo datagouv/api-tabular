@@ -76,6 +76,16 @@ async def resource_swagger(request):
     return web.Response(body=swagger_string)
 
 
+def build_next_page(nb_results: int, page_size: int, offset: int, total: int | None, default_next: str):
+    if total is not None:
+        # this is for raw or filtering queries
+        return default_next if page_size + offset < total else None
+    # for aggregation queries, the total is erroneous but we can be somewhat smart for the next page
+    if nb_results < page_size:
+        return None
+    return default_next
+
+
 @routes.get(r"/api/resources/{rid}/data/", name="data")
 async def resource_data(request):
     resource_id = request.match_info["rid"]
@@ -111,11 +121,15 @@ async def resource_data(request):
         "links": {
             "profile": url_for(request, "profile", rid=resource_id, _external=True),
             "swagger": url_for(request, "swagger", rid=resource_id, _external=True),
-            "next": next if page_size + offset < total else None,
+            "next": build_next_page(
+                nb_results=len(response), page_size=page_size, offset=offset, total=total, default_next=next
+            ),
             "prev": prev if page > 1 else None,
         },
-        "meta": {"page": page, "page_size": page_size, "total": total},
+        "meta": {"page": page, "page_size": page_size},
     }
+    if total is not None:
+        body["meta"]["total"] = total
     return web.json_response(body)
 
 
