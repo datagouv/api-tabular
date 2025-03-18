@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Optional
 
 import tomllib
 import yaml
@@ -125,7 +124,7 @@ async def get_app_version() -> str:
 
 def build_sql_query_string(
     request_arg: list,
-    resource_id: Optional[str] = None,
+    resource_id: str | None = None,
     page_size: int = None,
     offset: int = 0,
 ) -> str:
@@ -183,7 +182,7 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str) -> tuple[Optional[str], bool]:
+def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         return None, False
     if "__" in argument:
