@@ -78,7 +78,7 @@ async def resource_swagger(request):
 
 def build_next_page(
     nb_results: int, page_size: int, offset: int, total: int | None, default_next: str
-):
+) -> str | None:
     if total is not None:
         # this is for raw or filtering queries
         return default_next if page_size + offset < total else None
