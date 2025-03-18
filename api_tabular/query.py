@@ -19,7 +19,9 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list) 
         return record[0]
 
 
-async def get_resource_data(session: ClientSession, resource: dict, sql_query: str) -> tuple[list[dict], int | None]:
+async def get_resource_data(
+    session: ClientSession, resource: dict, sql_query: str
+) -> tuple[list[dict], int | None]:
     headers = {"Prefer": "count=exact"}
     url = f"{config.PGREST_ENDPOINT}/{resource['parsing_table']}?{sql_query}"
     skip_total = False

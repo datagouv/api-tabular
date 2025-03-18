@@ -76,7 +76,9 @@ async def resource_swagger(request):
     return web.Response(body=swagger_string)
 
 
-def build_next_page(nb_results: int, page_size: int, offset: int, total: int | None, default_next: str):
+def build_next_page(
+    nb_results: int, page_size: int, offset: int, total: int | None, default_next: str
+):
     if total is not None:
         # this is for raw or filtering queries
         return default_next if page_size + offset < total else None
@@ -122,7 +124,11 @@ async def resource_data(request):
             "profile": url_for(request, "profile", rid=resource_id, _external=True),
             "swagger": url_for(request, "swagger", rid=resource_id, _external=True),
             "next": build_next_page(
-                nb_results=len(response), page_size=page_size, offset=offset, total=total, default_next=next
+                nb_results=len(response),
+                page_size=page_size,
+                offset=offset,
+                total=total,
+                default_next=next,
             ),
             "prev": prev if page > 1 else None,
         },
