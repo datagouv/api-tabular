@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "udata-hydra-csvapi"
-version = "0.2.3"
+version = "0.2.4.dev"
 description = "API for CSV converted by udata-hydra"
 authors = ["data.gouv.fr <opendatateam@data.gouv.fr>"]
 license = "MIT"
