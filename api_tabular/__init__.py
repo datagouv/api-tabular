@@ -27,7 +27,17 @@ class Configurator:
         # override with os env settings
         for config_key in configuration:
             if config_key in os.environ:
-                configuration[config_key] = os.getenv(config_key)
+                value = os.getenv(config_key)
+                # Casting env value
+                if isinstance(configuration[config_key], list):
+                    value = value.split(",")
+                elif isinstance(configuration[config_key], bool):
+                    value = value.lower() in ["true", "1", "t", "y", "yes"]
+                elif isinstance(configuration[config_key], int):
+                    value = int(value)
+                elif isinstance(configuration[config_key], float):
+                    value = float(value)
+                configuration[config_key] = value
 
         # Make sure PGREST_ENDPOINT has a scheme
         if not configuration["PGREST_ENDPOINT"].startswith("http"):

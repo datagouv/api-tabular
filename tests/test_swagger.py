@@ -43,7 +43,7 @@ async def test_swagger_content(client, rmock, allow_aggregation, mocker):
 
     for output in ["json", "csv"]:
         params = swagger_dict["paths"][
-            f'/api/resources/{RESOURCE_ID}/data/{"" if output == "json" else "csv/"}'
+            f"/api/resources/{RESOURCE_ID}/data/{'' if output == 'json' else 'csv/'}"
         ]["parameters"]
         params = [p["name"] for p in params]
         for c in columns:
