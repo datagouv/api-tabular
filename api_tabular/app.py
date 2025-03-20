@@ -109,8 +109,6 @@ async def resource_data(request):
 
     try:
         sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
-        if sql_query.count("select=") > 1:
-            raise ValueError("the argument `columns` cannot be set alongside aggregators")
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
     except PermissionError as e:

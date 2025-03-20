@@ -170,7 +170,10 @@ def build_sql_query_string(
         sql_query.append(f"offset={offset}")
     if not sorted and not aggregators:
         sql_query.append("order=__id.asc")
-    return "&".join(sql_query)
+    q = "&".join(sql_query)
+    if q.count("select=") > 1:
+        raise ValueError("the argument `columns` cannot be set alongside aggregators")
+    return q
 
 
 def get_column_and_operator(argument: str) -> tuple[str, str]:
