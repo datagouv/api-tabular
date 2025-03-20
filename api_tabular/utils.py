@@ -170,7 +170,10 @@ def build_sql_query_string(
         sql_query.append(f"offset={offset}")
     if not sorted and not aggregators:
         sql_query.append("order=__id.asc")
-    return "&".join(sql_query)
+    q = "&".join(sql_query)
+    if q.count("select=") > 1:
+        raise ValueError("the argument `columns` cannot be set alongside aggregators")
+    return q
 
 
 def get_column_and_operator(argument: str) -> tuple[str, str]:
@@ -185,11 +188,12 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
 def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         return None, False
+    if argument == "columns":
+        return f"select={value}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
-            q = f"order={column}.{value}"
-            return q, True
+            return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False
         elif normalized_comparator == "differs":
@@ -257,6 +261,13 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "name": "page_size",
             "in": "query",
             "description": "Number of results per page",
+            "required": False,
+            "schema": {"type": "string"},
+        },
+        {
+            "name": "columns",
+            "in": "query",
+            "description": "Columns to keep in the result",
             "required": False,
             "schema": {"type": "string"},
         },

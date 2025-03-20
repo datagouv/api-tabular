@@ -1,6 +1,5 @@
 import pytest
 
-from api_tabular import config
 from api_tabular.utils import build_sql_query_string
 
 from .conftest import RESOURCE_ID
@@ -134,3 +133,15 @@ def test_query_aggregators(allow_aggregation, mocker):
             '"column_name__avg":"column_name".avg()',
         ]
     )
+
+
+def test_query_specify_columns():
+    query_str = ["columns=col1,col2"]
+    result = build_sql_query_string(query_str)
+    assert result == "select=col1,col2&order=__id.asc"
+
+
+def test_query_specify_columns_and_aggregate():
+    query_str = ["columns=col1,col2", "col1__groupby"]
+    with pytest.raises(ValueError):
+        build_sql_query_string(query_str)
