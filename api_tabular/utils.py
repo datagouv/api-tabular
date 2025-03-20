@@ -185,11 +185,12 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
 def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         return None, False
+    if argument == "columns":
+        return f"select={value}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
-            q = f"order={column}.{value}"
-            return q, True
+            return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False
         elif normalized_comparator == "differs":
