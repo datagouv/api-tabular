@@ -1,6 +1,6 @@
 # Changelog
 
-## Current (in progress)
+## 0.2.4 (2025-03-20)
 
 - Allow to request specific columns [#42](https://github.com/datagouv/api-tabular/pull/42) 
 
