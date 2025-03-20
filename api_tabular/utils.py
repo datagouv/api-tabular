@@ -264,6 +264,13 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "required": False,
             "schema": {"type": "string"},
         },
+        {
+            "name": "columns",
+            "in": "query",
+            "description": "Columns to keep in the result",
+            "required": False,
+            "schema": {"type": "string"},
+        },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
     # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py

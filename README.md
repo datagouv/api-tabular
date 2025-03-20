@@ -237,6 +237,11 @@ Pagination is made through queries with `page` and `page_size`:
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=30
 ```
 
+You may also specify the columns you want to keep using the `columns` argument:
+```shell
+curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=col1,col2
+```
+
 
 ## Contributing
 
