@@ -2,7 +2,6 @@ from collections import defaultdict
 
 import tomllib
 import yaml
-from aiohttp import ClientSession
 from aiohttp.web_request import Request
 from aiohttp.web_response import Response
 
@@ -101,13 +100,6 @@ OPERATORS_DESCRIPTIONS = {
 
 def is_aggregation_allowed(resource_id: str):
     return resource_id in config.ALLOW_AGGREGATION
-
-
-async def get_postgrest_version() -> str:
-    session = ClientSession()
-    async with session.get(config.PGREST_ENDPOINT) as res:
-        content = await res.json()
-    return content["info"]["version"]
 
 
 async def get_app_version() -> str:
