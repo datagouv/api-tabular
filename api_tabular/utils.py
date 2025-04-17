@@ -123,6 +123,7 @@ def build_sql_query_string(
     offset: int = 0,
 ) -> str:
     from query import get_potential_indexes
+
     indexes: set | None = get_potential_indexes(session, resource_id)
     sql_query = []
     aggregators = defaultdict(list)
