@@ -10,6 +10,7 @@ from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
 from api_tabular.error import QueryException
 from api_tabular.query import (
+    get_potential_indexes,
     get_resource,
     get_resource_data,
     get_resource_data_streamed,
@@ -106,14 +107,9 @@ async def resource_data(request):
     else:
         offset = 0
 
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
     try:
-        sql_query = build_sql_query_string(
-            session=request.app["csession"],
-            request_arg=query_string,
-            resource_id=resource_id,
-            page_size=page_size,
-            offset=offset,
-        )
+        sql_query = build_sql_query_string(query_string, resource_id, indexes, page_size, offset)
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
     except PermissionError as e:
