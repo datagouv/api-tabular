@@ -107,7 +107,13 @@ async def resource_data(request):
         offset = 0
 
     try:
-        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
+        sql_query = build_sql_query_string(
+            session=request.app["csession"],
+            request_arg=query_string,
+            resource_id=resource_id,
+            page_size=page_size,
+            offset=offset,
+        )
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
     except PermissionError as e:
