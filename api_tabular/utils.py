@@ -221,7 +221,7 @@ def raise_if_not_index(column_name: str, indexes: set | None) -> None:
     if indexes is None:
         return
     if column_name not in indexes:
-        raise ValueError(f"{column_name} is not among the allowed columns: {indexes}")
+        raise PermissionError(f"{column_name} is not among the allowed columns: {indexes}")
 
 
 def process_total(res: Response) -> int:
