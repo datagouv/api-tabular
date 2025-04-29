@@ -3,7 +3,13 @@ import pytest
 from api_tabular import config
 from api_tabular.utils import external_url
 
-from .conftest import DATE, PGREST_ENDPOINT, RESOURCE_ID, TABLES_INDEX_PATTERN
+from .conftest import (
+    DATE,
+    PGREST_ENDPOINT,
+    RESOURCE_EXCEPTION_PATTERN,
+    RESOURCE_ID,
+    TABLES_INDEX_PATTERN,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -270,3 +276,61 @@ async def test_api_pagination(client, rmock, mock_get_no_indexes):
         "meta": {"page": 2, "page_size": 1, "total": 2},
     }
     assert await res.json() == body
+
+
+async def test_api_resource_profile_and_indexes(client, rmock):
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
+    indexed_col = ["col1", "col3"]
+    rmock.get(
+        RESOURCE_EXCEPTION_PATTERN,
+        payload=[{"table_indexes": {c: "index" for c in indexed_col}}],
+        repeat=True,
+    )
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert res.status == 200
+    content = await res.json()
+    assert content["profile"] == {"this": "is-a-profile"}
+    # sorted because it's made from a set so the order might not be preserved
+    assert indexed_col == list(sorted(content["indexes"]))
+
+    # checking that the resource is readable with no filter
+    rmock.get(
+        TABLES_INDEX_PATTERN,
+        payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}],
+        repeat=True,
+    )
+    rmock.get(
+        f"{PGREST_ENDPOINT}/xxx?limit=1&order=__id.asc",
+        status=200,
+        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page=1&page_size=1")
+    assert res.status == 200
+
+    # checking that the resource can be filtered on an indexed column
+    rmock.get(
+        f'{PGREST_ENDPOINT}/xxx?"{indexed_col[0]}"=gte.1&limit=1&order=__id.asc',
+        status=200,
+        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(
+        f"/api/resources/{RESOURCE_ID}/data/?{indexed_col[0]}__greater=1&page=1&page_size=1"
+    )
+    assert res.status == 200
+
+    # checking that the resource cannot be filtered on a non-indexed column
+    non_indexed_col = "col2"
+    # postgrest would return a content
+    rmock.get(
+        f'{PGREST_ENDPOINT}/xxx?"{non_indexed_col}"=gte.1&limit=1&order=__id.asc',
+        status=200,
+        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(
+        f"/api/resources/{RESOURCE_ID}/data/?{non_indexed_col}__greater=1&page=1&page_size=1"
+    )
+    # but it's forbidden
+    assert res.status == 403
