@@ -11,7 +11,7 @@ from .conftest import RESOURCE_ID, TABLES_INDEX_PATTERN
 pytestmark = pytest.mark.asyncio
 
 
-async def test_swagger_endpoint(client, rmock):
+async def test_swagger_endpoint(client, rmock, mock_get_no_indexes):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"columns": {}}}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
     assert res.status == 200
@@ -24,7 +24,7 @@ async def test_swagger_endpoint(client, rmock):
         True,
     ],
 )
-async def test_swagger_content(client, rmock, allow_aggregation, mocker):
+async def test_swagger_content(client, rmock, allow_aggregation, mocker, mock_get_no_indexes):
     if allow_aggregation:
         mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
     with open("db/sample.csv", newline="") as csvfile:
