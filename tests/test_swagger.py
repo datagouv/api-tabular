@@ -97,11 +97,16 @@ async def test_swagger_with_indexes(rmock, client, mocker, allow_aggregation):
     )
     rmock.get(
         TABLES_INDEX_PATTERN,
-        payload=[{"profile": {"columns": {
-                c: {"python_type": "int", "format": "int", "score": 1.5}
-                for c in ["col1", "col2", "col3", "col4"]
+        payload=[
+            {
+                "profile": {
+                    "columns": {
+                        c: {"python_type": "int", "format": "int", "score": 1.5}
+                        for c in ["col1", "col2", "col3", "col4"]
+                    }
+                }
             }
-        }}],
+        ],
     )
     res = await client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
     swagger = await res.text()

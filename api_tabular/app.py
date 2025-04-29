@@ -64,7 +64,9 @@ async def resource_meta(request):
 @routes.get(r"/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(request):
     resource_id = request.match_info["rid"]
-    resource: dict = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
+    resource: dict = await get_resource(
+        request.app["csession"], resource_id, ["profile:csv_detective"]
+    )
     indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
     resource["indexes"] = list(indexes) if isinstance(indexes, set) else None
     return web.json_response(resource)
