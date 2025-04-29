@@ -278,7 +278,7 @@ async def test_api_pagination(client, rmock, mock_get_no_indexes):
     assert await res.json() == body
 
 
-async def test_api_resource_profile_and_indexes(client, rmock):
+async def test_api_resource_indexes(client, rmock, mocker):
     rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
     indexed_col = ["col1", "col3"]
     rmock.get(
@@ -331,6 +331,21 @@ async def test_api_resource_profile_and_indexes(client, rmock):
     )
     res = await client.get(
         f"/api/resources/{RESOURCE_ID}/data/?{non_indexed_col}__greater=1&page=1&page_size=1"
+    )
+    # but it's forbidden
+    assert res.status == 403
+
+    # checking that aggregation is not allowed despite the resource being in the exceptions
+    mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+    # postgrest would return a content
+    rmock.get(
+        f'{PGREST_ENDPOINT}/xxx?"{non_indexed_col}".avg()&limit=1&order=__id.asc',
+        status=200,
+        payload=[{"col2__avg": 2}],
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(
+        f"/api/resources/{RESOURCE_ID}/data/?{non_indexed_col}__avg&page=1&page_size=1"
     )
     # but it's forbidden
     assert res.status == 403
