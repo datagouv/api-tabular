@@ -68,7 +68,7 @@ async def get_potential_indexes(session: ClientSession, resource_id: str) -> set
         if not res.ok:
             handle_exception(res.status, "Database error", record, resource_id)
         if not record:
-            raise web.HTTPNotFound()
+            return None
         # indexes look like {"column_name": "index_type", ...} or None
-        indexes = json.loads(record[0].get("table_indexes", "{}"))
+        indexes = record[0].get("table_indexes", "{}")
         return set(indexes.keys()) if indexes else None

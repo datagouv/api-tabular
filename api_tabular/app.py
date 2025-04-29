@@ -64,7 +64,9 @@ async def resource_meta(request):
 @routes.get(r"/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(request):
     resource_id = request.match_info["rid"]
-    resource = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
+    resource: dict = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+    resource["indexes"] = list(indexes) if isinstance(indexes, set) else None
     return web.json_response(resource)
 
 
@@ -72,7 +74,11 @@ async def resource_profile(request):
 async def resource_swagger(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
-    swagger_string = build_swagger_file(resource["profile"]["columns"], resource_id)
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+    columns: dict[str, str] = resource["profile"]["columns"]
+    if indexes:
+        columns = {col: params for col, params in columns.items() if col in indexes}
+    swagger_string = build_swagger_file(columns, resource_id)
     return web.Response(body=swagger_string)
 
 

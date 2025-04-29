@@ -220,8 +220,9 @@ def add_aggregator(argument: str, indexes: set | None) -> tuple[str, str]:
 def raise_if_not_index(column_name: str, indexes: set | None) -> None:
     if indexes is None:
         return
-    if column_name not in indexes:
-        raise PermissionError(f"{column_name} is not among the allowed columns: {indexes}")
+    # we pop the heading and trailing " that were added upstream
+    if column_name[1:-1] not in indexes:
+        raise PermissionError(f"{column_name[1:-1]} is not among the allowed columns: {indexes}")
 
 
 def process_total(res: Response) -> int:
