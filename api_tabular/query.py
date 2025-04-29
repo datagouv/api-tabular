@@ -70,5 +70,5 @@ async def get_potential_indexes(session: ClientSession, resource_id: str) -> set
         if not record:
             return None
         # indexes look like {"column_name": "index_type", ...} or None
-        indexes = record[0].get("table_indexes", "{}")
+        indexes: dict = record[0].get("table_indexes", {})
         return set(indexes.keys()) if indexes else None
