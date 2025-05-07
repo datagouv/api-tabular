@@ -10,6 +10,7 @@ from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 from api_tabular import config
 from api_tabular.error import QueryException
 from api_tabular.query import (
+    get_potential_indexes,
     get_resource,
     get_resource_data,
     get_resource_data_streamed,
@@ -63,7 +64,11 @@ async def resource_meta(request):
 @routes.get(r"/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(request):
     resource_id = request.match_info["rid"]
-    resource = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
+    resource: dict = await get_resource(
+        request.app["csession"], resource_id, ["profile:csv_detective"]
+    )
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+    resource["indexes"] = list(indexes) if isinstance(indexes, set) else None
     return web.json_response(resource)
 
 
@@ -71,7 +76,11 @@ async def resource_profile(request):
 async def resource_swagger(request):
     resource_id = request.match_info["rid"]
     resource = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
-    swagger_string = build_swagger_file(resource["profile"]["columns"], resource_id)
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+    columns: dict[str, str] = resource["profile"]["columns"]
+    if indexes:
+        columns = {col: params for col, params in columns.items() if col in indexes}
+    swagger_string = build_swagger_file(columns, resource_id)
     return web.Response(body=swagger_string)
 
 
@@ -106,8 +115,9 @@ async def resource_data(request):
     else:
         offset = 0
 
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
     try:
-        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
+        sql_query = build_sql_query_string(query_string, resource_id, indexes, page_size, offset)
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
     except PermissionError as e:

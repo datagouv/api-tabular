@@ -117,6 +117,7 @@ async def get_app_version() -> str:
 def build_sql_query_string(
     request_arg: list,
     resource_id: str | None = None,
+    indexes: set | None = None,
     page_size: int = None,
     offset: int = 0,
 ) -> str:
@@ -127,13 +128,13 @@ def build_sql_query_string(
         _split = arg.split("=")
         # filters are expected to have the syntax `<column_name>__<operator>=<value>`
         if len(_split) == 2:
-            _filter, _sorted = add_filter(*_split)
+            _filter, _sorted = add_filter(*_split, indexes)
             if _filter:
                 sorted = sorted or _sorted
                 sql_query.append(_filter)
         # aggregators are expected to have the syntax `<column_name>__<operator>`
         elif len(_split) == 1:
-            column, operator = add_aggregator(_split[0])
+            column, operator = add_aggregator(_split[0], indexes)
             if column:
                 aggregators[operator].append(column)
         else:
@@ -177,13 +178,14 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
+def add_filter(argument: str, value: str, indexes: set | None) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         return None, False
     if argument == "columns":
         return f"select={value}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
+        raise_if_not_index(column, indexes)
         if normalized_comparator == "sort":
             return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
@@ -205,13 +207,22 @@ def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
-def add_aggregator(argument: str) -> tuple[str, str]:
+def add_aggregator(argument: str, indexes: set | None) -> tuple[str, str]:
     operator = None
     if "__" in argument:
         column, operator = get_column_and_operator(argument)
+        raise_if_not_index(column, indexes)
     if operator in ["avg", "count", "max", "min", "sum", "groupby"]:
         return column, operator
     raise ValueError(f"argument '{argument}' could not be parsed")
+
+
+def raise_if_not_index(column_name: str, indexes: set | None) -> None:
+    if indexes is None:
+        return
+    # we pop the heading and trailing " that were added upstream
+    if column_name[1:-1] not in indexes:
+        raise PermissionError(f"{column_name[1:-1]} is not among the allowed columns: {indexes}")
 
 
 def process_total(res: Response) -> int:
