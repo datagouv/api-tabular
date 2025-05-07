@@ -1,4 +1,5 @@
 PGREST_ENDPOINT = "http://localhost:8080"
+MAINDB_ENDPOINT = "http://localhost:5432"
 SERVER_NAME = "localhost:8005"
 SCHEME = "http"
 SENTRY_DSN = ""

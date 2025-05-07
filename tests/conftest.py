@@ -9,19 +9,21 @@ from api_tabular import config
 from api_tabular.app import app_factory
 
 PGREST_ENDPOINT = "https://example.com"
+MAINDB_ENDPOINT = "https://maindb.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 DATE = "2023-01-01T00:00:00.000000+00:00"
 TABLES_INDEX_PATTERN = re.compile(
     rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
 )
 RESOURCE_EXCEPTION_PATTERN = re.compile(
-    rf"^https://example\.com/resources_exceptions\?.*resource_id=eq.{RESOURCE_ID}.*$"
+    rf"^https://maindb\.com/resources_exceptions\?.*resource_id=eq.{RESOURCE_ID}.*$"
 )
 
 
 @pytest.fixture(autouse=True)
 def setup():
     config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
+    config.override(MAINDB_ENDPOINT=MAINDB_ENDPOINT)
 
 
 @pytest.fixture(autouse=True)
