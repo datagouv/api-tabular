@@ -169,6 +169,16 @@ async def resource_data_csv(request):
 @routes.get(r"/health/")
 async def get_health(request):
     """Return health check status"""
+    # pinging the only table that we know always exists
+    url = f"{config.PGREST_ENDPOINT}/tables_index"
+    async with request.app["csession"].head(url) as res:
+        if not res.ok:
+            raise QueryException(
+                503,
+                None,
+                "DB unavailable",
+                "postgREST has not started yet",
+            )
     start_time = request.app["start_time"]
     current_time = datetime.now(timezone.utc)
     uptime_seconds = (current_time - start_time).total_seconds()
