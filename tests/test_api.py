@@ -270,3 +270,22 @@ async def test_api_pagination(client, rmock):
         "meta": {"page": 2, "page_size": 1, "total": 2},
     }
     assert await res.json() == body
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        (500, 503, ["errors"]),
+        (200, 200, ["status", "version", "uptime_seconds"]),
+    ],
+)
+async def test_health(client, rmock, params):
+    postgrest_resp_code, api_expected_resp_code, expected_keys = params
+    rmock.get(
+        f"{PGREST_ENDPOINT}/tables_index",
+        status=postgrest_resp_code,
+    )
+    res = await client.get("/health/")
+    assert res.status == api_expected_resp_code
+    res_json = await res.json()
+    assert all(key in res_json for key in expected_keys)
