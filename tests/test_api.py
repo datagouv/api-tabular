@@ -275,7 +275,7 @@ async def test_api_pagination(client, rmock):
 @pytest.mark.parametrize(
     "params",
     [
-        (500, 503, ["errors"]),
+        (503, 503, ["errors"]),
         (200, 200, ["status", "version", "uptime_seconds"]),
     ],
 )
