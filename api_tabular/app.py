@@ -171,7 +171,7 @@ async def get_health(request):
     """Return health check status"""
     # pinging the only table that we know always exists
     url = f"{config.PGREST_ENDPOINT}/tables_index"
-    async with request.app["csession"].get(url) as res:
+    async with request.app["csession"].head(url) as res:
         if not res.ok:
             raise QueryException(
                 503,
