@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Remove PostgREST version in health endpoint [#43](https://github.com/datagouv/api-tabular/pull/43)
+- Better health endpoint [#45](https://github.com/datagouv/api-tabular/pull/45)
 
 ## 0.2.4 (2025-03-20)
 
