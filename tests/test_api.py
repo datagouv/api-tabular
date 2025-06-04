@@ -282,7 +282,7 @@ async def test_api_pagination(client, rmock):
 async def test_health(client, rmock, params):
     postgrest_resp_code, api_expected_resp_code, expected_keys = params
     rmock.head(
-        f"{PGREST_ENDPOINT}/tables_index",
+        f"{PGREST_ENDPOINT}/migrations_csv",
         status=postgrest_resp_code,
     )
     res = await client.get("/health/")
