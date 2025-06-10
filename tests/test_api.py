@@ -349,3 +349,22 @@ async def test_api_resource_indexes(client, rmock, mocker):
     )
     # but it's forbidden
     assert res.status == 403
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        (503, 503, ["errors"]),
+        (200, 200, ["status", "version", "uptime_seconds"]),
+    ],
+)
+async def test_health(client, rmock, params):
+    postgrest_resp_code, api_expected_resp_code, expected_keys = params
+    rmock.head(
+        f"{PGREST_ENDPOINT}/migrations_csv",
+        status=postgrest_resp_code,
+    )
+    res = await client.get("/health/")
+    assert res.status == api_expected_resp_code
+    res_json = await res.json()
+    assert all(key in res_json for key in expected_keys)
