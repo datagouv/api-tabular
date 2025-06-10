@@ -61,7 +61,7 @@ async def get_resource_data_streamed(
 
 async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
     q = f"select=table_indexes&resource_id=eq.{resource_id}"
-    url = f"{config.MAINDB_ENDPOINT}/resources_exceptions?{q}"
+    url = f"{config.PGREST_ENDPOINT}/resources_exceptions?{q}"
     async with session.get(url) as res:
         record = await res.json()
         if not res.ok:
