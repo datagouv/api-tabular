@@ -57,3 +57,17 @@ async def get_resource_data_streamed(
             async for chunk in res.content.iter_chunked(1024):
                 yield chunk
             yield b"\n"
+
+
+async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
+    q = f"select=table_indexes&resource_id=eq.{resource_id}"
+    url = f"{config.PGREST_ENDPOINT}/resources_exceptions?{q}"
+    async with session.get(url) as res:
+        record = await res.json()
+        if not res.ok:
+            handle_exception(res.status, "Database error", record, resource_id)
+        if not record:
+            return None
+        # indexes look like {"column_name": "index_type", ...} or None
+        indexes: dict = record[0].get("table_indexes", {})
+        return set(indexes.keys()) if indexes else None

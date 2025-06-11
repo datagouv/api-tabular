@@ -14,6 +14,16 @@ ALTER COLUMN created_at TYPE TIMESTAMPTZ;
 
 COPY tables_index(id, parsing_table, csv_detective, resource_id, url, created_at) FROM '/tmp/sample.csv' DELIMITER ',' CSV HEADER;
 
+CREATE TABLE IF NOT EXISTS "csvapi".resources_exceptions (
+    id serial PRIMARY KEY,
+    resource_id UUID,
+    table_indexes JSONB,
+    comment VARCHAR
+);
+
+COPY resources_exceptions(id, resource_id, table_indexes, comment) FROM '/tmp/exceptions.csv' DELIMITER ',' CSV HEADER;
+
+
 --
 -- PostgreSQL database dump
 --
@@ -1183,6 +1193,83 @@ SELECT pg_catalog.setval('"csvapi".a6311c164ebfb165ddc828ded___id_seq', 21777, t
 
 ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded
     ADD CONSTRAINT a6311c164ebfb165ddc828ded_pkey PRIMARY KEY (__id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz; Type: TABLE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE TABLE "csvapi".s34fff81a3a7292c64a77e5cz (
+    __id integer NOT NULL,
+    col1 integer,
+    col2 integer,
+    col3 integer,
+    col4 integer
+);
+
+
+ALTER TABLE "csvapi".s34fff81a3a7292c64a77e5cz OWNER TO "csvapi";
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz___id_seq; Type: SEQUENCE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE SEQUENCE "csvapi".s34fff81a3a7292c64a77e5cz___id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "csvapi".s34fff81a3a7292c64a77e5cz___id_seq OWNER TO "csvapi";
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz___id_seq; Type: SEQUENCE OWNED BY; Schema: csvapi; Owner: csvapi
+--
+
+ALTER SEQUENCE "csvapi".s34fff81a3a7292c64a77e5cz___id_seq OWNED BY "csvapi".s34fff81a3a7292c64a77e5cz.__id;
+
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz __id; Type: DEFAULT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".s34fff81a3a7292c64a77e5cz ALTER COLUMN __id SET DEFAULT nextval('"csvapi".s34fff81a3a7292c64a77e5cz___id_seq'::regclass);
+
+
+--
+-- Data for Name: s34fff81a3a7292c64a77e5cz; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
+--
+
+COPY "csvapi".s34fff81a3a7292c64a77e5cz (__id, col1, col2, col3, col4) FROM stdin;
+1	10	20	30	40
+2	11	21	31	41
+3	12	22	32	42
+4	13	23	33	43
+\.
+
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz___id_seq; Type: SEQUENCE SET; Schema: csvapi; Owner: csvapi
+--
+
+SELECT pg_catalog.setval('"csvapi".s34fff81a3a7292c64a77e5cz___id_seq', 21777, true);
+
+
+--
+-- Name: s34fff81a3a7292c64a77e5cz s34fff81a3a7292c64a77e5cz_pkey; Type: CONSTRAINT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".s34fff81a3a7292c64a77e5cz
+    ADD CONSTRAINT s34fff81a3a7292c64a77e5cz_pkey PRIMARY KEY (__id);
 
 
 --

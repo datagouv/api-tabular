@@ -14,6 +14,9 @@ DATE = "2023-01-01T00:00:00.000000+00:00"
 TABLES_INDEX_PATTERN = re.compile(
     rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
 )
+RESOURCE_EXCEPTION_PATTERN = re.compile(
+    rf"^https://example\.com/resources_exceptions\?.*resource_id=eq.{RESOURCE_ID}.*$"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -38,3 +41,8 @@ async def client():
 @pytest.fixture
 def mock_get_resource_empty(rmock):
     rmock.get(TABLES_INDEX_PATTERN, payload=[])
+
+
+@pytest.fixture
+def mock_get_not_exception(rmock):
+    rmock.get(RESOURCE_EXCEPTION_PATTERN, payload=[], repeat=True)
