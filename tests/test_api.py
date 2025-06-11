@@ -278,14 +278,17 @@ async def test_api_pagination(client, rmock, mock_get_no_indexes):
     assert await res.json() == body
 
 
-async def test_api_resource_indexes(client, rmock, mocker):
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
+async def test_api_exception_resource_indexes(client, rmock, mocker):
+    # fake exception with indexed columns
     indexed_col = ["col1", "col3"]
     rmock.get(
         RESOURCE_EXCEPTION_PATTERN,
         payload=[{"table_indexes": {c: "index" for c in indexed_col}}],
         repeat=True,
     )
+
+    # checking that we have an `indexes` key in the profile endpoint
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
     res = await client.get(f"/api/resources/{RESOURCE_ID}/profile/")
     assert res.status == 200
     content = await res.json()
@@ -294,13 +297,14 @@ async def test_api_resource_indexes(client, rmock, mocker):
     assert indexed_col == list(sorted(content["indexes"]))
 
     # checking that the resource is readable with no filter
+    table = "xxx"
     rmock.get(
         TABLES_INDEX_PATTERN,
-        payload=[{"__id": 1, "id": "test-id", "parsing_table": "xxx"}],
+        payload=[{"__id": 1, "id": "test-id", "parsing_table": table}],
         repeat=True,
     )
     rmock.get(
-        f"{PGREST_ENDPOINT}/xxx?limit=1&order=__id.asc",
+        f"{PGREST_ENDPOINT}/{table}?limit=1&order=__id.asc",
         status=200,
         payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
         headers={"Content-Range": "0-2/2"},
@@ -310,7 +314,7 @@ async def test_api_resource_indexes(client, rmock, mocker):
 
     # checking that the resource can be filtered on an indexed column
     rmock.get(
-        f'{PGREST_ENDPOINT}/xxx?"{indexed_col[0]}"=gte.1&limit=1&order=__id.asc',
+        f'{PGREST_ENDPOINT}/{table}?"{indexed_col[0]}"=gte.1&limit=1&order=__id.asc',
         status=200,
         payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
         headers={"Content-Range": "0-2/2"},
@@ -324,7 +328,7 @@ async def test_api_resource_indexes(client, rmock, mocker):
     non_indexed_col = "col2"
     # postgrest would return a content
     rmock.get(
-        f'{PGREST_ENDPOINT}/xxx?"{non_indexed_col}"=gte.1&limit=1&order=__id.asc',
+        f'{PGREST_ENDPOINT}/{table}?"{non_indexed_col}"=gte.1&limit=1&order=__id.asc',
         status=200,
         payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
         headers={"Content-Range": "0-2/2"},
@@ -335,13 +339,15 @@ async def test_api_resource_indexes(client, rmock, mocker):
     # but it's forbidden
     assert res.status == 403
 
-    # checking that aggregation is not allowed despite the resource being in the exceptions
+    # if aggregation is allowed:
     mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+
+    # checking that it's not possible on a non-indexed column
     # postgrest would return a content
     rmock.get(
-        f'{PGREST_ENDPOINT}/xxx?"{non_indexed_col}".avg()&limit=1&order=__id.asc',
+        f'{PGREST_ENDPOINT}/{table}?select="{non_indexed_col}__avg":"{non_indexed_col}".avg()&limit=1',
         status=200,
-        payload=[{"col2__avg": 2}],
+        payload=[{f"{non_indexed_col}__avg": 2}],
         headers={"Content-Range": "0-2/2"},
     )
     res = await client.get(
@@ -349,6 +355,80 @@ async def test_api_resource_indexes(client, rmock, mocker):
     )
     # but it's forbidden
     assert res.status == 403
+
+    # checking that it is possible on an indexed column
+    rmock.get(
+        f'{PGREST_ENDPOINT}/{table}?select="{indexed_col[0]}__avg":"{indexed_col[0]}".avg()&limit=1',
+        status=200,
+        payload=[{f"{indexed_col[0]}__avg": 2}],
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(
+        f"/api/resources/{RESOURCE_ID}/data/?{indexed_col[0]}__avg&page=1&page_size=1"
+    )
+    assert res.status == 200
+
+
+async def test_api_exception_resource_no_indexes(client, rmock, mocker):
+    # fake exception with no indexed column
+    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
+    rmock.get(
+        RESOURCE_EXCEPTION_PATTERN,
+        payload=[{"table_indexes": {}}],
+        repeat=True,
+    )
+
+    # checking that we have an `indexes` key in the profile endpoint
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert res.status == 200
+    content = await res.json()
+    assert content["profile"] == {"this": "is-a-profile"}
+    assert content["indexes"] is None
+
+    data = [{f"col{k}": k for k in range(1, 5)}]
+    # checking that the resource is readable with no filter
+    table = "xxx"
+    rmock.get(
+        TABLES_INDEX_PATTERN,
+        payload=[{"__id": 1, "id": "test-id", "parsing_table": table}],
+        repeat=True,
+    )
+    rmock.get(
+        f"{PGREST_ENDPOINT}/{table}?limit=1&order=__id.asc",
+        status=200,
+        payload=data,
+        headers={"Content-Range": "0-2/2"},
+    )
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page=1&page_size=1")
+    assert res.status == 200
+
+    # checking that the resource can be filtered on all columns
+    for k in range(1, 5):
+        rmock.get(
+            f'{PGREST_ENDPOINT}/{table}?"col{k}"=gte.1&limit=1&order=__id.asc',
+            status=200,
+            payload=data,
+            headers={"Content-Range": "0-2/2"},
+        )
+        res = await client.get(
+            f"/api/resources/{RESOURCE_ID}/data/?col{k}__greater=1&page=1&page_size=1"
+        )
+        assert res.status == 200
+
+    # if aggregation is allowed:
+    mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+    # checking that aggregation is allowed on all columns
+    for k in range(1, 5):
+        rmock.get(
+            f'{PGREST_ENDPOINT}/{table}?select="col{k}__avg":"col{k}".avg()&limit=1',
+            status=200,
+            payload=[{"col2__avg": 2}],
+            headers={"Content-Range": "0-2/2"},
+        )
+        res = await client.get(
+            f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1"
+        )
+        assert res.status == 200
 
 
 @pytest.mark.parametrize(
