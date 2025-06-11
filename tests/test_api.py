@@ -425,9 +425,7 @@ async def test_api_exception_resource_no_indexes(client, rmock, mocker):
             payload=[{"col2__avg": 2}],
             headers={"Content-Range": "0-2/2"},
         )
-        res = await client.get(
-            f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1"
-        )
+        res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1")
         assert res.status == 200
 
 
