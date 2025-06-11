@@ -328,3 +328,10 @@ async def test_health(setup, fake_client, rmock, params):
     assert res.status == api_expected_resp_code
     res_json = await res.json()
     assert all(key in res_json for key in expected_keys)
+
+
+async def test_aggregation_exceptions(client, mocker):
+    mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+    res = await client.get("/api/aggregation-exceptions/")
+    exceptions = await res.json()
+    assert exceptions == [RESOURCE_ID]
