@@ -44,5 +44,5 @@ def mock_get_resource_empty(rmock):
 
 
 @pytest.fixture
-def mock_get_no_indexes(rmock):
+def mock_get_not_exception(rmock):
     rmock.get(RESOURCE_EXCEPTION_PATTERN, payload=[], repeat=True)
