@@ -66,35 +66,17 @@ jobs:
   tests:
     docker:
       - image: cimg/python:<< pipeline.parameters.python-version >>
-      - image: "postgrest/postgrest:v12.2.3"
-        environment:
-          PGRST_DB_URI: postgres://csvapi:csvapi@postgres-test:5432/csvapi
-          p: http://127.0.0.1:8080
-          PGRST_SERVER_PORT: 8080
-          PGRST_DB_ANON_ROLE: csvapi
-          PGRST_DB_SCHEMA: csvapi
-          PGRST_DB_AGGREGATES_ENABLED: true
-        ports:
-          - 8080:8080
-      - image: "postgres:14"
-        environment:
-          POSTGRES_DB: csvapi
-          POSTGRES_USER: csvapi
-          POSTGRES_PASSWORD: csvapi
-        volumes:
-          - ./db/initdb/:/docker-entrypoint-initdb.d/
-          - ./db/sample.csv:/tmp/sample.csv
-          - ./db/exceptions.csv:/tmp/exceptions.csv
     steps:
       - attach_workspace:
           at: .
       - run:
-          name: Wait for PostgREST to be ready
+          name: Start containers
           command: |
-            dockerize -wait http://localhost:<< pipeline.parameters.postgrest-port >> -timeout 1m
+            docker-compose up -d
       - run:
           name: Start service
           command: |
+            dockerize -wait tcp://localhost:<< pipeline.parameters.postgrest-port >> -timeout 1m
             poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
       - run:
           name: Run tests
