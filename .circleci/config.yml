@@ -64,6 +64,7 @@ jobs:
             poetry run ruff format --check .
 
   tests:
+    machine: true
     docker:
       - image: cimg/python:<< pipeline.parameters.python-version >>
     steps:
