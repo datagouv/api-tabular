@@ -14,6 +14,12 @@ parameters:
   cache-prefix:
     type: string
     default: "py-cache-v2"
+  postgrest-port:
+    type: string
+    default: "8080"
+  api-port:
+    type: string
+    default: "8005"
 
 jobs:
   install:
@@ -63,6 +69,17 @@ jobs:
     steps:
       - attach_workspace:
           at: .
+      - setup_remote_docker:
+          version: 20.10.14
+      - run:
+          name: Start containers
+          command: |
+            docker-compose up -d
+      - run:
+          name: Start service
+          command: |
+            dockerize -wait tcp://localhost:<< pipeline.parameters.postgrest-port >> -timeout 1m
+            poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
       - run:
           name: Run tests
           command: |
