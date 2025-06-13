@@ -14,9 +14,6 @@ parameters:
   cache-prefix:
     type: string
     default: "py-cache-v2"
-  postgrest-port:
-    type: string
-    default: "8080"
   api-port:
     type: string
     default: "8005"
@@ -63,7 +60,7 @@ jobs:
             poetry run ruff check --select I .
             poetry run ruff format --check .
 
-  tests:
+  tests-containters:
     machine:
       image: ubuntu-2004:current
     steps:
@@ -73,10 +70,20 @@ jobs:
           name: Start containers
           command: |
             docker compose up -d
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+
+  tests:
+    docker:
+      - image: cimg/python:<< pipeline.parameters.python-version >>
+    steps:
+      - attach_workspace:
+          at: .
       - run:
           name: Start service
           command: |
-            dockerize -wait tcp://localhost:<< pipeline.parameters.postgrest-port >> -timeout 1m
             poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
       - run:
           name: Run tests
@@ -152,9 +159,15 @@ workflows:
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - tests:
+      - tests-containters:
           requires:
             - install
+          filters:
+            tags:
+              only: /v[0-9]+(\.[0-9]+)*/
+      - tests:
+          requires:
+            - tests-containters
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
