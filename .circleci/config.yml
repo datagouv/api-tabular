@@ -64,8 +64,8 @@ jobs:
             poetry run ruff format --check .
 
   tests:
-    docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+    machine:
+      image: ubuntu-2004:current
     steps:
       - attach_workspace:
           at: .
