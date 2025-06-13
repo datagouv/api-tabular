@@ -64,7 +64,6 @@ jobs:
             poetry run ruff format --check .
 
   tests:
-    machine: true
     docker:
       - image: cimg/python:<< pipeline.parameters.python-version >>
     steps:
@@ -73,7 +72,7 @@ jobs:
       - run:
           name: Start containers
           command: |
-            docker-compose up -d
+            docker compose up -d
       - run:
           name: Start service
           command: |
