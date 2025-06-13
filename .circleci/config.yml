@@ -84,7 +84,7 @@ jobs:
       - run:
           name: Start service
           command: |
-            poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
+            nohup poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
       - run:
           name: Run tests
           command: |
