@@ -62,7 +62,7 @@ jobs:
 
   setup-test-containers:
     machine:
-      image: ubuntu-2004:current
+      image: ubuntu-2004:current  # Machine executor needed for Docker-in-Docker (docker compose)
     steps:
       - attach_workspace:
           at: .
