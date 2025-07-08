@@ -60,7 +60,7 @@ jobs:
             poetry run ruff check --select I .
             poetry run ruff format --check .
 
-  tests-containters:
+  setup-test-containers:
     machine:
       image: ubuntu-2004:current
     steps:
@@ -70,6 +70,38 @@ jobs:
           name: Start containers
           command: |
             docker compose up -d
+      - run:
+          name: Debug container status
+          command: |
+            # TEMPORARY: Debug container status for troubleshooting
+            echo "Container status after startup:"  # DEBUG/TEMPORARY
+            docker compose ps  # DEBUG/TEMPORARY
+      - run:
+          name: Wait for PostgreSQL to be ready
+          command: |
+            # Wait for PostgreSQL to be ready to accept connections
+            timeout 60 bash -c 'until docker compose exec -T postgres-test pg_isready -U csvapi; do sleep 2; done'
+      - run:
+          name: Wait for PostgREST to be ready
+          command: |
+            # Wait for PostgREST to be ready
+            timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
+      - run:
+          name: Verify database setup
+          command: |
+            # Verify that test data was loaded correctly
+            docker compose exec -T postgres-test psql -U csvapi -d csvapi -c "SELECT COUNT(*) FROM csvapi.tables_index;"
+      - run:
+          name: Debug container logs
+          command: |
+            # TEMPORARY: Debug container logs for troubleshooting
+            echo "=== PostgreSQL logs ==="  # DEBUG/TEMPORARY
+            docker compose logs postgres-test | tail -20  # DEBUG/TEMPORARY
+            echo "=== PostgREST logs ==="  # DEBUG/TEMPORARY
+            docker compose logs postgrest | tail -20  # DEBUG/TEMPORARY
+          when: always
+      - store_test_results:
+          path: reports/python
       - persist_to_workspace:
           root: .
           paths:
@@ -86,11 +118,28 @@ jobs:
           command: |
             nohup poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
       - run:
+          name: Debug test environment
+          command: |
+            # TEMPORARY: Debug test environment setup
+            echo "Checking if containers are accessible..."  # DEBUG/TEMPORARY
+            curl -f http://localhost:8080/ || echo "PostgREST not accessible"  # DEBUG/TEMPORARY
+            echo "API service will start on port << pipeline.parameters.api-port >>"  # DEBUG/TEMPORARY
+      - run:
           name: Run tests
           command: |
             poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
+      - run:
+          name: Cleanup containers
+          command: |
+            docker compose down
+          when: always
+      - run:
+          name: Stop test service
+          command: |
+            pkill -f "adev runserver" || true
+          when: always
 
   build:
     docker:
@@ -147,28 +196,40 @@ jobs:
             poetry publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}" --no-interaction
 
 workflows:
-  build:
+  build-test-deploy:
     jobs:
       - install:
           filters:
+            branches:
+              only:
+                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - lint:
           requires:
             - install
           filters:
+            branches:
+              only:
+                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - tests-containters:
+      - setup-test-containers:
           requires:
             - install
           filters:
+            branches:
+              only:
+                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - tests:
           requires:
-            - tests-containters
+            - setup-test-containers
           filters:
+            branches:
+              only:
+                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - build:
