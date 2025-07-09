@@ -100,30 +100,16 @@ jobs:
             echo "=== PostgREST logs ==="  # DEBUG/TEMPORARY
             docker compose logs postgrest | tail -20  # DEBUG/TEMPORARY
           when: always
-      - store_test_results:
-          path: reports/python
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
-
-  tests:
-    docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
-    steps:
-      - attach_workspace:
-          at: .
+      - run:
+          name: Install python and dependencies
+          command: |
+            sudo apt-get install -y python<< pipeline.parameters.python-version >>
+            poetry config virtualenvs.in-project true
+            poetry install
       - run:
           name: Start service
           command: |
             nohup poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
-      - run:
-          name: Debug test environment
-          command: |
-            # TEMPORARY: Debug test environment setup
-            echo "Checking if containers are accessible..."  # DEBUG/TEMPORARY
-            curl -f http://localhost:8080/ || echo "PostgREST not accessible"  # DEBUG/TEMPORARY
-            echo "API service will start on port << pipeline.parameters.api-port >>"  # DEBUG/TEMPORARY
       - run:
           name: Run tests
           command: |
@@ -140,6 +126,44 @@ jobs:
           command: |
             pkill -f "adev runserver" || true
           when: always
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+
+  # tests:
+  #   docker:
+  #     - image: cimg/python:<< pipeline.parameters.python-version >>
+  #   steps:
+  #     - attach_workspace:
+  #         at: .
+  #     - run:
+  #         name: Start service
+  #         command: |
+  #           nohup poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
+  #     - run:
+  #         name: Debug test environment
+  #         command: |
+  #           # TEMPORARY: Debug test environment setup
+  #           echo "Checking if containers are accessible..."  # DEBUG/TEMPORARY
+  #           curl -f http://localhost:8080/ || echo "PostgREST not accessible"  # DEBUG/TEMPORARY
+  #           echo "API service will start on port << pipeline.parameters.api-port >>"  # DEBUG/TEMPORARY
+  #     - run:
+  #         name: Run tests
+  #         command: |
+  #           poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+  #     - store_test_results:
+  #         path: reports/python
+  #     - run:
+  #         name: Cleanup containers
+  #         command: |
+  #           docker compose down
+  #         when: always
+  #     - run:
+  #         name: Stop test service
+  #         command: |
+  #           pkill -f "adev runserver" || true
+  #         when: always
 
   build:
     docker:
