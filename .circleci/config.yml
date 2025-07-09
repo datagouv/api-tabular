@@ -60,7 +60,7 @@ jobs:
             poetry run ruff check --select I .
             poetry run ruff format --check .
 
-  setup-test-containers:
+  tests:
     machine:
       image: ubuntu-2004:current  # Machine executor needed for Docker-in-Docker (docker compose)
     steps:
@@ -96,10 +96,6 @@ jobs:
             nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
             sleep 5
       - run:
-          name: Check service
-          command: |
-            curl http://localhost:<< pipeline.parameters.api-port >>/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
-      - run:
           name: Run tests
           command: |
             /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
@@ -109,11 +105,6 @@ jobs:
           name: Cleanup containers
           command: |
             docker compose down
-          when: always
-      - run:
-          name: Stop test service
-          command: |
-            pkill -f "adev runserver" || true
           when: always
       - persist_to_workspace:
           root: .
@@ -193,7 +184,7 @@ workflows:
                 - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - setup-test-containers:
+      - tests:
           requires:
             - install
           filters:
@@ -205,6 +196,7 @@ workflows:
       - build:
           requires:
             - lint
+            - tests
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
