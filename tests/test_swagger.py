@@ -11,10 +11,9 @@ from .conftest import RESOURCE_EXCEPTION_PATTERN, RESOURCE_ID, TABLES_INDEX_PATT
 pytestmark = pytest.mark.asyncio
 
 
-# async def test_swagger_endpoint(client, rmock, mock_get_not_exception):
-#     rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"columns": {}}}])
-#     res = await client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
-#     assert res.status == 200
+async def test_swagger_endpoint(client, base_url):
+    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/swagger/")
+    assert res.status == 200
 
 
 # @pytest.mark.parametrize(
