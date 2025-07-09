@@ -113,7 +113,8 @@ jobs:
       - run:
           name: Start service
           command: |
-            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
+            # nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
+            /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
       - run:
           name: Check service
           command: |
