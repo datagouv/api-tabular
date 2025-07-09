@@ -104,6 +104,7 @@ jobs:
           name: Install python and dependencies
           command: |
             PYTHON_SHORT_VERSION=$(echo << pipeline.parameters.python-version >> | cut -d '.' -f 1,2)
+            sudo add-apt-repository ppa:deadsnakes/ppa
             sudo apt-get update
             sudo apt-get install -y python$PYTHON_SHORT_VERSION
             poetry config virtualenvs.in-project true
