@@ -114,6 +114,7 @@ jobs:
           name: Start service
           command: |
             nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
+            sleep 10 
       - run:
           name: Check service
           command: |
