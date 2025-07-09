@@ -105,6 +105,7 @@ jobs:
           command: |
             PYTHON_SHORT_VERSION=$(echo << pipeline.parameters.python-version >> | cut -d '.' -f 1,2)
             sudo add-apt-repository ppa:deadsnakes/ppa
+            sudo apt-get install -y jq
             sudo apt-get update
             sudo apt-get install -y python$PYTHON_SHORT_VERSION
             curl -sSL https://install.python-poetry.org | python$PYTHON_SHORT_VERSION -
@@ -114,7 +115,21 @@ jobs:
           name: Start service
           command: |
             nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
-            sleep 10 
+            MAX_ATTEMPTS=20
+            ATTEMPT=0
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              RESPONSE=$(curl -s http://localhost:8005/health/)
+              STATUS=$(echo "$RESPONSE" | jq -r '.status')
+              if [ "$STATUS" == "ok" ]; then
+                echo "Service is ready!"
+                exit 0
+              fi
+              ATTEMPT=$((ATTEMPT + 1))
+              echo "Attempt $ATTEMPT failed! Retrying in 5 seconds..."
+              sleep 5
+            done
+            echo "Failed to get expected response from http://localhost:8005/health/"
+            exit 1
       - run:
           name: Check service
           command: |
