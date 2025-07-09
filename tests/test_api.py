@@ -451,10 +451,11 @@ pytestmark = pytest.mark.asyncio
 async def test_tmp_api_resource_meta(client, base_url, tables_index_rows):
     import aiohttp
     async with aiohttp.ClientSession() as session:
-        async with session.get(f"{base_url}/api/resources/{RESOURCE_ID}/") as res:
+        async with session.get(f"{base_url}api/resources/{RESOURCE_ID}/") as res:
             record = await res.json()
             print(record)
-            assert record.status == 200
+            assert res.status == 200
+            assert "links" in record
 
     res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/")
     assert res.status == 200
