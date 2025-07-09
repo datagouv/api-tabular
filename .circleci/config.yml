@@ -71,12 +71,6 @@ jobs:
           command: |
             docker compose up -d
       - run:
-          name: Debug container status
-          command: |
-            # TEMPORARY: Debug container status for troubleshooting
-            echo "Container status after startup:"  # DEBUG/TEMPORARY
-            docker compose ps  # DEBUG/TEMPORARY
-      - run:
           name: Wait for PostgreSQL to be ready
           command: |
             # Wait for PostgreSQL to be ready to accept connections
@@ -87,25 +81,10 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Verify database setup
-          command: |
-            # Verify that test data was loaded correctly
-            docker compose exec -T postgres-test psql -U csvapi -d csvapi -c "SELECT COUNT(*) FROM csvapi.tables_index;"
-      - run:
-          name: Debug container logs
-          command: |
-            # TEMPORARY: Debug container logs for troubleshooting
-            echo "=== PostgreSQL logs ==="  # DEBUG/TEMPORARY
-            docker compose logs postgres-test | tail -20  # DEBUG/TEMPORARY
-            echo "=== PostgREST logs ==="  # DEBUG/TEMPORARY
-            docker compose logs postgrest | tail -20  # DEBUG/TEMPORARY
-          when: always
-      - run:
           name: Install python and dependencies
           command: |
             PYTHON_SHORT_VERSION=$(echo << pipeline.parameters.python-version >> | cut -d '.' -f 1,2)
             sudo add-apt-repository ppa:deadsnakes/ppa
-            sudo apt-get install -y jq
             sudo apt-get update
             sudo apt-get install -y python$PYTHON_SHORT_VERSION
             curl -sSL https://install.python-poetry.org | python$PYTHON_SHORT_VERSION -
@@ -119,7 +98,7 @@ jobs:
       - run:
           name: Check service
           command: |
-            curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
+            curl http://localhost:<< pipeline.parameters.api-port >>/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
       - run:
           name: Run tests
           command: |
