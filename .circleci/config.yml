@@ -115,6 +115,10 @@ jobs:
           command: |
             nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
       - run:
+          name: Check service
+          command: |
+            timeout 30 bash -c 'until curl -f http://localhost:8005/health/ > /dev/null 2>&1; do sleep 2; done'
+      - run:
           name: Run tests
           command: |
             /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
