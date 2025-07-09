@@ -103,8 +103,8 @@ jobs:
       - run:
           name: Install python and dependencies
           command: |
-            PYTHON_SHORT_VERSION=$(echo "${{ pipeline.parameters.python-version }}" | cut -d '.' -f 1,2)
-            sudo apt-get update
+            PYTHON_FULL_VERSION="{{ pipeline.parameters.python-version }}"
+            PYTHON_SHORT_VERSION=$(echo "$PYTHON_FULL_VERSION" | cut -d '.' -f 1,2)
             sudo apt-get install -y python$PYTHON_SHORT_VERSION
             poetry config virtualenvs.in-project true
             poetry install
