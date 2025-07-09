@@ -108,16 +108,16 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y python$PYTHON_SHORT_VERSION
             curl -sSL https://install.python-poetry.org | python$PYTHON_SHORT_VERSION -
-            poetry config virtualenvs.in-project true
-            poetry install
+            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
+            /home/circleci/.local/bin/poetry install
       - run:
           name: Start service
           command: |
-            nohup poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
+            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
       - run:
           name: Run tests
           command: |
-            poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
       - run:
