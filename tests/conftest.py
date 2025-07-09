@@ -28,11 +28,11 @@ def setup():
     config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
 
 
-@pytest.fixture(autouse=True)
-def rmock():
-    # passthrough for local requests (aiohttp TestServer)
-    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
-        yield m
+# @pytest.fixture(autouse=True)
+# def rmock():
+#     # passthrough for local requests (aiohttp TestServer)
+#     with aioresponses(passthrough=["http://127.0.0.1"]) as m:
+#         yield m
 
 
 @pytest_asyncio.fixture
