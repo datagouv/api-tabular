@@ -113,12 +113,11 @@ jobs:
       - run:
           name: Start service
           command: |
-            # nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py &
-            /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py
+            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
       - run:
           name: Check service
           command: |
-            timeout 30 bash -c 'until curl -f http://localhost:8005/health/ > /dev/null 2>&1; do sleep 2; done'
+            curl http://localhost:8005/health/
       - run:
           name: Run tests
           command: |
