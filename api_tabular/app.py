@@ -180,7 +180,7 @@ async def resource_data_csv(request):
 async def get_health(request):
     """Return health check status"""
     # pinging a specific table that we know always exists
-    url = f"{config.PGREST_ENDPOINT}/migrations_csv"
+    url = f"{config.PGREST_ENDPOINT}/tables_index"
     async with request.app["csession"].head(url) as res:
         if not res.ok:
             raise QueryException(
