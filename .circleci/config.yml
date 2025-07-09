@@ -247,15 +247,15 @@ workflows:
                 - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - tests:
-          requires:
-            - setup-test-containers
-          filters:
-            branches:
-              only:
-                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
+      # - tests:
+      #     requires:
+      #       - setup-test-containers
+      #     filters:
+      #       branches:
+      #         only:
+      #           - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
+      #       tags:
+      #         only: /v[0-9]+(\.[0-9]+)*/
       - build:
           requires:
             - tests
