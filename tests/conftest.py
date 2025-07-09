@@ -56,7 +56,7 @@ def mock_get_not_exception(rmock):
 
 @pytest.fixture
 def base_url():
-    yield f"{config.SCHEME}://{config.SERVER_NAME.replace('localhost', '127.0.0.1')}/"
+    yield f"{config.SCHEME}://{config.SERVER_NAME}/"
 
 
 def timestamptz_to_utc_iso(date_str: str) -> str:
