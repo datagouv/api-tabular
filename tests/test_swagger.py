@@ -11,7 +11,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_swagger_endpoint(client, base_url):
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/swagger/")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/swagger/")
     assert res.status == 200
 
 

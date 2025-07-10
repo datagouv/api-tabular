@@ -55,7 +55,7 @@ async def fake_client():
 
 @pytest.fixture
 def base_url():
-    yield f"{config.SCHEME}://{config.SERVER_NAME}/"
+    yield f"{config.SCHEME}://{config.SERVER_NAME}"
 
 
 def timestamptz_to_utc_iso(date_str: str) -> str:

@@ -106,10 +106,6 @@ jobs:
           command: |
             docker compose down
           when: always
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
 
   build:
     docker:
@@ -170,33 +166,24 @@ workflows:
     jobs:
       - install:
           filters:
-            branches:
-              only:
-                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - lint:
           requires:
             - install
           filters:
-            branches:
-              only:
-                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - tests:
           requires:
             - install
           filters:
-            branches:
-              only:
-                - refactor/tests-on-db  # TEMPORARY: for testing CI with real database
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - build:
           requires:
-            - lint
             - tests
+            - lint
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/

@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_api_resource_meta(client, base_url, tables_index_rows):
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/")
     assert res.status == 200
     assert await res.json() == {
         "created_at": tables_index_rows[RESOURCE_ID]["created_at"],
@@ -43,12 +43,12 @@ async def test_api_resource_meta(client, base_url, tables_index_rows):
 
 
 async def test_api_resource_meta_not_found(client, base_url):
-    res = await client.get(f"{base_url}api/resources/{UNKNOWN_RESOURCE_ID}/")
+    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert res.status == 404
 
 
 async def test_api_resource_profile(client, base_url, tables_index_rows):
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/profile/")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/profile/")
     assert res.status == 200
     assert await res.json() == {
         "profile": json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"]),
@@ -57,13 +57,13 @@ async def test_api_resource_profile(client, base_url, tables_index_rows):
 
 
 async def test_api_resource_profile_not_found(client, base_url):
-    res = await client.get(f"{base_url}api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
+    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
     assert res.status == 404
 
 
 async def test_api_resource_data(client, base_url, tables_index_rows):
     detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 200
     body = await res.json()
     assert all(key in body for key in ["data", "links", "meta"])
@@ -91,7 +91,7 @@ async def test_api_resource_data(client, base_url, tables_index_rows):
 async def test_api_resource_data_with_meta_args(client, base_url, tables_index_rows, args):
     detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
     params = "&".join(f"{k}={v}" for k, v in args.items())
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/?{params}")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{params}")
     assert res.status == 200
     body = await res.json()
     assert len(body["data"]) == args.get("page_size", config.PAGE_SIZE_DEFAULT)
@@ -129,7 +129,7 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
 )
 async def test_api_resource_data_with_data_args(client, base_url, filters):
     args = "&".join(f"{col}__{comp}={str(val).lower()}" for col, comp, val in filters)
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 200
     body = await res.json()
     # only checking first page
@@ -147,7 +147,7 @@ async def test_api_resource_data_with_data_args(client, base_url, filters):
 
 async def test_api_resource_data_with_args_error(client, base_url):
     args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
         "errors": [
@@ -162,7 +162,7 @@ async def test_api_resource_data_with_args_error(client, base_url):
 
 async def test_api_resource_data_with_page_size_error(client, base_url):
     args = f"page=1&page_size={config.PAGE_SIZE_MAX + 1}"
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
         "errors": [
@@ -176,12 +176,12 @@ async def test_api_resource_data_with_page_size_error(client, base_url):
 
 
 async def test_api_resource_data_not_found(client, base_url):
-    res = await client.get(f"{base_url}api/resources/{UNKNOWN_RESOURCE_ID}/data/")
+    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
     assert res.status == 404
 
 
 async def test_api_with_unsupported_args(client, base_url):
-    res = await client.get(f"{base_url}api/resources/{RESOURCE_ID}/data/?limit=1&select=numnum")
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?limit=1&select=numnum")
     assert res.status == 400
     body = {
         "errors": [
