@@ -22,7 +22,9 @@ async def test_swagger_endpoint(client, base_url):
         True,
     ],
 )
-async def test_swagger_content(setup, rmock, fake_client, allow_aggregation, mocker, tables_index_rows):
+async def test_swagger_content(
+    setup, rmock, fake_client, allow_aggregation, mocker, tables_index_rows, mock_get_not_exception,
+):
     detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
     if allow_aggregation:
         mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])

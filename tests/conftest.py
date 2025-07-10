@@ -41,6 +41,11 @@ async def client():
         yield session
 
 
+@pytest.fixture
+def mock_get_not_exception(rmock):
+    rmock.get(RESOURCE_EXCEPTION_PATTERN, payload=[], repeat=True)
+
+
 @pytest_asyncio.fixture
 async def fake_client():
     app = await app_factory()
