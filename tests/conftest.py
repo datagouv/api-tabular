@@ -1,7 +1,7 @@
 import csv
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-import re
 
 import aiohttp
 import pytest
@@ -60,7 +60,11 @@ def base_url():
 
 def timestamptz_to_utc_iso(date_str: str) -> str:
     """To convert the dates in TIMESTAMPTZ format (inserted into postgres) to isoformat"""
-    return datetime.fromisoformat((date_str + ":00").replace(" ", "T")).astimezone(timezone.utc).isoformat()
+    return (
+        datetime.fromisoformat((date_str + ":00").replace(" ", "T"))
+        .astimezone(timezone.utc)
+        .isoformat()
+    )
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from api_tabular import config
@@ -67,12 +68,8 @@ async def test_api_resource_data(client, base_url, tables_index_rows):
     body = await res.json()
     assert all(key in body for key in ["data", "links", "meta"])
     assert isinstance(body["data"], list) and len(body["data"]) == 20
-    assert (
-        isinstance(body["data"][0], dict)
-        and all(
-            col in body["data"][0]
-            for col in detection["header"]
-        )
+    assert isinstance(body["data"][0], dict) and all(
+        col in body["data"][0] for col in detection["header"]
     )
     assert body["links"] == {
         "next": external_url(f"/api/resources/{RESOURCE_ID}/data/?page=2&page_size=20"),
@@ -108,7 +105,9 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
             f"/api/resources/{RESOURCE_ID}/data/"
             f"?page={args.get('page', 1) - 1}"
             f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
-        ) if args.get("page", 1) > 1 else None,
+        )
+        if args.get("page", 1) > 1
+        else None,
         "profile": external_url(f"/api/resources/{RESOURCE_ID}/profile/"),
         "swagger": external_url(f"/api/resources/{RESOURCE_ID}/swagger/"),
     }
@@ -343,7 +342,9 @@ async def test_api_exception_resource_no_indexes(setup, fake_client, rmock, mock
             payload=[{"col2__avg": 2}],
             headers={"Content-Range": "0-2/2"},
         )
-        res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1")
+        res = await fake_client.get(
+            f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1"
+        )
         assert res.status == 200
 
 
