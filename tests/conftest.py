@@ -6,8 +6,11 @@ import re
 import aiohttp
 import pytest
 import pytest_asyncio
+from aiohttp.test_utils import TestClient, TestServer
+from aioresponses import aioresponses
 
 from api_tabular import config
+from api_tabular.app import app_factory
 
 PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
@@ -20,10 +23,29 @@ RESOURCE_EXCEPTION_PATTERN = re.compile(
 )
 
 
+@pytest.fixture
+def setup():
+    config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
+
+
+@pytest.fixture
+def rmock():
+    # passthrough for local requests (aiohttp TestServer)
+    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
+        yield m
+
+
 @pytest_asyncio.fixture
 async def client():
     async with aiohttp.ClientSession() as session:
         yield session
+
+
+@pytest_asyncio.fixture
+async def fake_client():
+    app = await app_factory()
+    async with TestClient(TestServer(app)) as client:
+        yield client
 
 
 @pytest.fixture
