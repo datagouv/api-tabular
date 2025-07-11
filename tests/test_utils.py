@@ -9,15 +9,15 @@ def test_build_link_with_page():
     assert link == external_url("/api/test?foo=1&bar=3&page=2&page_size=10")
 
 
-def test_url_for(client):
+def test_url_for(fake_client):
     request = make_mocked_request("GET", "/api/test?foo=bar")
-    request.app.router = client.app.router
+    request.app.router = fake_client.app.router
     url = url_for(request, "profile", rid="rid")
     assert str(url) == "/api/resources/rid/profile/"
 
 
-def test_url_for_external(client):
+def test_url_for_external(fake_client):
     request = make_mocked_request("GET", "/api/test?foo=bar")
-    request.app.router = client.app.router
+    request.app.router = fake_client.app.router
     url = url_for(request, "profile", rid="rid", _external=True)
     assert str(url) == external_url("/api/resources/rid/profile/")

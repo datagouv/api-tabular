@@ -11,6 +11,9 @@ parameters:
   cache-prefix:
     type: string
     default: "py-cache-v2"
+  api-port:
+    type: string
+    default: "8005"
 
 jobs:
   install:
@@ -58,11 +61,36 @@ jobs:
             poetry run ruff format --check .
 
   tests:
-    docker:
-      - image: acidrain/python-poetry:3.11-alpine
+    machine:
+      image: ubuntu-2004:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
     steps:
       - attach_workspace:
           at: .
+      - run:
+          name: Start containers
+          command: |
+            docker compose up -d
+      - run:
+          name: Wait for PostgreSQL to be ready
+          command: |
+            # Wait for PostgreSQL to be ready to accept connections
+            timeout 60 bash -c 'until docker compose exec -T postgres-test pg_isready -U csvapi; do sleep 2; done'
+      - run:
+          name: Wait for PostgREST to be ready
+          command: |
+            # Wait for PostgREST to be ready
+            timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
+      - run:
+          name: Install Poetry and dependencies
+          command: |
+            curl -sSL https://install.python-poetry.org | python3 -
+            poetry config virtualenvs.in-project true
+            poetry install --no-root --extras "dev"
+      - run:
+          name: Start service
+          command: |
+            nohup poetry run adev runserver -p8005 api_tabular/app.py > server.log 2>&1 &
+            sleep 5
       - run:
           name: Run tests
           command: |
