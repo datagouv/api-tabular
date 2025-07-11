@@ -81,20 +81,23 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install Poetry and dependencies
+          name: Install Python 3.11, Poetry and dependencies
           command: |
-            curl -sSL https://install.python-poetry.org | python3 -
-            poetry config virtualenvs.in-project true
-            poetry install --no-root --extras "dev"
+            sudo add-apt-repository ppa:deadsnakes/ppa
+            sudo apt-get update
+            sudo apt-get install -y python3.11
+            curl -sSL https://install.python-poetry.org | python3.11 -
+            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
+            /home/circleci/.local/bin/poetry install
       - run:
           name: Start service
           command: |
-            nohup poetry run adev runserver -p8005 api_tabular/app.py > server.log 2>&1 &
+            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
             sleep 5
       - run:
           name: Run tests
           command: |
-            poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
