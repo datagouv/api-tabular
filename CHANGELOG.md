@@ -5,6 +5,7 @@
 - Remove PostgREST version in health endpoint [#43](https://github.com/datagouv/api-tabular/pull/43)
 - Better health endpoint [#45](https://github.com/datagouv/api-tabular/pull/45) [#46](https://github.com/datagouv/api-tabular/pull/46)
 - Use indexes from resources_exceptions table to allow operations or not [#44](https://github.com/datagouv/api-tabular/pull/44)
+- Refactor tests to use the test containers [#48](https://github.com/datagouv/api-tabular/pull/48)
 
 ## 0.2.4 (2025-03-20)
 

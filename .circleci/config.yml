@@ -14,6 +14,9 @@ parameters:
   cache-prefix:
     type: string
     default: "py-cache-v2"
+  api-port:
+    type: string
+    default: "8005"
 
 jobs:
   install:
@@ -58,15 +61,44 @@ jobs:
             poetry run ruff format --check .
 
   tests:
-    docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+    machine:
+      image: ubuntu-2004:current  # Machine executor needed for Docker-in-Docker (docker compose)
     steps:
       - attach_workspace:
           at: .
       - run:
+          name: Start containers
+          command: |
+            docker compose up -d
+      - run:
+          name: Wait for PostgreSQL to be ready
+          command: |
+            # Wait for PostgreSQL to be ready to accept connections
+            timeout 60 bash -c 'until docker compose exec -T postgres-test pg_isready -U csvapi; do sleep 2; done'
+      - run:
+          name: Wait for PostgREST to be ready
+          command: |
+            # Wait for PostgREST to be ready
+            timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
+      - run:
+          name: Install python and dependencies
+          command: |
+            PYTHON_SHORT_VERSION=$(echo << pipeline.parameters.python-version >> | cut -d '.' -f 1,2)
+            sudo add-apt-repository ppa:deadsnakes/ppa
+            sudo apt-get update
+            sudo apt-get install -y python$PYTHON_SHORT_VERSION
+            curl -sSL https://install.python-poetry.org | python$PYTHON_SHORT_VERSION -
+            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
+            /home/circleci/.local/bin/poetry install
+      - run:
+          name: Start service
+          command: |
+            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
+            sleep 5
+      - run:
           name: Run tests
           command: |
-            poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
@@ -125,7 +157,7 @@ jobs:
             poetry publish --username "${PYPI_USERNAME}" --password "${PYPI_PASSWORD}" --no-interaction
 
 workflows:
-  build:
+  build-test-deploy:
     jobs:
       - install:
           filters:

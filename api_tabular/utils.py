@@ -276,8 +276,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
         },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
-    # see metier_to_python here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/explore_csv.py
-    # see cast for db here: https://github.com/datagouv/hydra/blob/main/udata_hydra/analysis/csv.py
+    # see cast for db here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/output/dataframe.py
     for key, value in resource_columns.items():
         for op in OPERATORS_DESCRIPTIONS:
             if not is_aggregation_allowed(resource_id) and OPERATORS_DESCRIPTIONS[op].get(

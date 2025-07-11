@@ -75,7 +75,9 @@ async def resource_profile(request):
 @routes.get(r"/api/resources/{rid}/swagger/", name="swagger")
 async def resource_swagger(request):
     resource_id = request.match_info["rid"]
-    resource = await get_resource(request.app["csession"], resource_id, ["profile:csv_detective"])
+    resource: dict = await get_resource(
+        request.app["csession"], resource_id, ["profile:csv_detective"]
+    )
     indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
     columns: dict[str, str] = resource["profile"]["columns"]
     if indexes:

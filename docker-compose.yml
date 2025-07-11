@@ -13,11 +13,13 @@ services:
       - PGRST_DB_AGGREGATES_ENABLED=true
     ports:
       - 8080:8080
+    depends_on:
+      - postgres-test
   postgres-test:
     image: "postgres:14"
     volumes:
       - ./db/initdb/:/docker-entrypoint-initdb.d/
-      - ./db/sample.csv:/tmp/sample.csv
+      - ./db/tables_index.csv:/tmp/tables_index.csv
       - ./db/exceptions.csv:/tmp/exceptions.csv
     environment:
       - POSTGRES_DB=csvapi
