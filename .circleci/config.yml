@@ -2,6 +2,9 @@
 version: 2.1
 
 parameters:
+  python-version:
+    type: string
+    default: "3.11"
   python-module:
     type: string
     default: "api_tabular"
@@ -18,7 +21,7 @@ parameters:
 jobs:
   install:
     docker:
-      - image: acidrain/python-poetry:3.11-alpine
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - checkout
       - run:
@@ -48,7 +51,7 @@ jobs:
 
   lint:
     docker:
-      - image: acidrain/python-poetry:3.11-alpine
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
@@ -80,12 +83,12 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install Python 3.11, Poetry and dependencies
+          name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
           command: |
             sudo add-apt-repository ppa:deadsnakes/ppa
             sudo apt-get update
-            sudo apt-get install -y python3.11
-            curl -sSL https://install.python-poetry.org | python3.11 -
+            sudo apt-get install -y python<< pipeline.parameters.python-version >>
+            curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
             /home/circleci/.local/bin/poetry config virtualenvs.in-project true
             /home/circleci/.local/bin/poetry install --extras "dev"
       - run:
@@ -102,7 +105,7 @@ jobs:
 
   build:
     docker:
-      - image: acidrain/python-poetry:3.11-alpine
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
@@ -145,7 +148,7 @@ jobs:
 
   publish:
     docker:
-      - image: acidrain/python-poetry:3.11-alpine
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
