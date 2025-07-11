@@ -71,7 +71,7 @@ def timestamptz_to_utc_iso(date_str: str) -> str:
 def tables_index_rows():
     base_directory = Path(__file__).parent.parent
     rows = {}
-    with open(base_directory / "db/tables_index", mode="r") as file:
+    with open(base_directory / "db/tables_index.csv", mode="r") as file:
         reader = csv.reader(file)
         columns = next(reader)
         for row in reader:
