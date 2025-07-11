@@ -178,6 +178,39 @@ async def resource_data_csv(request):
     return response
 
 
+@routes.get(r"/api/resources/{rid}/data/json/", name="json")
+async def resource_data_json(request):
+    resource_id = request.match_info["rid"]
+    query_string = request.query_string.split("&") if request.query_string else []
+
+    try:
+        sql_query = build_sql_query_string(query_string, resource_id)
+    except ValueError:
+        raise QueryException(400, None, "Invalid query string", "Malformed query")
+    except PermissionError as e:
+        raise QueryException(403, None, "Unauthorized parameters", str(e))
+
+    resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
+
+    response_headers = {
+        "Content-Disposition": f'attachment; filename="{resource_id}.json"',
+        "Content-Type": "application/json",
+    }
+    response = web.StreamResponse(headers=response_headers)
+    await response.prepare(request)
+
+    async for chunk in get_resource_data_streamed(
+        request.app["csession"],
+        resource,
+        sql_query,
+        accept_format="application/json",
+    ):
+        await response.write(chunk)
+
+    await response.write_eof()
+    return response
+
+
 @routes.get(r"/health/")
 async def get_health(request):
     """Return health check status"""
