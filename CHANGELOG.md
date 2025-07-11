@@ -6,8 +6,8 @@
 - Better health endpoint [#45](https://github.com/datagouv/api-tabular/pull/45) [#46](https://github.com/datagouv/api-tabular/pull/46)
 - Use indexes from resources_exceptions table to allow operations or not [#44](https://github.com/datagouv/api-tabular/pull/44)
 - Refactor tests to use the test containers [#48](https://github.com/datagouv/api-tabular/pull/48)
-- Add endpoint to see aggregation exceptions [#47](https://github.com/datagouv/api-tabular/pull/47)
 - Use a standard `pyproject.toml` file, use Poetry 2, use a lightweight image with integrated Poetry 2 for linting an build CI jobs, and don't wait for install step before running the tests jobs in CI [#38](https://github.com/datagouv/api-tabular/pull/38)
+- Add endpoint to see aggregation exceptions [#47](https://github.com/datagouv/api-tabular/pull/47)
 
 ## 0.2.4 (2025-03-20)
 
