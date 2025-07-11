@@ -65,7 +65,9 @@ async def test_api_resource_meta_not_found(client, base_url):
         RESOURCE_ID,
     ],
 )
-async def test_api_resource_profile(client, base_url, tables_index_rows, exceptions_rows, _resource_id):
+async def test_api_resource_profile(
+    client, base_url, tables_index_rows, exceptions_rows, _resource_id
+):
     indexes = (
         list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
         if _resource_id in exceptions_rows
@@ -226,12 +228,12 @@ async def test_api_with_unsupported_args(client, base_url):
         (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
     ],
 )
-async def test_api_exception_resource_indexes(client, base_url, tables_index_rows, exceptions_rows, params):
+async def test_api_exception_resource_indexes(
+    client, base_url, tables_index_rows, exceptions_rows, params
+):
     _resource_id, forbidden = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(
-        json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys()
-    )
+    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
     res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     content = await res.json()
@@ -251,10 +253,7 @@ async def test_api_exception_resource_indexes(client, base_url, tables_index_row
         assert res.status == 200
 
     # checking that the resource cannot be filtered nor aggregated on a non-indexed column
-    non_indexed_cols = [
-        col for col in detection["columns"].keys()
-        if col not in indexes
-    ]
+    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
     for col in non_indexed_cols:
         res = await client.get(
             f"{base_url}/api/resources/{_resource_id}/data/?{col}__greater=1&page=1&page_size=1"
