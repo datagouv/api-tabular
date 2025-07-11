@@ -30,16 +30,15 @@ jobs:
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
       - run:
-          name: Install Poetry 2.0.1 locally
+          name: Install Poetry 2 locally
           command: |
             python3 -m venv .venv
-            .venv/bin/pip install poetry==2.0.1
-            ln -s .venv/bin/poetry poetry-binary
+            .venv/bin/pip install poetry>=2.0.0
       - run:
-          name: Install python dependencies
+          name: Install Python dependencies with Poetry
           command: |
-            ./poetry-binary config virtualenvs.in-project true
-            ./poetry-binary install --no-root --extras "dev"
+            .venv/bin/poetry config virtualenvs.in-project true
+            .venv/bin/poetry install --no-root --extras "dev"
       - save_cache:
           key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
           paths:
@@ -60,8 +59,8 @@ jobs:
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
           # ruff format --check . : check code formatting without fixing (to fix, remove --check)
           command: |
-            ./poetry-binary run ruff check --select I .
-            ./poetry-binary run ruff format --check .
+            .venv/bin/poetry run ruff check --select I .
+            .venv/bin/poetry run ruff format --check .
 
   tests:
     docker:
@@ -72,7 +71,7 @@ jobs:
       - run:
           name: Run tests
           command: |
-            ./poetry-binary run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+            .venv/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
@@ -89,10 +88,10 @@ jobs:
                 export PACKAGE_VERSION=$CIRCLE_TAG
             elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
                 # for main branches, can't add the commit hash since it's not a valid format for publishing
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM
+                export PACKAGE_VERSION=$(.venv/bin/poetry version -s)$CIRCLE_BUILD_NUM
             else
                 # for feature branches, add the commit hash
-                export PACKAGE_VERSION=$(poetry version -s)$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
+                export PACKAGE_VERSION=$(.venv/bin/poetry version -s)$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
             fi
             # Display some debug info
             echo "Building a wheel release with version $PACKAGE_VERSION, build number: $CIRCLE_BUILD_NUM, commit hash: ${CIRCLE_SHA1:0:7}, tag: $CIRCLE_TAG."
@@ -106,11 +105,11 @@ jobs:
             # Build a wheel release
             if [[ $CIRCLE_TAG ]]; then
                 # This is a tagged release, version has been handled upstream
-                ./poetry-binary build
+                .venv/bin/poetry build
             else
                 # Relies on a dev version like "1.2.1.dev" by default
-                ./poetry-binary version $PACKAGE_VERSION
-                ./poetry-binary build
+                .venv/bin/poetry version $PACKAGE_VERSION
+                .venv/bin/poetry build
             fi
       - store_artifacts:
           path: dist
