@@ -64,8 +64,7 @@ jobs:
     machine:
       image: ubuntu-2004:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
       - run:
           name: Start containers
           command: |
@@ -88,7 +87,7 @@ jobs:
             sudo apt-get install -y python3.11
             curl -sSL https://install.python-poetry.org | python3.11 -
             /home/circleci/.local/bin/poetry config virtualenvs.in-project true
-            /home/circleci/.local/bin/poetry install
+            /home/circleci/.local/bin/poetry install --extras "dev"
       - run:
           name: Start service
           command: |
@@ -169,8 +168,6 @@ workflows:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - tests:
-          requires:
-            - install
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
