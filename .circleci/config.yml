@@ -101,11 +101,6 @@ jobs:
             /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
-      - run:
-          name: Cleanup containers
-          command: |
-            docker compose down
-          when: always
 
   build:
     docker:
