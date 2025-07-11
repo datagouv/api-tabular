@@ -1,8 +1,7 @@
 import os
+import tomllib
 import unittest.mock as mock
 from pathlib import Path
-
-import tomllib
 
 from api_tabular import Configurator
 

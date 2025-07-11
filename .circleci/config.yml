@@ -4,7 +4,7 @@ version: 2.1
 parameters:
   python-version:
     type: string
-    default: "3.11.10"
+    default: "3.11"
   python-module:
     type: string
     default: "api_tabular"
@@ -21,9 +21,12 @@ parameters:
 jobs:
   install:
     docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - checkout
+      - run:
+          name: Show Poetry version
+          command: poetry --version
       - run:
           name: Get the base reference branch
           command: export BASE_BRANCH=$(base_branch)
@@ -33,10 +36,10 @@ jobs:
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
       - run:
-          name: Install python dependencies
+          name: Install Python dependencies with Poetry
           command: |
             poetry config virtualenvs.in-project true
-            poetry install
+            poetry install --no-root --extras "dev"
       - save_cache:
           key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
           paths:
@@ -48,7 +51,7 @@ jobs:
 
   lint:
     docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
@@ -62,10 +65,9 @@ jobs:
 
   tests:
     machine:
-      image: ubuntu-2004:current  # Machine executor needed for Docker-in-Docker (docker compose)
+      image: ubuntu-2004:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
       - run:
           name: Start containers
           command: |
@@ -81,15 +83,14 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install python and dependencies
+          name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
           command: |
-            PYTHON_SHORT_VERSION=$(echo << pipeline.parameters.python-version >> | cut -d '.' -f 1,2)
             sudo add-apt-repository ppa:deadsnakes/ppa
             sudo apt-get update
-            sudo apt-get install -y python$PYTHON_SHORT_VERSION
-            curl -sSL https://install.python-poetry.org | python$PYTHON_SHORT_VERSION -
+            sudo apt-get install -y python<< pipeline.parameters.python-version >>
+            curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
             /home/circleci/.local/bin/poetry config virtualenvs.in-project true
-            /home/circleci/.local/bin/poetry install
+            /home/circleci/.local/bin/poetry install --extras "dev"
       - run:
           name: Start service
           command: |
@@ -104,7 +105,7 @@ jobs:
 
   build:
     docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
@@ -147,7 +148,7 @@ jobs:
 
   publish:
     docker:
-      - image: cimg/python:<< pipeline.parameters.python-version >>
+      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - attach_workspace:
           at: .
@@ -170,8 +171,6 @@ workflows:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - tests:
-          requires:
-            - install
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
