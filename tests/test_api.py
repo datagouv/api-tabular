@@ -3,38 +3,47 @@ import json
 import pytest
 
 from api_tabular import config
-from api_tabular.utils import external_url
 
 from .conftest import (
+    AGG_ALLOWED_INDEXED_RESOURCE_ID,
+    AGG_ALLOWED_RESOURCE_ID,
+    INDEXED_RESOURCE_ID,
     PGREST_ENDPOINT,
-    RESOURCE_EXCEPTION_PATTERN,
     RESOURCE_ID,
-    TABLES_INDEX_PATTERN,
     UNKNOWN_RESOURCE_ID,
 )
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_api_resource_meta(client, base_url, tables_index_rows):
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/")
+@pytest.mark.parametrize(
+    "_resource_id",
+    [
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+    ],
+)
+async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_id):
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/")
     assert res.status == 200
     assert await res.json() == {
-        "created_at": tables_index_rows[RESOURCE_ID]["created_at"],
-        "url": tables_index_rows[RESOURCE_ID]["url"],
+        "created_at": tables_index_rows[_resource_id]["created_at"],
+        "url": tables_index_rows[_resource_id]["url"],
         "links": [
             {
-                "href": external_url(f"/api/resources/{RESOURCE_ID}/profile/"),
+                "href": f"{base_url}/api/resources/{_resource_id}/profile/",
                 "type": "GET",
                 "rel": "profile",
             },
             {
-                "href": external_url(f"/api/resources/{RESOURCE_ID}/data/"),
+                "href": f"{base_url}/api/resources/{_resource_id}/data/",
                 "type": "GET",
                 "rel": "data",
             },
             {
-                "href": external_url(f"/api/resources/{RESOURCE_ID}/swagger/"),
+                "href": f"{base_url}/api/resources/{_resource_id}/swagger/",
                 "type": "GET",
                 "rel": "swagger",
             },
@@ -47,12 +56,26 @@ async def test_api_resource_meta_not_found(client, base_url):
     assert res.status == 404
 
 
-async def test_api_resource_profile(client, base_url, tables_index_rows):
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/profile/")
+@pytest.mark.parametrize(
+    "_resource_id",
+    [
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+    ],
+)
+async def test_api_resource_profile(client, base_url, tables_index_rows, exceptions_rows, _resource_id):
+    indexes = (
+        list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
+        if _resource_id in exceptions_rows
+        else None
+    )
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     assert await res.json() == {
-        "profile": json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"]),
-        "indexes": None,
+        "profile": json.loads(tables_index_rows[_resource_id]["csv_detective"]),
+        "indexes": sorted(indexes) if indexes else None,
     }
 
 
@@ -72,10 +95,10 @@ async def test_api_resource_data(client, base_url, tables_index_rows):
         col in body["data"][0] for col in detection["header"]
     )
     assert body["links"] == {
-        "next": external_url(f"/api/resources/{RESOURCE_ID}/data/?page=2&page_size=20"),
+        "next": f"{base_url}/api/resources/{RESOURCE_ID}/data/?page=2&page_size=20",
         "prev": None,
-        "profile": external_url(f"/api/resources/{RESOURCE_ID}/profile/"),
-        "swagger": external_url(f"/api/resources/{RESOURCE_ID}/swagger/"),
+        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
+        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
     }
     assert body["meta"] == {"page": 1, "page_size": 20, "total": detection["total_lines"]}
 
@@ -96,20 +119,20 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
     body = await res.json()
     assert len(body["data"]) == args.get("page_size", config.PAGE_SIZE_DEFAULT)
     assert body["links"] == {
-        "next": external_url(
-            f"/api/resources/{RESOURCE_ID}/data/"
+        "next": (
+            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
             f"?page={args.get('page', 1) + 1}"
             f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
         ),
-        "prev": external_url(
-            f"/api/resources/{RESOURCE_ID}/data/"
+        "prev": (
+            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
             f"?page={args.get('page', 1) - 1}"
             f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
         )
         if args.get("page", 1) > 1
         else None,
-        "profile": external_url(f"/api/resources/{RESOURCE_ID}/profile/"),
-        "swagger": external_url(f"/api/resources/{RESOURCE_ID}/swagger/"),
+        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
+        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
     }
     assert body["meta"] == {
         "page": args.get("page", 1),
@@ -196,157 +219,95 @@ async def test_api_with_unsupported_args(client, base_url):
     assert await res.json() == body
 
 
-async def test_api_exception_resource_indexes(setup, fake_client, rmock, mocker):
-    # fake exception with indexed columns
-    indexed_col = ["col1", "col3"]
-    rmock.get(
-        RESOURCE_EXCEPTION_PATTERN,
-        payload=[{"table_indexes": {c: "index" for c in indexed_col}}],
-        repeat=True,
+@pytest.mark.parametrize(
+    "params",
+    [
+        (INDEXED_RESOURCE_ID, True),
+        (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
+    ],
+)
+async def test_api_exception_resource_indexes(client, base_url, tables_index_rows, exceptions_rows, params):
+    _resource_id, forbidden = params
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
+    indexes = list(
+        json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys()
     )
-
-    # checking that we have an `indexes` key in the profile endpoint
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     content = await res.json()
-    assert content["profile"] == {"this": "is-a-profile"}
+    assert content["profile"] == detection
     # sorted because it's made from a set so the order might not be preserved
-    assert indexed_col == list(sorted(content["indexes"]))
+    assert sorted(indexes) == list(sorted(content["indexes"]))
 
     # checking that the resource is readable with no filter
-    table = "xxx"
-    rmock.get(
-        TABLES_INDEX_PATTERN,
-        payload=[{"__id": 1, "id": "test-id", "parsing_table": table}],
-        repeat=True,
-    )
-    rmock.get(
-        f"{PGREST_ENDPOINT}/{table}?limit=1&order=__id.asc",
-        status=200,
-        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?page=1&page_size=1")
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
-    # checking that the resource can be filtered on an indexed column
-    rmock.get(
-        f'{PGREST_ENDPOINT}/{table}?"{indexed_col[0]}"=gte.1&limit=1&order=__id.asc',
-        status=200,
-        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(
-        f"/api/resources/{RESOURCE_ID}/data/?{indexed_col[0]}__greater=1&page=1&page_size=1"
-    )
-    assert res.status == 200
+    # checking that the resource can be filtered on indexed columns
+    for idx in indexes:
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{idx}__greater=1&page=1&page_size=1"
+        )
+        assert res.status == 200
 
-    # checking that the resource cannot be filtered on a non-indexed column
-    non_indexed_col = "col2"
-    # postgrest would return a content
-    rmock.get(
-        f'{PGREST_ENDPOINT}/{table}?"{non_indexed_col}"=gte.1&limit=1&order=__id.asc',
-        status=200,
-        payload=[{"col1": 1, "col2": 2, "col3": 3, "col4": 4}],
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(
-        f"/api/resources/{RESOURCE_ID}/data/?{non_indexed_col}__greater=1&page=1&page_size=1"
-    )
-    # but it's forbidden
-    assert res.status == 403
+    # checking that the resource cannot be filtered nor aggregated on a non-indexed column
+    non_indexed_cols = [
+        col for col in detection["columns"].keys()
+        if col not in indexes
+    ]
+    for col in non_indexed_cols:
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__greater=1&page=1&page_size=1"
+        )
+        assert res.status == 403
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby=1&page=1&page_size=1"
+        )
+        assert res.status == 403
 
-    # if aggregation is allowed:
-    mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
-
-    # checking that it's not possible on a non-indexed column
-    # postgrest would return a content
-    rmock.get(
-        f'{PGREST_ENDPOINT}/{table}?select="{non_indexed_col}__avg":"{non_indexed_col}".avg()&limit=1',
-        status=200,
-        payload=[{f"{non_indexed_col}__avg": 2}],
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(
-        f"/api/resources/{RESOURCE_ID}/data/?{non_indexed_col}__avg&page=1&page_size=1"
-    )
-    # but it's forbidden
-    assert res.status == 403
-
-    # checking that it is possible on an indexed column
-    rmock.get(
-        f'{PGREST_ENDPOINT}/{table}?select="{indexed_col[0]}__avg":"{indexed_col[0]}".avg()&limit=1',
-        status=200,
-        payload=[{f"{indexed_col[0]}__avg": 2}],
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(
-        f"/api/resources/{RESOURCE_ID}/data/?{indexed_col[0]}__avg&page=1&page_size=1"
-    )
-    assert res.status == 200
+    # checking whether aggregation is allowed on indexed columns
+    for idx in indexes:
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
+        )
+        assert res.status == 403 if forbidden else 200
 
 
-async def test_api_exception_resource_no_indexes(setup, fake_client, rmock, mocker):
-    # fake exception with no indexed column
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"this": "is-a-profile"}}])
-    rmock.get(
-        RESOURCE_EXCEPTION_PATTERN,
-        payload=[{"table_indexes": {}}],
-        repeat=True,
-    )
-
+@pytest.mark.parametrize(
+    "params",
+    [
+        (RESOURCE_ID, True),
+        (AGG_ALLOWED_RESOURCE_ID, False),
+    ],
+)
+async def test_api_exception_resource_no_indexes(client, base_url, tables_index_rows, params):
+    _resource_id, forbidden = params
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     # checking that we have an `indexes` key in the profile endpoint
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     content = await res.json()
-    assert content["profile"] == {"this": "is-a-profile"}
+    assert content["profile"] == detection
     assert content["indexes"] is None
 
-    data = [{f"col{k}": k for k in range(1, 5)}]
     # checking that the resource is readable with no filter
-    table = "xxx"
-    rmock.get(
-        TABLES_INDEX_PATTERN,
-        payload=[{"__id": 1, "id": "test-id", "parsing_table": table}],
-        repeat=True,
-    )
-    rmock.get(
-        f"{PGREST_ENDPOINT}/{table}?limit=1&order=__id.asc",
-        status=200,
-        payload=data,
-        headers={"Content-Range": "0-2/2"},
-    )
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?page=1&page_size=1")
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
     # checking that the resource can be filtered on all columns
-    for k in range(1, 5):
-        rmock.get(
-            f'{PGREST_ENDPOINT}/{table}?"col{k}"=gte.1&limit=1&order=__id.asc',
-            status=200,
-            payload=data,
-            headers={"Content-Range": "0-2/2"},
-        )
-        res = await fake_client.get(
-            f"/api/resources/{RESOURCE_ID}/data/?col{k}__greater=1&page=1&page_size=1"
+    for col in detection["columns"].keys():
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
         assert res.status == 200
 
     # if aggregation is allowed:
-    mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
-    # checking that aggregation is allowed on all columns
-    for k in range(1, 5):
-        rmock.get(
-            f'{PGREST_ENDPOINT}/{table}?select="col{k}__avg":"col{k}".avg()&limit=1',
-            status=200,
-            payload=[{"col2__avg": 2}],
-            headers={"Content-Range": "0-2/2"},
+    # checking whether aggregation is allowed on all columns or none
+    for col in detection["columns"].keys():
+        res = await client.get(
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
-        res = await fake_client.get(
-            f"/api/resources/{RESOURCE_ID}/data/?col{k}__avg&page=1&page_size=1"
-        )
-        assert res.status == 200
+        assert res.status == 403 if forbidden else 200
 
 
 @pytest.mark.parametrize(

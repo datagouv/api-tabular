@@ -5,45 +5,49 @@ import yaml
 
 from api_tabular.utils import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
 
-from .conftest import RESOURCE_EXCEPTION_PATTERN, RESOURCE_ID, TABLES_INDEX_PATTERN
+from .conftest import (
+    AGG_ALLOWED_INDEXED_RESOURCE_ID,
+    AGG_ALLOWED_RESOURCE_ID,
+    INDEXED_RESOURCE_ID,
+    RESOURCE_ID,
+)
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_swagger_endpoint(client, base_url):
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/swagger/")
+@pytest.mark.parametrize(
+    "_resource_id",
+    [
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+    ],
+)
+async def test_swagger_endpoint(client, base_url, _resource_id):
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/swagger/")
     assert res.status == 200
 
 
 @pytest.mark.parametrize(
-    "allow_aggregation",
+    "params",
     [
-        False,
-        True,
+        (RESOURCE_ID, False),
+        (AGG_ALLOWED_RESOURCE_ID, True),
     ],
 )
-async def test_swagger_content(
-    setup,
-    rmock,
-    fake_client,
-    allow_aggregation,
-    mocker,
-    tables_index_rows,
-    mock_get_not_exception,
-):
-    detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    if allow_aggregation:
-        mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+async def test_swagger_no_indexes(client, base_url, tables_index_rows, params):
+    _resource_id, allow_aggregation = params
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     columns = {c: v["python_type"] for c, v in detection["columns"].items()}
-    rmock.get(TABLES_INDEX_PATTERN, payload=[{"profile": {"columns": detection["columns"]}}])
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/swagger/")
     swagger = await res.text()
     swagger_dict = yaml.safe_load(swagger)
 
     missing = []
     for output in ["json", "csv"]:
         params = swagger_dict["paths"][
-            f"/api/resources/{RESOURCE_ID}/data/{'' if output == 'json' else 'csv/'}"
+            f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
         ]["parameters"]
         params = [p["name"] for p in params]
         for c in columns:
@@ -81,44 +85,29 @@ async def test_swagger_content(
 
 
 @pytest.mark.parametrize(
-    "allow_aggregation",
+    "_resource_id",
     [
-        False,
-        True,
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
     ],
 )
-async def test_swagger_with_indexes(setup, rmock, fake_client, mocker, allow_aggregation):
-    if allow_aggregation:
-        mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
-
-    indexed_col = ["col1", "col3"]
-    non_indexed_col = ["col2", "col4"]
-    rmock.get(
-        RESOURCE_EXCEPTION_PATTERN,
-        payload=[{"table_indexes": {c: "index" for c in indexed_col}}],
-        repeat=True,
+async def test_swagger_with_indexes(client, base_url, tables_index_rows, exceptions_rows, _resource_id):
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
+    indexes = list(
+        json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys()
     )
-    rmock.get(
-        TABLES_INDEX_PATTERN,
-        payload=[
-            {
-                "profile": {
-                    "columns": {
-                        c: {"python_type": "int", "format": "int", "score": 1.5}
-                        for c in ["col1", "col2", "col3", "col4"]
-                    }
-                }
-            }
-        ],
-    )
-    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
+    non_indexed_cols = [
+        col for col in detection["columns"].keys()
+        if col not in indexes
+    ]
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/swagger/")
     swagger = await res.text()
     swagger_dict = yaml.safe_load(swagger)
 
     for output in ["json", "csv"]:
         params = swagger_dict["paths"][
-            f"/api/resources/{RESOURCE_ID}/data/{'' if output == 'json' else 'csv/'}"
+            f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
         ]["parameters"]
         params = set([p["name"].split("__")[0] for p in params if "__" in p["name"]])
-        assert all(c in params for c in indexed_col)
-        assert not any(c in params for c in non_indexed_col)
+        assert all(c in params for c in indexes)
+        assert not any(c in params for c in non_indexed_cols)

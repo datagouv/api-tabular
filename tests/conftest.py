@@ -1,5 +1,4 @@
 import csv
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,12 +15,8 @@ PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
 INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
-TABLES_INDEX_PATTERN = re.compile(
-    rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
-)
-RESOURCE_EXCEPTION_PATTERN = re.compile(
-    rf"^https://example\.com/resources_exceptions\?.*resource_id=eq.{RESOURCE_ID}.*$"
-)
+AGG_ALLOWED_RESOURCE_ID = "dddddddd-7777-eeee-8888-ffffffffffff"
+AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
 
 
 @pytest.fixture
@@ -40,11 +35,6 @@ def rmock():
 async def client():
     async with aiohttp.ClientSession() as session:
         yield session
-
-
-@pytest.fixture
-def mock_get_not_exception(rmock):
-    rmock.get(RESOURCE_EXCEPTION_PATTERN, payload=[], repeat=True)
 
 
 @pytest_asyncio.fixture
