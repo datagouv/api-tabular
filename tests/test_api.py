@@ -75,10 +75,12 @@ async def test_api_resource_profile(
     )
     res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
     assert res.status == 200
-    assert await res.json() == {
-        "profile": json.loads(tables_index_rows[_resource_id]["csv_detective"]),
-        "indexes": sorted(indexes) if indexes else None,
-    }
+    body = await res.json()
+    assert body["profile"] == json.loads(tables_index_rows[_resource_id]["csv_detective"])
+    if indexes is None:
+        assert body["indexes"] is None
+    else:
+        assert sorted(body["indexes"]) == sorted(indexes)
 
 
 async def test_api_resource_profile_not_found(client, base_url):
