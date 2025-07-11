@@ -21,7 +21,7 @@ AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
 
 
 @pytest.fixture
-def setup():
+def setup() -> None:
     config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
 
 
@@ -33,13 +33,13 @@ def rmock():
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[aiohttp.ClientSession, Any, Any]:
+async def client() -> AsyncGenerator[aiohttp.ClientSession, Any]:
     async with aiohttp.ClientSession() as session:
         yield session
 
 
 @pytest_asyncio.fixture
-async def fake_client() -> AsyncGenerator[TestClient, Any, Any]:
+async def fake_client() -> AsyncGenerator[TestClient, Any]:
     app = await app_factory()
     async with TestClient(TestServer(app)) as client:
         yield client
