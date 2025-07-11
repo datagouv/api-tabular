@@ -199,6 +199,12 @@ async def get_health(request):
     )
 
 
+@routes.get(r"/api/aggregation-exceptions/")
+async def get_aggregation_exceptions(request):
+    """Return the list of resources for which aggregation queries are allowed"""
+    return web.json_response(config.ALLOW_AGGREGATION)
+
+
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
