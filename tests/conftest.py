@@ -14,7 +14,8 @@ from api_tabular.app import app_factory
 
 PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
-UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-ccccccccccca"
+UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
+INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
 TABLES_INDEX_PATTERN = re.compile(
     rf"^https://example\.com/tables_index\?.*resource_id=eq.{RESOURCE_ID}.*$"
 )

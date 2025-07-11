@@ -181,14 +181,15 @@ async def test_api_resource_data_not_found(client, base_url):
 
 
 async def test_api_with_unsupported_args(client, base_url):
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?limit=1&select=numnum")
+    arg = "limit=1"
+    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{arg}")
     assert res.status == 400
     body = {
         "errors": [
             {
                 "code": None,
                 "title": "Invalid query string",
-                "detail": "Malformed query: argument 'limit=1' could not be parsed",
+                "detail": f"Malformed query: argument '{arg}' could not be parsed",
             },
         ],
     }

@@ -47,10 +47,10 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: eb7a008177131590c2f1a2ca05e530b5; Type: TABLE; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0; Type: TABLE; Schema: csvapi; Owner: csvapi
 --
 
-CREATE TABLE "csvapi".eb7a008177131590c2f1a2ca05e530b5 (
+CREATE TABLE "csvapi".eb7a008177131590c2f1a2ca0 (
     __id integer NOT NULL,
     id character varying,
     score float,
@@ -61,13 +61,13 @@ CREATE TABLE "csvapi".eb7a008177131590c2f1a2ca05e530b5 (
 );
 
 
-ALTER TABLE "csvapi".eb7a008177131590c2f1a2ca05e530b5 OWNER TO "csvapi";
+ALTER TABLE "csvapi".eb7a008177131590c2f1a2ca0 OWNER TO "csvapi";
 
 --
--- Name: eb7a008177131590c2f1a2ca05e530b5___id_seq; Type: SEQUENCE; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0___id_seq; Type: SEQUENCE; Schema: csvapi; Owner: csvapi
 --
 
-CREATE SEQUENCE "csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq
+CREATE SEQUENCE "csvapi".eb7a008177131590c2f1a2ca0___id_seq
     AS integer
     START WITH 1
     INCREMENT BY 1
@@ -76,27 +76,27 @@ CREATE SEQUENCE "csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq
     CACHE 1;
 
 
-ALTER TABLE "csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq OWNER TO "csvapi";
+ALTER TABLE "csvapi".eb7a008177131590c2f1a2ca0___id_seq OWNER TO "csvapi";
 
 --
--- Name: eb7a008177131590c2f1a2ca05e530b5___id_seq; Type: SEQUENCE OWNED BY; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0___id_seq; Type: SEQUENCE OWNED BY; Schema: csvapi; Owner: csvapi
 --
 
-ALTER SEQUENCE "csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq OWNED BY "csvapi".eb7a008177131590c2f1a2ca05e530b5.__id;
-
-
---
--- Name: eb7a008177131590c2f1a2ca05e530b5 __id; Type: DEFAULT; Schema: csvapi; Owner: csvapi
---
-
-ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca05e530b5 ALTER COLUMN __id SET DEFAULT nextval('"csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq'::regclass);
+ALTER SEQUENCE "csvapi".eb7a008177131590c2f1a2ca0___id_seq OWNED BY "csvapi".eb7a008177131590c2f1a2ca0.__id;
 
 
 --
--- Data for Name: eb7a008177131590c2f1a2ca05e530b5; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0 __id; Type: DEFAULT; Schema: csvapi; Owner: csvapi
 --
 
-COPY "csvapi".eb7a008177131590c2f1a2ca05e530b5 (__id, id, score, decompte, is_true, birth, liste) FROM stdin;
+ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca0 ALTER COLUMN __id SET DEFAULT nextval('"csvapi".eb7a008177131590c2f1a2ca0___id_seq'::regclass);
+
+
+--
+-- Data for Name: eb7a008177131590c2f1a2ca0; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
+--
+
+COPY "csvapi".eb7a008177131590c2f1a2ca0 (__id, id, score, decompte, is_true, birth, liste) FROM stdin;
 1 	8c7a6452-9295-4db2-b692-34104574fded	0.708	90	False	1949-07-16	[0]
 2 	e5b8864b-d1d0-4452-8d83-517d31da7ff2	0.852	75	True	1958-02-18	[0]
 3 	7cb17d7f-a12f-40cb-97d1-49b17491e609	0.302	71	True	1927-09-15	[0, 1]
@@ -1101,18 +1101,18 @@ COPY "csvapi".eb7a008177131590c2f1a2ca05e530b5 (__id, id, score, decompte, is_tr
 
 
 --
--- Name: eb7a008177131590c2f1a2ca05e530b5___id_seq; Type: SEQUENCE SET; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0___id_seq; Type: SEQUENCE SET; Schema: csvapi; Owner: csvapi
 --
 
-SELECT pg_catalog.setval('"csvapi".eb7a008177131590c2f1a2ca05e530b5___id_seq', 21777, true);
+SELECT pg_catalog.setval('"csvapi".eb7a008177131590c2f1a2ca0___id_seq', 21777, true);
 
 
 --
--- Name: eb7a008177131590c2f1a2ca05e530b5 eb7a008177131590c2f1a2ca05e530b5_pkey; Type: CONSTRAINT; Schema: csvapi; Owner: csvapi
+-- Name: eb7a008177131590c2f1a2ca0 eb7a008177131590c2f1a2ca0_pkey; Type: CONSTRAINT; Schema: csvapi; Owner: csvapi
 --
 
-ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca05e530b5
-    ADD CONSTRAINT eb7a008177131590c2f1a2ca05e530b5_pkey PRIMARY KEY (__id);
+ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca0
+    ADD CONSTRAINT eb7a008177131590c2f1a2ca0_pkey PRIMARY KEY (__id);
 
 
 --
@@ -1207,10 +1207,12 @@ ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded
 
 CREATE TABLE "csvapi".s34fff81a3a7292c64a77e5cz (
     __id integer NOT NULL,
-    col1 integer,
-    col2 integer,
-    col3 integer,
-    col4 integer
+    id character varying,
+    score float,
+    decompte integer,
+    is_true boolean,
+    birth character varying,
+    liste character varying
 );
 
 
@@ -1249,11 +1251,17 @@ ALTER TABLE ONLY "csvapi".s34fff81a3a7292c64a77e5cz ALTER COLUMN __id SET DEFAUL
 -- Data for Name: s34fff81a3a7292c64a77e5cz; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
 --
 
-COPY "csvapi".s34fff81a3a7292c64a77e5cz (__id, col1, col2, col3, col4) FROM stdin;
-1	10	20	30	40
-2	11	21	31	41
-3	12	22	32	42
-4	13	23	33	43
+COPY "csvapi".s34fff81a3a7292c64a77e5cz (__id, id, score, decompte, is_true, birth, liste) FROM stdin;
+1 	8c7a6452-9295-4db2-b692-34104574fded	0.708	90	False	1949-07-16	[0]
+2 	e5b8864b-d1d0-4452-8d83-517d31da7ff2	0.852	75	True	1958-02-18	[0]
+3 	7cb17d7f-a12f-40cb-97d1-49b17491e609	0.302	71	True	1927-09-15	[0, 1]
+4 	0da36ff5-5c55-4b98-8455-1ae8a579be14	0.016	40	True	1936-04-11	[0, 1]
+5 	3439b563-b2eb-47a7-99bb-dd89fab1df0e	0.899	27	False	1999-02-02	[0, 1, 2]
+6 	6d2b25b7-8e02-4e26-aaca-0d30c4bf66b6	0.264	29	True	1941-05-25	[0, 1, 2]
+7 	255a414e-b773-4205-ba7c-0d86825f4b12	0.093	85	True	1953-04-28	[0, 1, 2]
+8 	086750ed-9b33-4538-a42d-6f0d4aa66afe	0.59	24	True	1980-08-02	[0, 1]
+9 	d23d51b0-3f92-4370-a2fd-875b74623114	0.299	23	True	1916-09-22	[0, 1]
+10 	adfef4c1-c544-4b94-9885-c336b926e61e	0.117	81	False	1965-01-15	[0]
 \.
 
 
