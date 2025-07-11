@@ -1,2 +1,3 @@
 id,resource_id,table_indexes,comment
 1,aaaaaaaa-5555-bbbb-6666-cccccccccccc,"{""id"": ""index"", ""birth"": ""index""}","Une ressource indexée"
+2,aaaaaaaa-9999-bbbb-1010-cccccccccccc,"{""decompte"": ""index""}","Une ressource indexée et agrégation autorisée"
