@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, AsyncGenerator, Generator
 
 import aiohttp
 import pytest
@@ -32,20 +33,20 @@ def rmock():
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client() -> AsyncGenerator[aiohttp.ClientSession, Any, Any]:
     async with aiohttp.ClientSession() as session:
         yield session
 
 
 @pytest_asyncio.fixture
-async def fake_client():
+async def fake_client() -> AsyncGenerator[TestClient, Any, Any]:
     app = await app_factory()
     async with TestClient(TestServer(app)) as client:
         yield client
 
 
 @pytest.fixture
-def base_url():
+def base_url() -> Generator[str, Any, Any]:
     yield f"{config.SCHEME}://{config.SERVER_NAME}"
 
 
@@ -74,10 +75,10 @@ def csv_to_dict(file_name: str) -> dict:
 
 
 @pytest.fixture
-def tables_index_rows():
+def tables_index_rows() -> Generator[dict, Any, Any]:
     yield csv_to_dict("tables_index")
 
 
 @pytest.fixture
-def exceptions_rows():
+def exceptions_rows() -> Generator[dict, Any, Any]:
     yield csv_to_dict("exceptions")
