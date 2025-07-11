@@ -19,7 +19,7 @@ services:
     image: "postgres:14"
     volumes:
       - ./db/initdb/:/docker-entrypoint-initdb.d/
-      - ./db/sample.csv:/tmp/sample.csv
+      - ./db/tables_index:/tmp/tables_index
       - ./db/exceptions.csv:/tmp/exceptions.csv
     environment:
       - POSTGRES_DB=csvapi
