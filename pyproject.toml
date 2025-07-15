@@ -15,8 +15,8 @@ requires-python = "<4.0,>=3.11"
 license = {text = "MIT"}
 readme = "README.md"
 
-[tool.uv]
-dev-dependencies = [
+[project.optional-dependencies]
+dev = [
     "aiohttp-devtools<2.0.0,>=1.0.post0",
     "aioresponses<1.0.0,>=0.7.4",
     "bumpr<1.0.0,>=0.3.8",
@@ -24,11 +24,6 @@ dev-dependencies = [
     "pytest-asyncio<1.0.0,>=0.20.3",
     "pytest-mock<4.0.0,>=3.10.0",
     "ruff<1.0.0,>=0.6.5",
-]
-
-[tool.pdm.build]
-includes = [
-    "api_tabular",
 ]
 
 [tool.ruff]
