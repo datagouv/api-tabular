@@ -19,42 +19,16 @@ parameters:
     default: "8005"
 
 jobs:
-  install:
+  lint:
     docker:
       - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
       - checkout
       - run:
-          name: Show Poetry version
-          command: poetry --version
-      - run:
-          name: Get the base reference branch
-          command: export BASE_BRANCH=$(base_branch)
-      - restore_cache:
-          keys:
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
-      - run:
-          name: Install Python dependencies with Poetry
+          name: Install Python dev dependencies only with Poetry
           command: |
             poetry config virtualenvs.in-project true
             poetry install --no-root --extras "dev"
-      - save_cache:
-          key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "poetry.lock" }}
-          paths:
-            - .venv
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
-
-  lint:
-    docker:
-      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
-    steps:
-      - attach_workspace:
-          at: .
       - run:
           name: Lint and format code and sort imports
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
@@ -107,8 +81,12 @@ jobs:
     docker:
       - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
+      - run:
+          name: Install Python dependencies with Poetry
+          command: |
+            poetry config virtualenvs.in-project true
+            poetry install --no-root
       - run:
           name: Set the version number
           command: |
@@ -160,13 +138,7 @@ jobs:
 workflows:
   build-test-deploy:
     jobs:
-      - install:
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
       - lint:
-          requires:
-            - install
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
