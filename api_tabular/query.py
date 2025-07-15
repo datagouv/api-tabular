@@ -38,7 +38,7 @@ async def get_resource_data(
 
 async def get_resource_data_streamed(
     session: ClientSession,
-    model: str,
+    model: dict,
     sql_query: str,
     accept_format: str = "text/csv",
     batch_size: int = config.BATCH_SIZE,

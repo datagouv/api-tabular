@@ -447,6 +447,22 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
                 },
                 "parameters": parameters_list,
             },
+            f"/api/resources/{rid}/data/json/": {
+                "get": {
+                    "description": "Returns resource data based on ID as a JSON file.",
+                    "summary": "Get resource data from its ID in JSON format",
+                    "operationId": "getResourceDataFromIdJSON",
+                    "responses": {
+                        "200": {
+                            "description": "successful operation",
+                            "content": {"application/json": {}},
+                        },
+                        "400": {"description": "Invalid query string"},
+                        "404": {"description": "Resource not found"},
+                    },
+                },
+                "parameters": parameters_list,
+            },
         },
         "components": component_dict,
     }
