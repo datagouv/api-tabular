@@ -21,7 +21,7 @@ parameters:
 jobs:
   install:
     docker:
-      - image: ghcr.io/astral-sh/uv:latest
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
       - checkout
       - run:
@@ -34,7 +34,7 @@ jobs:
             - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
       - run:
           name: Install python dependencies
-          command: uv sync
+          command: uv sync --extra dev
       - save_cache:
           key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "uv.lock" }}
           paths:
@@ -46,7 +46,7 @@ jobs:
 
   set_version:
     docker:
-      - image: ghcr.io/astral-sh/uv:latest
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
       - attach_workspace:
           at: .
@@ -54,7 +54,8 @@ jobs:
           name: Update version in pyproject.toml
           command: |
             # Extract the current version from pyproject.toml
-            CURRENT_VERSION=$(grep -oP '^version = "\K[^"]+' pyproject.toml)
+            CURRENT_VERSION=$(uv version)
+            echo "Current version: $CURRENT_VERSION"
 
             if [[ $CIRCLE_TAG ]]; then
                 VERSION=$CIRCLE_TAG
@@ -82,7 +83,7 @@ jobs:
 
   lint:
     docker:
-      - image: ghcr.io/astral-sh/uv:latest
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
       - attach_workspace:
           at: .
@@ -114,29 +115,28 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
+          name: Install uv and dependencies
           command: |
-            sudo add-apt-repository ppa:deadsnakes/ppa
-            sudo apt-get update
-            sudo apt-get install -y python<< pipeline.parameters.python-version >>
-            curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
-            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
-            /home/circleci/.local/bin/poetry install --extras "dev"
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            uv sync --extra dev
       - run:
           name: Start service
           command: |
-            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
+            export PATH="$HOME/.local/bin:$PATH"
+            nohup uv run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
             sleep 5
       - run:
           name: Run tests
           command: |
+            export PATH="$HOME/.local/bin:$PATH"
             uv run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
       - store_test_results:
           path: reports/python
 
   build:
     docker:
-      - image: ghcr.io/astral-sh/uv:latest
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
       - attach_workspace:
           at: .
@@ -152,7 +152,7 @@ jobs:
 
   publish:
     docker:
-      - image: acidrain/python-poetry:<< pipeline.parameters.python-version >>-alpine
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
       - attach_workspace:
           at: .
@@ -181,14 +181,11 @@ workflows:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - tests:
-          requires:
-            - set_version
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
       - build:
           requires:
-            - tests
             - lint
           filters:
             tags:
