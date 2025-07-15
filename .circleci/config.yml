@@ -44,43 +44,6 @@ jobs:
           paths:
             - .
 
-  set_version:
-    docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
-    steps:
-      - attach_workspace:
-          at: .
-      - run:
-          name: Update version in pyproject.toml
-          command: |
-            # Extract the current version from pyproject.toml
-            CURRENT_VERSION=$(uv version)
-            echo "Current version: $CURRENT_VERSION"
-
-            if [[ $CIRCLE_TAG ]]; then
-                VERSION=$CIRCLE_TAG
-            elif [[ $CIRCLE_BRANCH == << pipeline.parameters.publish-branch >> ]]; then
-                VERSION=${CURRENT_VERSION%.*}.$CIRCLE_BUILD_NUM
-            else
-                VERSION=${CURRENT_VERSION%.*}.$CIRCLE_BUILD_NUM+${CIRCLE_SHA1:0:7}
-            fi
-
-            # Update the version in pyproject.toml
-            sed -i "s/^version = \".*\"$/version = \"$VERSION\"/" pyproject.toml
-
-            # Display updated pyproject.toml for debugging
-            cat pyproject.toml | grep version
-
-            # Commit the updated file
-            git config user.name "CircleCI Bot"
-            git config user.email "circleci@example.com"
-            git add pyproject.toml
-            git commit -m "CI: Update version to $VERSION" || echo "No changes to commit."
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
-
   lint:
     docker:
       - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
@@ -168,15 +131,7 @@ workflows:
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
-      - set_version:
-          requires:
-            - install
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
       - lint:
-          requires:
-            - set_version
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
