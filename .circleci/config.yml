@@ -19,37 +19,16 @@ parameters:
     default: "8005"
 
 jobs:
-  install:
-    docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
-    steps:
-      - checkout
-      - run:
-          name: Get the base reference branch
-          command: export BASE_BRANCH=$(base_branch)
-      - restore_cache:
-          keys:
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "uv.lock" }}
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Branch }}
-            - << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ .Environment.BASE_BRANCH }}
-      - run:
-          name: Install python dependencies
-          command: uv sync --extra dev
-      - save_cache:
-          key: << pipeline.parameters.cache-prefix >>-v1-{{ arch }}-{{ checksum "uv.lock" }}
-          paths:
-            - .uv
-      - persist_to_workspace:
-          root: .
-          paths:
-            - .
+
 
   lint:
     docker:
       - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
+      - run:
+          name: Install dev dependencies
+          command: uv sync --extra dev
       - run:
           name: Lint and format code and sort imports
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
@@ -101,8 +80,10 @@ jobs:
     docker:
       - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
+      - run:
+          name: Install dependencies
+          command: uv sync
       - run:
           name: Build a distributable package
           command: uv build
@@ -127,10 +108,6 @@ jobs:
 workflows:
   build-test-deploy:
     jobs:
-      - install:
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
       - lint:
           filters:
             tags:
