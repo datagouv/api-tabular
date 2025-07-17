@@ -456,7 +456,9 @@ Tests are automatically run on every pull request and push to main branch. See [
 The release process uses [bump'X](https://github.com/datagouv/bumpx):
 
 ```shell
-# Bump version
+# To perform a dry run of version bumping
+poetry run bumpx -v -d
+# To bump version
 poetry run bumpx
 ```
 
