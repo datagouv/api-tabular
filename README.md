@@ -1,44 +1,96 @@
-# Api-tabular
+# Tabular API
 
-This connects to [hydra](https://github.com/datagouv/hydra) and serves the converted CSVs as an API.
+[![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Dependencies
+An API service that provides RESTful access to CSV data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
 
-- Python >= 3.11
-- [Poetry](https://python-poetry.org/) >= 2.0.0
-- [hydra](https://github.com/datagouv/hydra)
-- [postgrest](https://github.com/PostgREST/postgrest)
+This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
+The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
 
-## Run locally
+## 🛠️ Installation & Setup
 
-Start [hydra](https://github.com/datagouv/hydra) via `docker compose`.
+### 📋 Requirements
 
-Launch this project:
+- **Python** >= 3.11, < 3.13
+- **[Poetry](https://python-poetry.org/)** >= 2.0.0 (for dependency management)
+- **Docker & Docker Compose**
 
-```shell
-docker compose up
+### 🧪 Run with a test database
+
+1. **Start the Infrastructure**
+
+   Start this project via `docker compose`:
+   ```shell
+   docker compose up
+   ```
+
+   This starts PostgREST container and PostgreSQL container with fake test data. You can access the raw PostgREST API on http://localhost:8080.
+
+2. **Launch the main API proxy**
+
+   Install dependencies and start the proxy services:
+   ```shell
+   poetry install
+   poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
+   poetry run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
+   ```
+
+   The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
+
+3. **Test the API**
+
+   Query the API using a `resource_id`. Several test resources are available in the fake database:
+
+   - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
+   - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
+   - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
+   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
+
+### 🏭 Run with a real Hydra database
+
+To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
+
+1. **Configure the PostgREST endpoint** to point to your Hydra database:
+
+   ```shell
+   export PGREST_ENDPOINT="http://your-hydra-postgrest:8080"
+   ```
+
+   Or create a `config.toml` file:
+   ```toml
+   PGREST_ENDPOINT = "http://your-hydra-postgrest:8080"
+   ```
+
+2. **Start only the API services** (skip the fake database):
+   ```shell
+   poetry install
+   poetry run adev runserver -p8005 api_tabular/app.py
+   poetry run adev runserver -p8006 api_tabular/metrics.py
+   ```
+
+3. **Use real resource IDs** from your Hydra database instead of the test IDs.
+
+**Note:** Make sure your Hydra PostgREST instance is accessible and the database schema matches the expected structure (tables in the `csvapi` schema).
+
+
+## 📚 API Documentation
+
+### Resource Endpoints
+
+#### Get Resource Metadata
+```http
+GET /api/resources/{resource_id}/
 ```
 
-You can now access the raw postgrest API on http://localhost:8080.
+Returns basic information about the resource including creation date, URL, and available endpoints.
 
-Now you can launch the proxy (ie the app):
-
-```shell
-poetry install
-poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-poetry run adev runserver -p8005 api_tabular/metrics.py    # Api related to udata's metrics
-```
-
-And query postgrest via the proxy using a `resource_id`, cf below. Test resource_id is `aaaaaaaa-1111-bbbb-2222-cccccccccccc`
-
-## API
-
-### Meta informations on resource
-
+**Example:**
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
 ```
 
+**Response:**
 ```json
 {
   "created_at": "2023-04-21T22:54:22.043492+00:00",
@@ -63,12 +115,19 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
 }
 ```
 
-### Profile (csv-detective output) for a resource
+#### Get Resource Profile
+```http
+GET /api/resources/{resource_id}/profile/
+```
 
+Returns the CSV profile information (column types, headers, etc.) generated by [csv-detective](https://github.com/datagouv/csv-detective).
+
+**Example:**
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/
 ```
 
+**Response:**
 ```json
 {
   "profile": {
@@ -85,12 +144,19 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/pr
 }
 ```
 
-### Data for a resource (ie resource API)
+#### Get Resource Data
+```http
+GET /api/resources/{resource_id}/data/
+```
 
+Returns the actual data with support for filtering, sorting, and pagination.
+
+**Example:**
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/
 ```
 
+**Response:**
 ```json
 {
   "data": [
@@ -119,13 +185,33 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
 }
 ```
 
-This endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameter):
-
+#### Get Resource Data as CSV
+```http
+GET /api/resources/{resource_id}/data/csv/
 ```
-# sort by column
-column_name__sort=asc
-column_name__sort=desc
 
+Streams the data directly as a CSV file for download.
+
+#### Get Resource Data as JSON
+```http
+GET /api/resources/{resource_id}/data/json/
+```
+
+Streams the data directly as a JSON file for download.
+
+#### Get Swagger Documentation
+```http
+GET /api/resources/{resource_id}/swagger/
+```
+
+Returns OpenAPI/Swagger documentation specific to this resource.
+
+### Query Operators
+
+The data endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameter):
+
+#### Filtering Operators
+```
 # exact value
 column_name__exact=value
 
@@ -149,7 +235,19 @@ column_name__strictly_less=value
 
 # strictly greater
 column_name__strictly_greater=value
+```
 
+#### Sorting
+```
+# sort by column
+column_name__sort=asc
+column_name__sort=desc
+```
+
+#### Aggregation Operators
+> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint.
+
+```
 # group by values
 column_name__groupby
 
@@ -169,15 +267,27 @@ column_name__max
 column_name__sum
 ```
 
-> /!\ WARNING: aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint.
+> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
-> NB : passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
+#### Pagination
+```
+page=1          # Page number (default: 1)
+page_size=20    # Items per page (default: 20, max: 50)
+```
 
-For instance:
+#### Column Selection
+```
+columns=col1,col2,col3    # Select specific columns only
+```
+
+### Example Queries
+
+#### Basic Filtering
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?score__greater=0.9&decompte__exact=13
 ```
-returns
+
+**Returns:**
 ```json
 {
   "data": [
@@ -214,11 +324,13 @@ returns
 }
 ```
 
+#### Aggregation with Filtering
 With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?decompte__groupby&birth__less=1996&score__avg
 ```
-i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, grouped by `decompte`, returns
+
+i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, grouped by `decompte`, returns:
 ```json
 {
     "data": [
@@ -239,35 +351,160 @@ i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, group
 }
 ```
 
-Pagination is made through queries with `page` and `page_size`:
+#### Pagination
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=30
 ```
 
-You may also specify the columns you want to keep using the `columns` argument:
+#### Column Selection
 ```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=col1,col2
+curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=id,score,birth
 ```
 
+### Metrics API
 
-## Contributing
+The metrics service provides similar functionality for system metrics:
 
-### Pre-commit hook
+```shell
+# Get metrics data
+curl http://localhost:8006/api/{model}/data/
 
-This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and format code before each commit.
-Please install it with:
+# Get metrics as CSV
+curl http://localhost:8006/api/{model}/data/csv/
+```
+
+### Health Check
+
+```shell
+# Main API health
+curl http://localhost:8005/health/
+
+# Metrics API health
+curl http://localhost:8006/health/
+```
+
+## ⚙️ Configuration
+
+Configuration is handled through TOML files and environment variables. The default configuration is in `api_tabular/config_default.toml`.
+
+### Key Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `PGREST_ENDPOINT` | `http://localhost:8080` | PostgREST server URL |
+| `SERVER_NAME` | `localhost:8005` | Server name for URL generation |
+| `SCHEME` | `http` | URL scheme (http/https) |
+| `SENTRY_DSN` | `None` | Sentry DSN for error reporting (optional) |
+| `PAGE_SIZE_DEFAULT` | `20` | Default page size |
+| `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
+| `BATCH_SIZE` | `50000` | Batch size for streaming |
+| `DOC_PATH` | `/api/doc` | Swagger documentation path |
+| `ALLOW_AGGREGATION` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
+
+### Environment Variables
+
+You can override any configuration value using environment variables:
+
+```shell
+export PGREST_ENDPOINT="http://my-postgrest:8080"
+export PAGE_SIZE_DEFAULT=50
+export SENTRY_DSN="https://your-sentry-dsn"
+```
+
+### Custom Configuration File
+
+Create a `config.toml` file in the project root or set the `CSVAPI_SETTINGS` environment variable:
+
+```shell
+export CSVAPI_SETTINGS="/path/to/your/config.toml"
+```
+
+## 🧪 Testing
+
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
+
+### Running Tests
+
+```shell
+# Run all tests
+poetry run pytest
+
+# Run specific test file
+poetry run pytest tests/test_api.py
+
+# Run tests with verbose output
+poetry run pytest -v
+
+# Run tests and show print statements
+poetry run pytest -s
+```
+
+### Tests Structure
+
+- **`tests/test_api.py`** - API endpoint tests (actually pings the running API)
+- **`tests/test_config.py`** - Configuration loading tests
+- **`tests/test_query.py`** - Query building and processing tests
+- **`tests/test_swagger.py`** - Swagger documentation tests (actually pings the running API)
+- **`tests/test_utils.py`** - Utility function tests
+- **`tests/conftest.py`** - Test fixtures and configuration
+
+### CI/CD Testing
+
+Tests are automatically run in CI/CD. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration.
+
+## 🤝 Contributing
+
+### 🧹 Code Linting and Formatting
+
+This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/) for linting and formatting. **Either running these commands manually or installing the pre-commit hook is required before submitting contributions.**
+
+```shell
+# Lint and sort imports, and format code
+poetry run ruff check  --select I --fix && poetry run ruff format
+```
+
+### 🔗 Pre-commit Hooks
+
+This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and format code before each commit. **Installing the pre-commit hook is required for contributions.**
+
+**Install pre-commit hooks:**
 ```shell
 poetry run pre-commit install
 ```
+The re-commit hook that automatically:
+- Check YAML syntax
+- Fix end-of-file issues
+- Remove trailing whitespace
+- Check for large files
+- Run Ruff linting and formatting
 
-### Lint and format code
+### 🧪 Running Tests
 
-To lint, format and sort imports, this repository uses [Ruff](https://astral.sh/ruff/).
-You can run the following command to lint and format the code:
+**Pull requests cannot be merged unless all CI/CD tests pass.**
+Tests are automatically run on every pull request and push to main branch. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration, and the [🧪 Testing](#-testing) section above for detailed testing commands.
+
+### 📦 Version Management
+
+The release process uses [bump'X](https://github.com/datagouv/bumpx):
 ```shell
-poetry run ruff check --fix && poetry run ruff format
+# To perform a dry run of version bumping
+poetry run bumpx -v -d
+# To bump version
+poetry run bumpx
 ```
 
-### Releases
+## 📄 License
 
-The release process uses [bump'X](https://github.com/datagouv/bumpx).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/datagouv/api-tabular/issues)
+- **Discussion**: Use the discussion section at the end of the [production API page](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/)
+- **Contact Form**: [Support form](https://support.data.gouv.fr/)
+
+## 🌐 Production Resources
+
+- **Production API**: [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api)
+- **Product Documentation**: [API tabulaire data.gouv.fr (beta)](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French)
+- **Technical Documentation**: [Swagger/OpenAPI docs](https://tabular-api.data.gouv.fr/api/doc)
