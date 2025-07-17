@@ -17,8 +17,6 @@ This service is mainly used, developed and maintained by [data.gouv.fr](https://
 
 ## 🛠️ Installation & Setup
 
-### Quick Start
-
 1. **Start [udata-hydra](https://github.com/datagouv/hydra)**
 
    Start [udata-hydra](https://github.com/datagouv/hydra) via `docker compose`
@@ -30,7 +28,7 @@ This service is mainly used, developed and maintained by [data.gouv.fr](https://
    docker compose up
    ```
 
-   This starts PostgreSQL and PostgREST as a proxy to access the database tables. You can access the raw PostgREST API on http://localhost:8080.
+   This starts PostgREST. You can then access the raw PostgREST API on http://localhost:8080.
 
 3. **Launch the main API proxy**
 
@@ -409,7 +407,7 @@ poetry run pytest -v
 poetry run pytest -s
 ```
 
-### Test Structure
+### Tests Structure
 
 - **`tests/test_api.py`** - API endpoint tests
 - **`tests/test_config.py`** - Configuration loading tests
@@ -433,7 +431,7 @@ This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/
 poetry run ruff check  --select I --fix && poetry run ruff format
 ```
 
-### Pre-commit Hooks
+### 🔗 Pre-commit Hooks
 
 This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and format code before each commit. **Installing the pre-commit hook is required for contributions.**
 
