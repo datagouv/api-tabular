@@ -1,6 +1,6 @@
 # Tabular API
 
-[![Tests](https://github.com/datagouv/api-tabular/workflows/Tests/badge.svg)](https://github.com/datagouv/api-tabular/actions)
+[![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://circleci.com/gh/datagouv/api-tabular)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An API service that provides RESTful access to CSV data converted by [udata-hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
@@ -163,6 +163,13 @@ GET /api/resources/{resource_id}/data/csv/
 ```
 
 Streams the data directly as a CSV file for download.
+
+#### Get Resource Data as JSON
+```http
+GET /api/resources/{resource_id}/data/json/
+```
+
+Streams the data directly as a JSON file for download.
 
 #### Get Swagger Documentation
 ```http
@@ -454,7 +461,6 @@ Tests are automatically run on every pull request and push to main branch. See [
 ### 📦 Version Management
 
 The release process uses [bump'X](https://github.com/datagouv/bumpx):
-
 ```shell
 # To perform a dry run of version bumping
 poetry run bumpx -v -d
