@@ -1,6 +1,6 @@
 # Tabular API
 
-[![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://circleci.com/gh/datagouv/api-tabular)
+[![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An API service that provides RESTful access to CSV data converted by [udata-hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
@@ -43,7 +43,12 @@ This service is mainly used, developed and maintained by [data.gouv.fr](https://
 
 4. **Test the API**
 
-   Query the API using a `resource_id`. Test resource_id is `aaaaaaaa-1111-bbbb-2222-cccccccccccc`.
+   Query the API using a `resource_id`. Several test resources are available:
+
+   - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
+   - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
+   - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
+   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
 
 
 ## 📚 API Documentation
