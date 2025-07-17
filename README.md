@@ -8,15 +8,13 @@ An API service that provides RESTful access to CSV data converted by [Hydra](htt
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
 The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
 
-## 📋 Dependencies
+## 🛠️ Installation & Setup
+
+### 📋 Requirements
 
 - **Python** >= 3.11, < 3.13
 - **[Poetry](https://python-poetry.org/)** >= 2.0.0 (for dependency management)
-- **[udata-hydra](https://github.com/datagouv/hydra)**
-- **[PostgREST](https://github.com/PostgREST/postgrest)**
 - **Docker & Docker Compose**
-
-## 🛠️ Installation & Setup
 
 ### 🧪 Run with a test database
 
@@ -430,9 +428,6 @@ This project uses [pytest](https://pytest.org/) for testing with async support a
 ```shell
 # Run all tests
 poetry run pytest
-
-# Run tests with coverage
-poetry run pytest --cov=api_tabular
 
 # Run specific test file
 poetry run pytest tests/test_api.py
