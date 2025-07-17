@@ -16,7 +16,7 @@ services:
     depends_on:
       - postgres-test
   postgres-test:
-    image: "postgres:14"
+    image: "postgres:15"
     volumes:
       - ./db/initdb/:/docker-entrypoint-initdb.d/
       - ./db/tables_index.csv:/tmp/tables_index.csv
