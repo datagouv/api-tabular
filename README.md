@@ -3,7 +3,7 @@
 [![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An API service that provides RESTful access to CSV data converted by [udata-hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
+An API service that provides RESTful access to CSV data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
 
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
 
@@ -11,26 +11,24 @@ This service is mainly used, developed and maintained by [data.gouv.fr](https://
 
 - **Python** >= 3.11, < 3.13
 - **[Poetry](https://python-poetry.org/)** >= 2.0.0 (for dependency management)
-- **[udata-hydra](https://github.com/datagouv/hydra)** (for database access)
+- **[udata-hydra](https://github.com/datagouv/hydra)**
 - **[PostgREST](https://github.com/PostgREST/postgrest)**
 - **Docker & Docker Compose**
 
 ## 🛠️ Installation & Setup
 
-1. **Start [udata-hydra](https://github.com/datagouv/hydra)**
+### 🧪 Run with a test database
 
-   Start [udata-hydra](https://github.com/datagouv/hydra) via `docker compose`
-
-2. **Start PostgREST**
+1. **Start the Infrastructure**
 
    Start this project via `docker compose`:
    ```shell
    docker compose up
    ```
 
-   This starts PostgREST. You can then access the raw PostgREST API on http://localhost:8080.
+   This starts PostgREST container and PostgreSQL container with fake test data. You can access the raw PostgREST API on http://localhost:8080.
 
-3. **Launch the main API proxy**
+2. **Launch the main API proxy**
 
    Install dependencies and start the proxy services:
    ```shell
@@ -41,14 +39,40 @@ This service is mainly used, developed and maintained by [data.gouv.fr](https://
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
 
-4. **Test the API**
+3. **Test the API**
 
-   Query the API using a `resource_id`. Several test resources are available:
+   Query the API using a `resource_id`. Several test resources are available in the fake database:
 
    - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
    - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
    - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
    - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
+
+### 🏭 Run with a real Hydra database
+
+To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
+
+1. **Configure the PostgREST endpoint** to point to your Hydra database:
+
+   ```shell
+   export PGREST_ENDPOINT="http://your-hydra-postgrest:8080"
+   ```
+
+   Or create a `config.toml` file:
+   ```toml
+   PGREST_ENDPOINT = "http://your-hydra-postgrest:8080"
+   ```
+
+2. **Start only the API services** (skip the fake database):
+   ```shell
+   poetry install
+   poetry run adev runserver -p8005 api_tabular/app.py
+   poetry run adev runserver -p8006 api_tabular/metrics.py
+   ```
+
+3. **Use real resource IDs** from your Hydra database instead of the test IDs.
+
+**Note:** Make sure your Hydra PostgREST instance is accessible and the database schema matches the expected structure (tables in the `csvapi` schema).
 
 
 ## 📚 API Documentation
