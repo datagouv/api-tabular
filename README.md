@@ -323,7 +323,7 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
 
 #### Column Selection
 ```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=col1,col2
+curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=id,score,birth
 ```
 
 ### Metrics API
