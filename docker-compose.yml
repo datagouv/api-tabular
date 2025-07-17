@@ -1,5 +1,3 @@
-version: '3'
-
 services:
   postgrest:
     image: "postgrest/postgrest:v12.2.3"
