@@ -364,7 +364,7 @@ Configuration is handled through TOML files and environment variables. The defau
 | `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
 | `BATCH_SIZE` | `50000` | Batch size for streaming |
 | `DOC_PATH` | `/api/doc` | Swagger documentation path |
-| `ALLOW_AGGREGATION` | `[]` | List of resource IDs allowed for aggregation |
+| `ALLOW_AGGREGATION` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
 
 ### Environment Variables
 
