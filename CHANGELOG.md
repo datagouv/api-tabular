@@ -9,6 +9,7 @@
 - Use a standard `pyproject.toml` file, use Poetry 2, use a lightweight image with integrated Poetry 2 for linting an build CI jobs, and don't wait for install step before running the tests jobs in CI [#38](https://github.com/datagouv/api-tabular/pull/38)
 - Add endpoint to see aggregation exceptions [#47](https://github.com/datagouv/api-tabular/pull/47)
 - Add endpoint to get data as JSON [#49](https://github.com/datagouv/api-tabular/pull/49)
+- Use PostgreSQL 15 for containerized test DB to be iso with prod [#51](https://github.com/datagouv/api-tabular/pull/51)
 
 ## 0.2.4 (2025-03-20)
 
