@@ -386,7 +386,7 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities.
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
 
 ### Running Tests
 
