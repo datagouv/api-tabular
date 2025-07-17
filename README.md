@@ -6,7 +6,7 @@
 An API service that provides RESTful access to CSV data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV resources.
 
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
-The production API is deployed on data.gouv.fr infrastructure. See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details.
+The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
 
 ## 📋 Dependencies
 
@@ -507,3 +507,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: [GitHub Issues](https://github.com/datagouv/api-tabular/issues)
 - **Discussion**: Use the discussion section at the end of the [production API page](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/)
 - **Contact Form**: [Support form](https://support.data.gouv.fr/)
+
+## 🌐 Production Resources
+
+- **Production API**: [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api)
+- **Product Documentation**: [API tabulaire data.gouv.fr (beta)](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French)
+- **Technical Documentation**: [Swagger/OpenAPI docs](https://tabular-api.data.gouv.fr/api/doc)
