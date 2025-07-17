@@ -10,7 +10,7 @@
 - Add endpoint to see aggregation exceptions [#47](https://github.com/datagouv/api-tabular/pull/47)
 - Add endpoint to get data as JSON [#49](https://github.com/datagouv/api-tabular/pull/49)
 - Use PostgreSQL 15 for containerized test DB to be iso with prod [#51](https://github.com/datagouv/api-tabular/pull/51)
-- Improve the documentation [#52](https://github.com/datagouv/api-tabular/pull/52)
+- Improve the documentation [#52](https://github.com/datagouv/api-tabular/pull/52) and [#53](https://github.com/datagouv/api-tabular/pull/53)
 
 ## 0.2.4 (2025-03-20)
 
