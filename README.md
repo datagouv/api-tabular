@@ -409,10 +409,10 @@ poetry run pytest -s
 
 ### Tests Structure
 
-- **`tests/test_api.py`** - API endpoint tests
+- **`tests/test_api.py`** - API endpoint tests (actually pings the running API)
 - **`tests/test_config.py`** - Configuration loading tests
 - **`tests/test_query.py`** - Query building and processing tests
-- **`tests/test_swagger.py`** - Swagger documentation tests
+- **`tests/test_swagger.py`** - Swagger documentation tests (actually pings the running API)
 - **`tests/test_utils.py`** - Utility function tests
 - **`tests/conftest.py`** - Test fixtures and configuration
 
