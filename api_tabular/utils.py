@@ -107,7 +107,7 @@ async def get_app_version() -> str:
     try:
         with open("pyproject.toml", "rb") as f:
             pyproject = tomllib.load(f)
-        return pyproject.get("tool", {}).get("poetry", {}).get("version", "unknown")
+        return pyproject.get("project", {}).get("version", "unknown")
     except FileNotFoundError:
         return "unknown (pyproject.toml not found)"
     except Exception as e:
