@@ -6,13 +6,14 @@ CREATE TABLE IF NOT EXISTS "csvapi".tables_index (
     csv_detective JSONB,
     resource_id UUID,
     url VARCHAR,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
 );
 
 ALTER TABLE tables_index
 ALTER COLUMN created_at TYPE TIMESTAMPTZ;
 
-COPY tables_index(id, parsing_table, csv_detective, resource_id, url, created_at) FROM '/tmp/tables_index.csv' DELIMITER ',' CSV HEADER;
+COPY tables_index(id, parsing_table, csv_detective, resource_id, url, created_at, deleted_at) FROM '/tmp/tables_index.csv' DELIMITER ',' CSV HEADER;
 
 CREATE TABLE IF NOT EXISTS "csvapi".resources_exceptions (
     id serial PRIMARY KEY,
