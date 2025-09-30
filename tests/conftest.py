@@ -18,6 +18,7 @@ UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
 INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
 AGG_ALLOWED_RESOURCE_ID = "dddddddd-7777-eeee-8888-ffffffffffff"
 AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
+DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
 
 
 @pytest.fixture
@@ -67,7 +68,11 @@ def csv_to_dict(file_name: str) -> dict:
         columns = next(reader)
         for row in reader:
             row_dict = {
-                col: value if col != "created_at" else timestamptz_to_utc_iso(value)
+                col: value
+                if col not in ["created_at", "deleted_at"]
+                else timestamptz_to_utc_iso(value)
+                if value
+                else None
                 for col, value in zip(columns, row)
             }
             rows[row_dict["resource_id"]] = row_dict

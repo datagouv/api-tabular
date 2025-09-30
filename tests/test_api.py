@@ -9,6 +9,7 @@ from api_tabular import config
 from .conftest import (
     AGG_ALLOWED_INDEXED_RESOURCE_ID,
     AGG_ALLOWED_RESOURCE_ID,
+    DELETED_RESOURCE_ID,
     INDEXED_RESOURCE_ID,
     PGREST_ENDPOINT,
     RESOURCE_ID,
@@ -51,6 +52,15 @@ async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_
             },
         ],
     }
+
+
+async def test_api_resource_meta_deleted(client, base_url):
+    """Test that deleted resources return 410 Gone for metadata endpoint"""
+    res = await client.get(f"{base_url}/api/resources/{DELETED_RESOURCE_ID}/")
+    assert res.status == 410
+    text = await res.text()
+    assert "permanently deleted" in text
+    assert DELETED_RESOURCE_ID in text
 
 
 async def test_api_resource_meta_not_found(client, base_url):
