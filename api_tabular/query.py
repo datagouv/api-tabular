@@ -8,9 +8,11 @@ from api_tabular.utils import process_total
 
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list) -> dict:
-    # Always include deleted_at for deletion checking, but don't duplicate it
+    # Always include deleted_at and dataset_id for deletion checking, but don't duplicate them
     if "deleted_at" not in columns:
         columns.append("deleted_at")
+    if "dataset_id" not in columns:
+        columns.append("dataset_id")
     q = f"select={','.join(columns)}&resource_id=eq.{resource_id}&order=created_at.desc"
     url = f"{config.PGREST_ENDPOINT}/tables_index?{q}"
     async with session.get(url) as res:
@@ -21,9 +23,13 @@ async def get_resource(session: ClientSession, resource_id: str, columns: list) 
             raise web.HTTPNotFound()
         if record[0].get("deleted_at") is not None:
             deleted_at: str = record[0]["deleted_at"]
-            raise web.HTTPGone(
-                text=f"Resource {resource_id} has been permanently deleted on {deleted_at} by its producer. Contact the resource producer to get more information."
-            )
+            dataset_id: str | None = record[0].get("dataset_id")
+            message = f"Resource {resource_id} has been permanently deleted on {deleted_at} by its producer."
+            if dataset_id:
+                message += f" You can find more information about this resource at https://www.data.gouv.fr/datasets/{dataset_id}"
+            else:
+                message += " Contact the resource producer to get more information."
+            raise web.HTTPGone(text=message)
         return record[0]
 
 
