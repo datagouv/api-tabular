@@ -3,6 +3,7 @@
 ## Current (in progress)
 
 - Return HTTP 410 Gone response for deleted resources [#56](https://github.com/datagouv/api-tabular/pull/56)
+- Include dataset information in 410 error message for deleted resources [#58](https://github.com/datagouv/api-tabular/pull/58)
 
 ## 0.2.5 (2025-07-21)
 
