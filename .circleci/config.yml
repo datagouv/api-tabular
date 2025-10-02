@@ -119,6 +119,7 @@ workflows:
       - build:
           requires:
             - lint
+            - tests
           filters:
             tags:
               only: /v[0-9]+(\.[0-9]+)*/
