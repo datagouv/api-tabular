@@ -1,4 +1,6 @@
+import csv
 import json
+from io import StringIO
 
 import pytest
 
@@ -7,6 +9,7 @@ from api_tabular import config
 from .conftest import (
     AGG_ALLOWED_INDEXED_RESOURCE_ID,
     AGG_ALLOWED_RESOURCE_ID,
+    DELETED_RESOURCE_ID,
     INDEXED_RESOURCE_ID,
     PGREST_ENDPOINT,
     RESOURCE_ID,
@@ -49,6 +52,15 @@ async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_
             },
         ],
     }
+
+
+async def test_api_resource_meta_deleted(client, base_url):
+    """Test that deleted resources return 410 Gone for metadata endpoint"""
+    res = await client.get(f"{base_url}/api/resources/{DELETED_RESOURCE_ID}/")
+    assert res.status == 410
+    text = await res.text()
+    assert "permanently deleted" in text
+    assert DELETED_RESOURCE_ID in text
 
 
 async def test_api_resource_meta_not_found(client, base_url):
@@ -334,3 +346,46 @@ async def test_aggregation_exceptions(client, base_url):
     res = await client.get(f"{base_url}/api/aggregation-exceptions/")
     exceptions = await res.json()
     assert exceptions == config.ALLOW_AGGREGATION
+
+
+@pytest.mark.parametrize(
+    "_resource_id",
+    [
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+    ],
+)
+async def test_api_csv_export(client, base_url, tables_index_rows, _resource_id):
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/csv/")
+    assert res.status == 200
+    content = await res.text()
+    reader = csv.reader(StringIO(content))
+    columns = next(reader)
+    rows = [r for r in reader]
+    # __id is added by tabular-api
+    assert columns == ["__id"] + list(detection["columns"])
+    assert len(rows) == detection["total_lines"]
+
+
+@pytest.mark.parametrize(
+    "_resource_id",
+    [
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
+        INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+    ],
+)
+async def test_api_json_export(client, base_url, tables_index_rows, _resource_id):
+    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
+    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/json/")
+    assert res.status == 200
+    content = await res.text()
+    rows = json.loads(content)
+    assert len(rows) == detection["total_lines"]
+    for row in rows:
+        # __id is added by tabular-api
+        assert list(row.keys()) == ["__id"] + list(detection["columns"])

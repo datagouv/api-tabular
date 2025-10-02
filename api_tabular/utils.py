@@ -107,7 +107,7 @@ async def get_app_version() -> str:
     try:
         with open("pyproject.toml", "rb") as f:
             pyproject = tomllib.load(f)
-        return pyproject.get("tool", {}).get("poetry", {}).get("version", "unknown")
+        return pyproject.get("project", {}).get("version", "unknown")
     except FileNotFoundError:
         return "unknown (pyproject.toml not found)"
     except Exception as e:
@@ -441,6 +441,22 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
                     "operationId": "getResourceDataFromIdCSV",
                     "responses": {
                         "200": {"description": "successful operation", "content": {"text/csv": {}}},
+                        "400": {"description": "Invalid query string"},
+                        "404": {"description": "Resource not found"},
+                    },
+                },
+                "parameters": parameters_list,
+            },
+            f"/api/resources/{rid}/data/json/": {
+                "get": {
+                    "description": "Returns resource data based on ID as a JSON file.",
+                    "summary": "Get resource data from its ID in JSON format",
+                    "operationId": "getResourceDataFromIdJSON",
+                    "responses": {
+                        "200": {
+                            "description": "successful operation",
+                            "content": {"application/json": {}},
+                        },
                         "400": {"description": "Invalid query string"},
                         "404": {"description": "Resource not found"},
                     },
