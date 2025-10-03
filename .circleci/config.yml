@@ -28,7 +28,7 @@ jobs:
       - checkout
       - run:
           name: Install dev dependencies
-          command: uv sync --extra dev
+          command: uv sync --locked --extra dev
       - run:
           name: Lint and format code and sort imports
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
