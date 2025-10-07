@@ -54,11 +54,11 @@ jobs:
             # Wait for PostgREST to be ready
             timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
       - run:
-          name: Install uv and dependencies
+          name: Install uv and dependencies and dev dependencies
           command: |
             curl -LsSf https://astral.sh/uv/install.sh | sh
             export PATH="$HOME/.local/bin:$PATH"
-            uv sync --extra dev
+            uv sync --frozen --extra dev
       - run:
           name: Start service
           command: |
@@ -79,8 +79,8 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install dependencies
-          command: uv sync
+          name: Install dependencies and dev dependencies
+          command: uv sync --frozen
       - run:
           name: Build a distributable package
           command: uv build
