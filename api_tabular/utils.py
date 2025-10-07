@@ -299,7 +299,8 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                             ),
                             "required": False,
                             "schema": {"type": "string"},
-                        } | (
+                        }
+                        | (
                             # aggregators don't need a value
                             {
                                 "schema": {"type": "boolean", "default": False},
