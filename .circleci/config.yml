@@ -11,9 +11,6 @@ parameters:
   publish-branch:
     type: string
     default: "master"
-  cache-prefix:
-    type: string
-    default: "py-cache-v2"
   api-port:
     type: string
     default: "8005"
