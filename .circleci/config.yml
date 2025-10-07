@@ -59,11 +59,9 @@ jobs:
       - run:
           name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
           command: |
-            sudo apt-get install -y software-properties-common
             sudo add-apt-repository ppa:deadsnakes/ppa
             sudo apt-get update
             sudo apt-get install -y python<< pipeline.parameters.python-version >>
-            apt-cache policy python3.11
             curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
             /home/circleci/.local/bin/poetry config virtualenvs.in-project true
             /home/circleci/.local/bin/poetry install --extras "dev"
