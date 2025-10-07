@@ -4,7 +4,7 @@ version: 2.1
 parameters:
   python-version:
     type: string
-    default: "3.10"
+    default: "3.11"
   python-module:
     type: string
     default: "api_tabular"
@@ -39,7 +39,7 @@ jobs:
 
   tests:
     machine:
-      image: ubuntu-2004:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
+      image: ubuntu-2204:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
     steps:
       - checkout
       - run:
@@ -59,10 +59,23 @@ jobs:
       - run:
           name: Install Python << pipeline.parameters.python-version >>, Poetry and dependencies
           command: |
-            sudo apt install software-properties-common
             sudo add-apt-repository ppa:deadsnakes/ppa
             sudo apt-get update
             sudo apt-get install -y python<< pipeline.parameters.python-version >>
+            curl -sSL https://install.python-poetry.org | python<< pipeline.parameters.python-version >> -
+            /home/circleci/.local/bin/poetry config virtualenvs.in-project true
+            /home/circleci/.local/bin/poetry install --extras "dev"
+      - run:
+          name: Start service
+          command: |
+            nohup /home/circleci/.local/bin/poetry run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
+            sleep 5
+      - run:
+          name: Run tests
+          command: |
+            /home/circleci/.local/bin/poetry run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+      - store_test_results:
+          path: reports/python
 
   build:
     docker:
