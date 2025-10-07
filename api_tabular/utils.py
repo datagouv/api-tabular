@@ -50,20 +50,20 @@ MAP_TYPES = {
 
 OPERATORS_DESCRIPTIONS = {
     "exact": {
-        "name": "{}__exact=value",
-        "description": "Exact match in column: {}",
+        "name": "{}__exact",
+        "description": "Exact match in column: {} ({}__exact=value)",
     },
     "differs": {
-        "name": "{}__differs=value",
-        "description": "Differs from in column: {}",
+        "name": "{}__differs",
+        "description": "Differs from in column: {} ({}__differs=value)",
     },
     "contains": {
-        "name": "{}__contains=value",
-        "description": "String contains in column: {}",
+        "name": "{}__contains",
+        "description": "String contains in column: {} ({}__contains=value)",
     },
     "in": {
-        "name": "{}__in=value1,value2,...",
-        "description": "Value in list in column: {}",
+        "name": "{}__in",
+        "description": "Value in list in column: {} ({}__in=value1,value2,...)",
     },
     "groupby": {
         "name": "{}__groupby",
@@ -256,23 +256,26 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
         {
             "name": "page",
             "in": "query",
-            "description": "Specific page",
+            "description": "Specific page (page=value)",
             "required": False,
-            "schema": {"type": "string"},
+            "schema": {"type": "integer"},
         },
         {
             "name": "page_size",
             "in": "query",
-            "description": "Number of results per page",
+            "description": "Number of results per page (page_size=value)",
             "required": False,
-            "schema": {"type": "string"},
+            "schema": {"type": "integer"},
         },
         {
             "name": "columns",
             "in": "query",
-            "description": "Columns to keep in the result",
+            "description": "Columns to keep in the result (columns=value1,value2,...)",
             "required": False,
             "schema": {"type": "string"},
+            # see https://swagger.io/docs/specification/v3_0/serialization/
+            "style": "form",
+            "explode": "false",
         },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
@@ -289,26 +292,34 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         {
                             "name": OPERATORS_DESCRIPTIONS[op]["name"].format(key),
                             "in": "query",
-                            "description": OPERATORS_DESCRIPTIONS[op]["description"].format(key),
+                            "description": (
+                                (s := OPERATORS_DESCRIPTIONS[op]["description"]).format(
+                                    *[key for _ in range(s.count("{}"))]
+                                )
+                            ),
                             "required": False,
                             "schema": {"type": "string"},
-                        },
+                        } | (
+                            # aggregators don't need a value
+                            {
+                                "schema": {"type": "boolean", "default": False},
+                                "allowEmptyValue": True,
+                            }
+                            if OPERATORS_DESCRIPTIONS[op].get("is_aggregator")
+                            else {}
+                        ),
                     ]
                 )
         if "sort" in TYPE_POSSIBILITIES[value["python_type"]]:
             parameters_list.extend(
                 [
                     {
-                        "name": f"{key}__sort=asc",
+                        "name": f"{key}__sort",
                         "in": "query",
-                        "description": f"Sort ascending on column: {key}",
-                        "required": False,
-                        "schema": {"type": "string"},
-                    },
-                    {
-                        "name": f"{key}__sort=desc",
-                        "in": "query",
-                        "description": f"Sort descending on column: {key}",
+                        "description": (
+                            f"Sort ascending or descending on column: {key} "
+                            f"({key}__sort=asc or {key}__sort=desc)"
+                        ),
                         "required": False,
                         "schema": {"type": "string"},
                     },
@@ -318,30 +329,30 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             parameters_list.extend(
                 [
                     {
-                        "name": f"{key}__less=value",
+                        "name": f"{key}__less",
                         "in": "query",
-                        "description": f"Less than in column: {key}",
+                        "description": f"Less than in column: {key} ({key}__less=value)",
                         "required": False,
                         "schema": {"type": "string"},
                     },
                     {
-                        "name": f"{key}__greater=value",
+                        "name": f"{key}__greater",
                         "in": "query",
-                        "description": f"Greater than in column: {key}",
+                        "description": f"Greater than in column: {key} ({key}__greater=value)",
                         "required": False,
                         "schema": {"type": "string"},
                     },
                     {
-                        "name": f"{key}__strictly_less=value",
+                        "name": f"{key}__strictly_less",
                         "in": "query",
-                        "description": f"Strictly less than in column: {key}",
+                        "description": f"Strictly less than in column: {key} ({key}__strictly_less=value)",
                         "required": False,
                         "schema": {"type": "string"},
                     },
                     {
-                        "name": f"{key}__strictly_greater=value",
+                        "name": f"{key}__strictly_greater",
                         "in": "query",
-                        "description": f"Strictly greater than in column: {key}",
+                        "description": f"Strictly greater than in column: {key} ({key}__strictly_greater=value)",
                         "required": False,
                         "schema": {"type": "string"},
                     },
