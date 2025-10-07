@@ -69,6 +69,7 @@ async def test_swagger_no_indexes(client, base_url, tables_index_rows, params):
                             and f"{c}__{_p}" not in params  # filters are in
                         ):
                             missing.append(f"{c}__{_p} is missing in {output} output")
+                            assert params[f"{c}__{_p}"].get("allowEmptyValue") is None
                         if (
                             OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator")
                             and f"{c}__{_p}" in params  # aggregators are out
