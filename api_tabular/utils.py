@@ -64,7 +64,7 @@ OPERATORS_DESCRIPTIONS = {
     "in": {
         "name": "{}__in",
         "description": "Value in list in column: {} ({}__in=value1,value2,...)",
-        "example": "value1,value2,value3"
+        "example": "value1,value2,value3",
     },
     "groupby": {
         "name": "{}__groupby",
