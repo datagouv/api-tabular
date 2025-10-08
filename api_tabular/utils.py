@@ -64,6 +64,7 @@ OPERATORS_DESCRIPTIONS = {
     "in": {
         "name": "{}__in",
         "description": "Value in list in column: {} ({}__in=value1,value2,...)",
+        "example": "value1,value2,value3"
     },
     "groupby": {
         "name": "{}__groupby",
@@ -259,6 +260,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "description": "Specific page (page=value)",
             "required": False,
             "schema": {"type": "integer"},
+            "example": 1,
         },
         {
             "name": "page_size",
@@ -266,6 +268,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "description": "Number of results per page (page_size=value)",
             "required": False,
             "schema": {"type": "integer"},
+            "example": 1,
         },
         {
             "name": "columns",
@@ -275,7 +278,8 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "schema": {"type": "string"},
             # see https://swagger.io/docs/specification/v3_0/serialization/
             "style": "form",
-            "explode": "false",
+            "explode": False,
+            "example": "column1,column2,column4",
         },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
@@ -307,7 +311,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                                 "allowEmptyValue": True,
                             }
                             if OPERATORS_DESCRIPTIONS[op].get("is_aggregator")
-                            else {}
+                            else {"example": OPERATORS_DESCRIPTIONS[op].get("example", "value")}
                         ),
                     ]
                 )
@@ -323,6 +327,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         ),
                         "required": False,
                         "schema": {"type": "string"},
+                        "example": "asc",
                     },
                 ]
             )
@@ -335,6 +340,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         "description": f"Less than in column: {key} ({key}__less=value)",
                         "required": False,
                         "schema": {"type": "string"},
+                        "example": "value",
                     },
                     {
                         "name": f"{key}__greater",
@@ -342,6 +348,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         "description": f"Greater than in column: {key} ({key}__greater=value)",
                         "required": False,
                         "schema": {"type": "string"},
+                        "example": "value",
                     },
                     {
                         "name": f"{key}__strictly_less",
@@ -349,6 +356,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         "description": f"Strictly less than in column: {key} ({key}__strictly_less=value)",
                         "required": False,
                         "schema": {"type": "string"},
+                        "example": "value",
                     },
                     {
                         "name": f"{key}__strictly_greater",
@@ -356,6 +364,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                         "description": f"Strictly greater than in column: {key} ({key}__strictly_greater=value)",
                         "required": False,
                         "schema": {"type": "string"},
+                        "example": "value",
                     },
                 ]
             )
