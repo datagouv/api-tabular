@@ -49,7 +49,7 @@ async def test_swagger_no_indexes(client, base_url, tables_index_rows, params):
         params = swagger_dict["paths"][
             f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
         ]["parameters"]
-        params = [p["name"] for p in params]
+        params = {p["name"]: p for p in params}
         for c in columns:
             for p in TYPE_POSSIBILITIES[columns[c]]:
                 _params = (
@@ -57,24 +57,19 @@ async def test_swagger_no_indexes(client, base_url, tables_index_rows, params):
                     if p == "compare"
                     else [p]
                 )
-                value = "value"
-                if p == "sort":
-                    value = "asc"
-                elif p == "in":
-                    value = "value1,value2,..."
                 for _p in _params:
                     if allow_aggregation:
-                        if (
-                            f"{c}__{_p}={value}" not in params  # filters
-                            and f"{c}__{_p}" not in params  # aggregators
-                        ):
+                        if f"{c}__{_p}" not in params:
                             missing.append(f"{c}__{_p} is missing in {output} output")
+                        elif OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator"):
+                            assert params[f"{c}__{_p}"].get("allowEmptyValue")
                     else:
                         if (
                             not OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator")
-                            and f"{c}__{_p}={value}" not in params  # filters are in
+                            and f"{c}__{_p}" not in params  # filters are in
                         ):
                             missing.append(f"{c}__{_p} is missing in {output} output")
+                            assert params[f"{c}__{_p}"].get("allowEmptyValue") is None
                         if (
                             OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator")
                             and f"{c}__{_p}" in params  # aggregators are out
