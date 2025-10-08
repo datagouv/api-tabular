@@ -15,7 +15,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 ### 📋 Requirements
 
 - **Python** >= 3.11, < 3.13
-- **[Poetry](https://python-poetry.org/)** >= 2.0.0 (for dependency management)
+- **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker & Docker Compose**
 
 ### 🧪 Run with a test database
@@ -33,9 +33,9 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
    Install dependencies and start the proxy services:
    ```shell
-   poetry install
-   poetry run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-   poetry run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
+   uv sync
+   uv run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
+   uv run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -66,9 +66,9 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
 
 2. **Start only the API services** (skip the fake database):
    ```shell
-   poetry install
-   poetry run adev runserver -p8005 api_tabular/app.py
-   poetry run adev runserver -p8006 api_tabular/metrics.py
+   uv sync
+   uv run adev runserver -p8005 api_tabular/app.py
+   uv run adev runserver -p8006 api_tabular/metrics.py
    ```
 
 3. **Use real resource IDs** from your Hydra database instead of the test IDs.
