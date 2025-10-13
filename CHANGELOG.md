@@ -15,16 +15,6 @@
 - style: better commit message for tag_version.sh
 - Update to version 0.2.6.dev for next development cycle
 
-
-## Current (in progress)
-
-- Return HTTP 410 Gone response for deleted resources [#56](https://github.com/datagouv/api-tabular/pull/56)
-- Fix CI due to end-of-lifed ubuntu distro [#62](https://github.com/datagouv/api-tabular/pull/62)
-- Fix swagger structure according to guidelines [#60](https://github.com/datagouv/api-tabular/pull/60)
-- Include dataset information in 410 error message for deleted resources [#58](https://github.com/datagouv/api-tabular/pull/58)
-- Use uv for lock file and in CI [#59](https://github.com/datagouv/api-tabular/pull/59)
-- Replace Bump'r with `tag_version.sh` script [#63](https://github.com/datagouv/api-tabular/pull/63)
-
 ## 0.2.5 (2025-07-21)
 
 - Remove PostgREST version in health endpoint [#43](https://github.com/datagouv/api-tabular/pull/43)
