@@ -6,6 +6,7 @@
 - Fix CI due to end-of-lifed ubuntu distro [#62](https://github.com/datagouv/api-tabular/pull/62)
 - Fix swagger structure according to guidelines [#60](https://github.com/datagouv/api-tabular/pull/60)
 - Include dataset information in 410 error message for deleted resources [#58](https://github.com/datagouv/api-tabular/pull/58)
+- Use uv for lock file and in CI [#59](https://github.com/datagouv/api-tabular/pull/59)
 
 ## 0.2.5 (2025-07-21)
 
