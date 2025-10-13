@@ -174,15 +174,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bumpr"
-version = "0.3.8"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/02/c0/fc50c19972517e44b669f2bb66da7dc90027d98c0d7551282362aff60d77/bumpr-0.3.8.tar.gz", hash = "sha256:6bfdda629f7816012c0e3dcaca54b6228e25b2159956049639b329389f0348ad", size = 16445, upload-time = "2021-11-01T16:13:26.41Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6b/6c/b23a0f4804e04d30d4087d512e93734668fc16296fc4327c3a29cb11b0e1/bumpr-0.3.8-py3-none-any.whl", hash = "sha256:1cdfe40b618d97ee3af07f74b3983c0bc5c68a369cc317995259e241438b93a6", size = 21272, upload-time = "2021-11-01T16:13:25.369Z" },
-]
-
-[[package]]
 name = "certifi"
 version = "2024.8.30"
 source = { registry = "https://pypi.org/simple" }
@@ -546,7 +537,7 @@ wheels = [
 [[package]]
 name = "udata-hydra-csvapi"
 version = "0.2.6.dev0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "aiohttp-cors" },
@@ -558,7 +549,6 @@ dependencies = [
 dev = [
     { name = "aiohttp-devtools" },
     { name = "aioresponses" },
-    { name = "bumpr" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -572,7 +562,6 @@ requires-dist = [
     { name = "aiohttp-devtools", marker = "extra == 'dev'", specifier = ">=1.0.post0,<2.0.0" },
     { name = "aiohttp-swagger", specifier = "==1.0.16" },
     { name = "aioresponses", marker = "extra == 'dev'", specifier = ">=0.7.4,<1.0.0" },
-    { name = "bumpr", marker = "extra == 'dev'", specifier = ">=0.3.8,<1.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.2.1,<8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.20.3,<1.0.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.10.0,<4.0.0" },
