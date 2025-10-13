@@ -243,7 +243,7 @@ echo "CHANGELOG.md updated with commits from $LAST_TAG to HEAD"
 
 # Commit the version and CHANGELOG updates
 git add pyproject.toml CHANGELOG.md
-git commit -m "Bump version $VERSION"
+git commit -m "chore: bump version to $VERSION"
 
 echo "✓ Committed pyproject.toml and CHANGELOG.md"
 
