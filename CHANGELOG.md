@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.6 (2025-10-13)
+
+- build: replace bump'r with tag_version.sh script ([#63](https://github.com/datagouv/api-tabular/pull/63))
+- build: use uv for lock file and in CI ([#59](https://github.com/datagouv/api-tabular/pull/59))
+- chore: add debug steps in CI
+- docs: update changelog
+- feat: HTTP response 410 on deleted resource ([#56](https://github.com/datagouv/api-tabular/pull/56))
+- feat: include dataset information in 410 error message for deleted resources ([#58](https://github.com/datagouv/api-tabular/pull/58))
+- Fix CI ([#62](https://github.com/datagouv/api-tabular/pull/62))
+- Fix swagger structure according to guidelines ([#60](https://github.com/datagouv/api-tabular/pull/60))
+- fix: fix permissions on the tag_version.sh script
+- Revert "chore: add debug steps in CI"
+- style: better commit message for tag_version.sh
+- Update to version 0.2.6.dev for next development cycle
+
+
 ## Current (in progress)
 
 - Return HTTP 410 Gone response for deleted resources [#56](https://github.com/datagouv/api-tabular/pull/56)

@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "udata-hydra-csvapi"
-version = "0.2.6.dev"
+version = "0.2.6"
 description = "API for CSV converted by udata-hydra"
 authors = [
     {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
