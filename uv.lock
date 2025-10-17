@@ -214,6 +214,18 @@ wheels = [
 ]
 
 [[package]]
+name = "datagouv-client"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "tenacity" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/89/36572a8c6286904885ce6108c226441eb8dff15de4e8410e15aa36ad3519/datagouv_client-0.2.0-py3-none-any.whl", hash = "sha256:44a73f3cf6303b2d1f61348b7650e882649d3a18c00d05408712caef466610ce", size = 14657, upload-time = "2025-09-19T08:59:38.144Z" },
+]
+
+[[package]]
 name = "devtools"
 version = "0.12.2"
 source = { registry = "https://pypi.org/simple" }
@@ -895,6 +907,15 @@ wheels = [
 ]
 
 [[package]]
+name = "tenacity"
+version = "9.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/d4/2b0cd0fe285e14b36db076e78c93766ff1d529d70408bd1d2a5a84f1d929/tenacity-9.1.2.tar.gz", hash = "sha256:1169d376c297e7de388d18b4481760d478b0e99a777cad3a9c86e556f4b697cb", size = 48036, upload-time = "2025-04-02T08:25:09.966Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/30/643397144bfbfec6f6ef821f36f33e57d35946c44a2352d3c9f0ae847619/tenacity-9.1.2-py3-none-any.whl", hash = "sha256:f77bf36710d8b73a50b2dd155c97b870017ad21afe6ab300326b0371b3b05138", size = 28248, upload-time = "2025-04-02T08:25:07.678Z" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -936,6 +957,12 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "datagouv-client" },
+    { name = "httpx" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.4,<4.0.0" },
@@ -951,6 +978,12 @@ requires-dist = [
     { name = "sentry-sdk", specifier = ">=2.13.0,<3.0.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "datagouv-client", specifier = ">=0.2.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+]
 
 [[package]]
 name = "urllib3"
