@@ -74,12 +74,12 @@ class TabularMCPServer:
                         "properties": {
                             "question": {
                                 "type": "string",
-                                "description": "Natural language question about the data (e.g., 'Dans quels départements se trouvent la plupart des associations d'utilité publique en 2023?')",
+                                "description": "Natural language question about the data",
                             },
-                            "max_results": {
+                            "limit": {
                                 "type": "integer",
-                                "description": "Maximum number of results to return (default: 20)",
-                                "default": 20,
+                                "description": "Maximum number of results to return (default: auto-determined)",
+                                "default": 0,  # 0 means auto-determine
                                 "minimum": 1,
                                 "maximum": 100,
                             },
@@ -191,7 +191,6 @@ class TabularMCPServer:
     def _build_query_from_question(self, question: str, best_match: dict) -> list[str]:
         """Build query parameters based on question intent."""
         query_parts = []
-        keywords = self._extract_keywords(question)
 
         # Add basic pagination
         query_parts.append("page=1")
@@ -238,10 +237,62 @@ class TabularMCPServer:
 
         return result
 
+    def _determine_limit(self, question: str, default_limit: int = 20) -> int:
+        """Simple logic to determine appropriate result limit based on question type."""
+        question_lower = question.lower()
+
+        # Specific lookups - return fewer results
+        if any(
+            word in question_lower
+            for word in [
+                "qu'est-ce que",
+                "quand",
+                "combien",
+                "coordonnées",
+                "adresse",
+                "où se trouve",
+            ]
+        ):
+            return 5
+
+        # Aggregations - return more results to show patterns
+        if any(
+            word in question_lower
+            for word in [
+                "la plupart",
+                "plus",
+                "maximum",
+                "minimum",
+                "moyenne",
+                "total",
+                "nombre",
+                "top",
+                "plus haut",
+                "plus bas",
+            ]
+        ):
+            return 50
+
+        # Search queries - medium results
+        if any(
+            word in question_lower
+            for word in ["trouver", "chercher", "rechercher", "montrer", "afficher", "voir"]
+        ):
+            return 30
+
+        # Default
+        return default_limit
+
     async def _ask_data_question(self, arguments: dict[str, Any]) -> CallToolResult:
         """Ask natural language questions about available data."""
         question = arguments["question"]
-        max_results = arguments.get("max_results", 20)
+        user_limit = arguments.get("limit", 0)  # 0 means auto-determine
+
+        # Auto-determine limit if user didn't specify one
+        if user_limit == 0:
+            limit = self._determine_limit(question)
+        else:
+            limit = user_limit
 
         try:
             # 1. Extract keywords from question
@@ -294,7 +345,7 @@ class TabularMCPServer:
 
                     # Build SQL query
                     sql_query = self.query_builder.build_sql_query_string(
-                        query_params, best_match["resource"]["resource_id"], indexes, max_results, 0
+                        query_params, best_match["resource"]["resource_id"], indexes, limit, 0
                     )
 
                     # Execute query
