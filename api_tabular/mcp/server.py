@@ -192,10 +192,6 @@ class TabularMCPServer:
         """Build query parameters based on question intent."""
         query_parts = []
 
-        # Add basic pagination
-        query_parts.append("page=1")
-        query_parts.append("page_size=20")
-
         # Look for aggregation patterns in the question
         if any(
             word in question.lower()
@@ -236,6 +232,46 @@ class TabularMCPServer:
             result += f"\n... et {len(data) - 5} autres résultats\n"
 
         return result
+
+    async def _search_all_pages(
+        self, data_accessor, resource, indexes, question, best_match, max_results: int = 1000
+    ) -> list[dict]:
+        """Search through all pages to get comprehensive results."""
+        from api_tabular import config
+
+        all_results = []
+        page_size = config.PAGE_SIZE_MAX  # Use the configured max page size (50)
+        offset = 0
+
+        while len(all_results) < max_results:
+            # Build query for current page
+            query_params = self._build_query_from_question(question, best_match)
+
+            # Build SQL query with current offset
+            sql_query = self.query_builder.build_sql_query_string(
+                query_params, best_match["resource"]["resource_id"], indexes, page_size, offset
+            )
+
+            # Execute query for current page
+            data, total = await data_accessor.get_resource_data(resource, sql_query)
+
+            if not data:  # No more data
+                break
+
+            all_results.extend(data)
+
+            # If we got fewer results than page_size, we've reached the end
+            if len(data) < page_size:
+                break
+
+            offset += page_size
+
+            # Safety check to prevent infinite loops
+            if offset > 10000:  # Max 10,000 records
+                break
+
+        # Return only the requested number of results
+        return all_results[:max_results]
 
     def _determine_limit(self, question: str, default_limit: int = 20) -> int:
         """Simple logic to determine appropriate result limit based on question type."""
@@ -323,10 +359,7 @@ class TabularMCPServer:
                     isError=True,
                 )
 
-            # 3. Build query based on question intent
-            query_params = self._build_query_from_question(question, best_match)
-
-            # 4. Use existing core logic to query data
+            # 3. Use existing core logic to query data
             from aiohttp import ClientSession
 
             async with ClientSession() as session:
@@ -343,15 +376,12 @@ class TabularMCPServer:
                         best_match["resource"]["resource_id"]
                     )
 
-                    # Build SQL query
-                    sql_query = self.query_builder.build_sql_query_string(
-                        query_params, best_match["resource"]["resource_id"], indexes, limit, 0
+                    # Search through all pages to get comprehensive results
+                    data = await self._search_all_pages(
+                        data_accessor, resource, indexes, question, best_match, limit
                     )
 
-                    # Execute query
-                    data, total = await data_accessor.get_resource_data(resource, sql_query)
-
-                    # 5. Format and return results
+                    # 4. Format and return results
                     formatted_result = self._format_results(data, best_match)
 
                     return CallToolResult(content=[TextContent(type="text", text=formatted_result)])
