@@ -37,3 +37,9 @@ line-length = 100
 [tool.uv.build-backend]
 module-name = "api_tabular"
 module-root = ""
+
+[dependency-groups]
+dev = [
+    "datagouv-client>=0.2.0",
+    "httpx>=0.28.1",
+]
