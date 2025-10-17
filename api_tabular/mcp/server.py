@@ -154,102 +154,102 @@ class TabularMCPServer:
         page_size = arguments.get("page_size", 20)
         columns = arguments.get("columns", [])
 
-        # Ensure data accessor is initialized
-        if not self.data_accessor:
-            from aiohttp import ClientSession
+        # Create a new session for this request
+        from aiohttp import ClientSession
 
-            self.data_accessor = DataAccessor(ClientSession())
+        async with ClientSession() as session:
+            data_accessor = DataAccessor(session)
 
-        try:
-            # Get resource metadata
-            resource = await self.data_accessor.get_resource(resource_id, ["parsing_table"])
+            try:
+                # Get resource metadata
+                resource = await data_accessor.get_resource(resource_id, ["parsing_table"])
 
-            # Get potential indexes
-            indexes = await self.data_accessor.get_potential_indexes(resource_id)
+                # Get potential indexes
+                indexes = await data_accessor.get_potential_indexes(resource_id)
 
-            # Build query string
-            query_parts = []
+                # Build query string
+                query_parts = []
 
-            # Add filters
-            for key, value in filters.items():
-                query_parts.append(f"{key}={value}")
+                # Add filters
+                for key, value in filters.items():
+                    query_parts.append(f"{key}={value}")
 
-            # Add sorting
-            if sort:
-                column = sort.get("column")
-                order = sort.get("order", "asc")
-                if column:
-                    query_parts.append(f"{column}__sort={order}")
+                # Add sorting
+                if sort:
+                    column = sort.get("column")
+                    order = sort.get("order", "asc")
+                    if column:
+                        query_parts.append(f"{column}__sort={order}")
 
-            # Add pagination
-            offset = (page - 1) * page_size
-            query_parts.append(f"page={page}")
-            query_parts.append(f"page_size={page_size}")
+                # Add pagination
+                offset = (page - 1) * page_size
+                query_parts.append(f"page={page}")
+                query_parts.append(f"page_size={page_size}")
 
-            # Add column selection
-            if columns:
-                query_parts.append(f"columns={','.join(columns)}")
+                # Add column selection
+                if columns:
+                    query_parts.append(f"columns={','.join(columns)}")
 
-            # Build SQL query
-            sql_query = self.query_builder.build_sql_query_string(
-                query_parts, resource_id, indexes, page_size, offset
-            )
+                # Build SQL query
+                sql_query = self.query_builder.build_sql_query_string(
+                    query_parts, resource_id, indexes, page_size, offset
+                )
 
-            # Execute query
-            data, total = await self.data_accessor.get_resource_data(resource, sql_query)
+                # Execute query
+                data, total = await data_accessor.get_resource_data(resource, sql_query)
 
-            # Format response
-            result = {
-                "data": data,
-                "meta": {"page": page, "page_size": page_size, "total": total},
-                "resource_id": resource_id,
-            }
+                # Format response
+                result = {
+                    "data": data,
+                    "meta": {"page": page, "page_size": page_size, "total": total},
+                    "resource_id": resource_id,
+                }
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=json.dumps(result, indent=2))]
-            )
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))]
+                )
 
-        except Exception as e:
-            return CallToolResult(
-                content=[TextContent(type="text", text=f"Query error: {str(e)}")], isError=True
-            )
+            except Exception as e:
+                return CallToolResult(
+                    content=[TextContent(type="text", text=f"Query error: {str(e)}")], isError=True
+                )
 
     async def _get_resource_info(self, arguments: dict[str, Any]) -> CallToolResult:
         """Get resource metadata and profile information."""
         resource_id = arguments["resource_id"]
 
-        # Ensure data accessor is initialized
-        if not self.data_accessor:
-            from aiohttp import ClientSession
+        # Create a new session for this request
+        from aiohttp import ClientSession
 
-            self.data_accessor = DataAccessor(ClientSession())
+        async with ClientSession() as session:
+            data_accessor = DataAccessor(session)
 
-        try:
-            # Get basic resource info
-            resource = await self.data_accessor.get_resource(
-                resource_id, ["created_at", "url", "profile:csv_detective"]
-            )
+            try:
+                # Get basic resource info
+                resource = await data_accessor.get_resource(
+                    resource_id, ["created_at", "url", "profile:csv_detective"]
+                )
 
-            # Get potential indexes
-            indexes = await self.data_accessor.get_potential_indexes(resource_id)
+                # Get potential indexes
+                indexes = await data_accessor.get_potential_indexes(resource_id)
 
-            result = {
-                "resource_id": resource_id,
-                "created_at": resource["created_at"],
-                "url": resource["url"],
-                "profile": resource.get("profile", {}),
-                "indexes": list(indexes) if indexes else None,
-            }
+                result = {
+                    "resource_id": resource_id,
+                    "created_at": resource["created_at"],
+                    "url": resource["url"],
+                    "profile": resource.get("profile", {}),
+                    "indexes": list(indexes) if indexes else None,
+                }
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=json.dumps(result, indent=2))]
-            )
+                return CallToolResult(
+                    content=[TextContent(type="text", text=json.dumps(result, indent=2))]
+                )
 
-        except Exception as e:
-            return CallToolResult(
-                content=[TextContent(type="text", text=f"Resource info error: {str(e)}")],
-                isError=True,
-            )
+            except Exception as e:
+                return CallToolResult(
+                    content=[TextContent(type="text", text=f"Resource info error: {str(e)}")],
+                    isError=True,
+                )
 
     async def _list_accessible_resources(self, arguments: dict[str, Any]) -> CallToolResult:
         """List accessible resources from configuration."""
