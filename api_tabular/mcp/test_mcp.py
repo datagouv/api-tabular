@@ -5,7 +5,7 @@ Test script for the MCP server.
 
 import asyncio
 
-from .server import create_server
+from api_tabular.mcp.server import create_server
 
 
 async def test_mcp_server():

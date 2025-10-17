@@ -40,3 +40,9 @@ include = ["api_tabular*"]
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
+
+[dependency-groups]
+dev = [
+    "datagouv-client>=0.2.0",
+    "httpx>=0.28.1",
+]

@@ -7,7 +7,7 @@ This demonstrates how to use the MCP tools programmatically.
 import asyncio
 import json
 
-from .server import create_server
+from api_tabular.mcp.server import create_server
 
 
 async def example_usage():
