@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.7 (2025-10-21)
+
+- build: use dynamic versioning with setuptools_scm ([#66](https://github.com/datagouv/api-tabular/pull/66))
+- chore: update lock file
+- docs: clean changelog to adapt to new tag_version.sh atomated changes
+- fix: fix tag_version.sh
+- Remove examples to prevent default values ([#64](https://github.com/datagouv/api-tabular/pull/64))
+- style: better commit message for tag_version.sh
+
+
 ## 0.2.6 (2025-10-13)
 
 - build: replace bump'r with tag_version.sh script ([#63](https://github.com/datagouv/api-tabular/pull/63))
