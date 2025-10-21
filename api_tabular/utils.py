@@ -1,5 +1,5 @@
-import tomllib
 from collections import defaultdict
+from importlib.metadata import version
 
 import yaml
 from aiohttp.web_request import Request
@@ -103,15 +103,11 @@ def is_aggregation_allowed(resource_id: str):
 
 
 async def get_app_version() -> str:
-    """Parse pyproject.toml and return the version or an error."""
+    """Get the version from the installed package metadata."""
     try:
-        with open("pyproject.toml", "rb") as f:
-            pyproject = tomllib.load(f)
-        return pyproject.get("project", {}).get("version", "unknown")
-    except FileNotFoundError:
-        return "unknown (pyproject.toml not found)"
-    except Exception as e:
-        return f"unknown ({str(e)})"
+        return version("udata-hydra-csvapi")
+    except Exception:
+        return "unknown"
 
 
 def build_sql_query_string(
