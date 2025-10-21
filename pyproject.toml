@@ -1,10 +1,10 @@
 [build-system]
-requires = ["uv_build>=0.9.0,<0.10.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=68", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "udata-hydra-csvapi"
-version = "0.2.6"
+dynamic = ["version"]
 description = "API for CSV converted by udata-hydra"
 authors = [
     {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
@@ -33,6 +33,6 @@ dev = [
 lint = { extend-select = ["I"], ignore = ["F401"] } # ["I"] is to also sort imports with an isort rule # TODO: remove ignore F401 later
 line-length = 100
 
-[tool.uv.build-backend]
-module-name = "api_tabular"
-module-root = ""
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"

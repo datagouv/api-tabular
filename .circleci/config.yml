@@ -78,11 +78,23 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install dependencies and dev dependencies
-          command: uv sync --frozen
+          name: Install build tools
+          command: |
+            uv pip install setuptools-scm
       - run:
-          name: Build a distributable package
-          command: uv build
+          name: Compute RELEASE_VERSION via setuptools_scm
+          command: |
+            # derive from setuptools_scm or base version + build number
+            RELEASE_VERSION=$(uv run python -m setuptools_scm)
+            echo "Building a wheel release with version $RELEASE_VERSION"
+            echo "Build number: $CIRCLE_BUILD_NUM"
+            echo "Commit hash: ${CIRCLE_SHA1:0:7}"
+            echo "Git tag: $CIRCLE_TAG"
+      - run:
+          name: Build a distributable package as a wheel release
+          command: |
+            uv build --wheel
+      # Build already executed above; artifacts are in dist/
       - store_artifacts:
           path: dist
       - persist_to_workspace:
