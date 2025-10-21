@@ -18,11 +18,11 @@ parameters:
 jobs:
   lint:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
     steps:
       - checkout
       - run:
-          name: Install dev dependencies
+          name: Install dependencies and dev dependencies
           command: uv sync --frozen --extra dev
       - run:
           name: Lint and format code and sort imports
@@ -74,15 +74,24 @@ jobs:
 
   build:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
     steps:
       - checkout
       - run:
-          name: Install dependencies and dev dependencies
-          command: uv sync --frozen
+          name: Compute RELEASE_VERSION via setuptools_scm
+          command: |
+            uv pip install --system setuptools-scm
+            # derive from setuptools_scm or base version + build number
+            RELEASE_VERSION=$(python -m setuptools_scm)
+            echo "Building a wheel release with version $RELEASE_VERSION"
+            echo "Build number: $CIRCLE_BUILD_NUM"
+            echo "Commit hash: ${CIRCLE_SHA1:0:7}"
+            echo "Git tag: $CIRCLE_TAG"
       - run:
-          name: Build a distributable package
-          command: uv build
+          name: Build a distributable package as a wheel release
+          command: |
+            uv build --wheel
+      # Build already executed above; artifacts are in dist/
       - store_artifacts:
           path: dist
       - persist_to_workspace:
