@@ -536,7 +536,6 @@ wheels = [
 
 [[package]]
 name = "udata-hydra-csvapi"
-version = "0.2.6.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
