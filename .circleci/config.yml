@@ -22,7 +22,7 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install dpendencies and dev dependencies
+          name: Install dependencies and dev dependencies
           command: uv sync --frozen --extra dev
       - run:
           name: Lint and format code and sort imports
@@ -78,14 +78,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install build tools
-          command: |
-            uv pip install setuptools-scm
-      - run:
           name: Compute RELEASE_VERSION via setuptools_scm
           command: |
+            uv pip install --system setuptools-scm
             # derive from setuptools_scm or base version + build number
-            RELEASE_VERSION=$(uv run python -m setuptools_scm)
+            RELEASE_VERSION=$(python -m setuptools_scm)
             echo "Building a wheel release with version $RELEASE_VERSION"
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
