@@ -18,11 +18,11 @@ parameters:
 jobs:
   lint:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
     steps:
       - checkout
       - run:
-          name: Install dev dependencies
+          name: Install dpendencies and dev dependencies
           command: uv sync --frozen --extra dev
       - run:
           name: Lint and format code and sort imports
@@ -74,7 +74,7 @@ jobs:
 
   build:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
     steps:
       - checkout
       - run:
