@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8 (2025-10-21)
+
+- docs: fix python versions constraints inconsistencies ([#67](https://github.com/datagouv/api-tabular/pull/67))
+- fix: fix version in health check ([#68](https://github.com/datagouv/api-tabular/pull/68))
+
+
 ## 0.2.7 (2025-10-21)
 
 - build: use dynamic versioning with setuptools_scm ([#66](https://github.com/datagouv/api-tabular/pull/66))
