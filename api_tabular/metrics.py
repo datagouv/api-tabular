@@ -2,6 +2,7 @@ import os
 
 import aiohttp_cors
 import sentry_sdk
+import yaml
 from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
@@ -11,6 +12,7 @@ from api_tabular.error import QueryException, handle_exception
 from api_tabular.utils import (
     build_link_with_page,
     build_sql_query_string,
+    get_app_version,
     process_total,
 )
 
@@ -128,6 +130,13 @@ async def get_health(request):
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
+        app["app_version"] = await get_app_version()
+
+        with open("metrics_swagger.yaml", "r") as f:
+            swagger_info = yaml.safe_load(f)
+        swagger_info["info"]["version"] = app["app_version"]
+
+        setup_swagger(app, swagger_url=config.DOC_PATH, ui_version=3, swagger_info=swagger_info)
 
     async def on_cleanup(app):
         await app["csession"].close()
@@ -147,10 +156,6 @@ async def app_factory():
     )
     for route in list(app.router.routes()):
         cors.add(route)
-
-    setup_swagger(
-        app, swagger_url=config.DOC_PATH, ui_version=3, swagger_from_file="metrics_swagger.yaml"
-    )
 
     return app
 
