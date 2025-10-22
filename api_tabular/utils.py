@@ -413,7 +413,7 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
     swagger_dict = {
         "openapi": "3.0.3",
         "info": {
-            "title": "Resource data API",
+            "title": "Tabular API",
             "description": "Retrieve data for a specified resource with optional filtering and sorting.",
             "version": "1.0.0",
         },
