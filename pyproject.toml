@@ -28,6 +28,11 @@ dev = [
     "pytest-asyncio<1.0.0,>=0.20.3",
     "pytest-mock<4.0.0,>=3.10.0",
     "ruff<1.0.0,>=0.6.5",
+    "datagouv-client>=0.2.0",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.0.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
 ]
 
 [tool.ruff]
@@ -40,9 +45,3 @@ include = ["api_tabular*"]
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
-
-[dependency-groups]
-dev = [
-    "datagouv-client>=0.2.0",
-    "httpx>=0.28.1",
-]
