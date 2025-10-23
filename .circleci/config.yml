@@ -18,7 +18,7 @@ parameters:
 jobs:
   lint:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
     steps:
       - checkout
       - run:
@@ -74,7 +74,7 @@ jobs:
 
   build:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
     steps:
       - checkout
       - run:
@@ -101,7 +101,7 @@ jobs:
 
   publish:
     docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-bookworm-slim
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie-slim
     steps:
       - attach_workspace:
           at: .

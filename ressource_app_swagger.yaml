@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Resource data API
+  title: Tabular API
   description: Retrieve data for resources with optional filtering and sorting
   version: 1.0.0
 tags:
