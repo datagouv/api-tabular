@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "api-tabular": {
+      "url": "http://localhost:8082"
+    }
+  }
+}

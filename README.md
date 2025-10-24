@@ -425,7 +425,7 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 This project includes a Model Context Protocol (MCP) server for natural language access to tabular data.
 
-### Setup
+### Setup and Configuration
 
 1. **Set up Hydra database externally**
 2. **Set PGREST_ENDPOINT environment variable:**
@@ -436,48 +436,55 @@ This project includes a Model Context Protocol (MCP) server for natural language
    ```shell
    docker compose -f docker-compose-hydra.yml up -d
    ```
+4. **Start the HTTP MCP server:**
+   ```bash
+   # Start the persistent HTTP MCP server (runs on port 8082)
+   uv run python api_tabular/mcp/http_mcp_server.py
+   ```
 
-### MCP Configuration
+### 🚀 Quick Start
 
-#### Local MCP Server
+1. **Test the server:**
+   ```bash
+   curl http://localhost:8082/health
+   curl -X POST http://localhost:8082/mcp/tools/list -H "Content-Type: application/json" -d '{}'
+   ```
 
-For a locally running MCP server, add this to your chat agent's MCP configuration:
+### 🔧 LM Studio Configuration
 
-```json
-{
-  "mcpServers": {
-    "api-tabular": {
-      "command": "uv",
-      "args": [
-        "run",
-        "python",
-        "api_tabular/mcp/server.py"
-      ],
-      "cwd": "/path/to/your/api-tabular"
-    }
-  }
-}
-```
-
-#### Remote MCP Server
-
-If the MCP server is running as a persistent HTTP service on a remote host:
+For LM Studio, use this configuration:
 
 ```json
 {
   "mcpServers": {
     "api-tabular": {
-      "command": "curl",
-      "args": [
-        "-X", "POST",
-        "http://remote-mcp-server:port/mcp"
-      ]
+      "url": "http://localhost:8082"
     }
   }
 }
 ```
 
-**Note**: The exact configuration depends on how the remote MCP server is deployed (HTTP endpoint, WebSocket, etc.).
+### 📋 Available Endpoints
+
+- `GET /health` - Health check
+- `POST /mcp/initialize` - MCP initialization
+- `POST /mcp/tools/list` - List available tools
+- `POST /mcp/tools/call` - Call a tool
+- `POST /mcp/resources/list` - List available resources
+- `POST /mcp/resources/read` - Read a specific resource
+
+### 🛠️ Available Tools
+
+1. **`list_datagouv_resources`** - Browse all available datasets and resources
+2. **`ask_datagouv_question`** - Ask natural language questions about the data
+
+### 🧪 Testing
+
+```bash
+# Test the HTTP MCP server
+uv run python api_tabular/mcp/test_mcp.py
+```
+
 
 ## 🧪 Testing
 
