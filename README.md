@@ -421,6 +421,64 @@ Create a `config.toml` file in the project root or set the `CSVAPI_SETTINGS` env
 export CSVAPI_SETTINGS="/path/to/your/config.toml"
 ```
 
+## 🤖 MCP Server
+
+This project includes a Model Context Protocol (MCP) server for natural language access to tabular data.
+
+### Setup
+
+1. **Set up Hydra database externally**
+2. **Set PGREST_ENDPOINT environment variable:**
+   ```shell
+   export PGREST_ENDPOINT="http://localhost:8081"
+   ```
+3. **Launch PostgREST:**
+   ```shell
+   docker compose -f docker-compose-hydra.yml up -d
+   ```
+
+### MCP Configuration
+
+#### Local MCP Server
+
+For a locally running MCP server, add this to your chat agent's MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "api_tabular/mcp/server.py"
+      ],
+      "cwd": "/path/to/your/api-tabular"
+    }
+  }
+}
+```
+
+#### Remote MCP Server
+
+If the MCP server is running as a persistent HTTP service on a remote host:
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "command": "curl",
+      "args": [
+        "-X", "POST",
+        "http://remote-mcp-server:port/mcp"
+      ]
+    }
+  }
+}
+```
+
+**Note**: The exact configuration depends on how the remote MCP server is deployed (HTTP endpoint, WebSocket, etc.).
+
 ## 🧪 Testing
 
 This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
