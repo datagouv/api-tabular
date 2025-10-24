@@ -438,7 +438,7 @@ This project includes a Model Context Protocol (MCP) server for natural language
    ```
 4. **Start the HTTP MCP server:**
    ```bash
-   # Start the persistent HTTP MCP server (runs on port 8082)
+   # Start the standards-compliant HTTP MCP server (runs on port 8082)
    uv run python api_tabular/mcp/http_mcp_server.py
    ```
 
@@ -446,8 +446,8 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 1. **Test the server:**
    ```bash
-   curl http://localhost:8082/health
-   curl -X POST http://localhost:8082/mcp/tools/list -H "Content-Type: application/json" -d '{}'
+   curl http://127.0.0.1:8082/health
+   curl -X POST http://127.0.0.1:8082/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
    ```
 
 ### 🔧 LM Studio Configuration
@@ -458,7 +458,7 @@ For LM Studio, use this configuration:
 {
   "mcpServers": {
     "api-tabular": {
-      "url": "http://localhost:8082"
+      "url": "http://127.0.0.1:8082/mcp"
     }
   }
 }
@@ -467,11 +467,15 @@ For LM Studio, use this configuration:
 ### 📋 Available Endpoints
 
 - `GET /health` - Health check
-- `POST /mcp/initialize` - MCP initialization
-- `POST /mcp/tools/list` - List available tools
-- `POST /mcp/tools/call` - Call a tool
-- `POST /mcp/resources/list` - List available resources
-- `POST /mcp/resources/read` - Read a specific resource
+- `POST /mcp` - JSON-RPC messages (client → server)
+- `GET /mcp` - SSE stream (server → client)
+
+### 🔒 Security Features
+
+- **Origin header validation** - Prevents DNS rebinding attacks
+- **Localhost binding only** - Binds to 127.0.0.1 for security
+- **Session management** - Secure session IDs with validation
+- **Protocol versioning** - Supports MCP protocol versioning
 
 ### 🛠️ Available Tools
 

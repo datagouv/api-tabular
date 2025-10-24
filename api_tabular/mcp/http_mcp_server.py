@@ -7,6 +7,7 @@ This implements the MCP protocol over HTTP for better stability.
 import asyncio
 import json
 import logging
+import uuid
 from pathlib import Path
 
 from aiohttp import web
@@ -31,26 +32,259 @@ class HTTPMCPServer:
 
     def __init__(self):
         self.app = web.Application()
+        self.sessions = {}  # Store active sessions
         self._setup_routes()
         self.resources_config_path = Path(__file__).parent / "data" / "mcp_available_resources.json"
         self.pgrest_endpoint = "http://localhost:8081"
 
     def _setup_routes(self):
-        """Setup HTTP routes for MCP operations."""
-        # Health check
+        """Setup HTTP routes for MCP operations following standards."""
+        # Single MCP endpoint that handles both POST and GET
+        self.app.router.add_post("/mcp", self._mcp_endpoint)
+        self.app.router.add_get("/mcp", self._mcp_endpoint)
+
+        # Health check (non-standard but useful)
         self.app.router.add_get("/health", self._health_check)
 
-        # MCP protocol endpoints
-        self.app.router.add_post("/mcp/initialize", self._initialize)
-        self.app.router.add_post("/mcp/tools/list", self._list_tools)
-        self.app.router.add_post("/mcp/tools/call", self._call_tool)
-        self.app.router.add_post("/mcp/resources/list", self._list_resources)
-        self.app.router.add_post("/mcp/resources/read", self._read_resource)
+    async def _validate_origin(self, request: Request) -> bool:
+        """Validate Origin header to prevent DNS rebinding attacks."""
+        origin = request.headers.get("Origin")
+        if origin:
+            # For local development, allow localhost origins
+            allowed_origins = [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+            ]
+            return origin in allowed_origins
+        return True  # Allow requests without Origin header
 
-        # Legacy endpoints for compatibility
-        self.app.router.add_get("/mcp/tools", self._list_tools_get)
-        self.app.router.add_post("/mcp/list_tools", self._list_tools)
-        self.app.router.add_post("/mcp/call_tool", self._call_tool)
+    async def _mcp_endpoint(self, request: Request) -> Response:
+        """Single MCP endpoint handling both POST and GET requests."""
+        # Validate Origin header for security
+        if not await self._validate_origin(request):
+            return web.Response(status=403, text="Origin not allowed")
+
+        if request.method == "POST":
+            return await self._handle_post_request(request)
+        elif request.method == "GET":
+            return await self._handle_get_request(request)
+        else:
+            return web.Response(status=405, text="Method Not Allowed")
+
+    async def _handle_post_request(self, request: Request) -> Response:
+        """Handle POST requests (JSON-RPC messages from client)."""
+        try:
+            # Check for required headers
+            accept_header = request.headers.get("Accept", "")
+            if "application/json" not in accept_header and "text/event-stream" not in accept_header:
+                return web.Response(status=400, text="Missing required Accept header")
+
+            # Get protocol version
+            protocol_version = request.headers.get("MCP-Protocol-Version", "2025-03-26")
+
+            # Get session ID if present
+            session_id = request.headers.get("Mcp-Session-Id")
+
+            # Parse JSON-RPC message
+            data = await request.json()
+
+            # Handle different JSON-RPC message types
+            if "method" in data:
+                # This is a JSON-RPC request
+                if data["method"] == "initialize":
+                    return await self._handle_initialize_request(data, session_id, protocol_version)
+                elif data["method"] == "tools/list":
+                    return await self._handle_tools_list_request(data, session_id)
+                elif data["method"] == "tools/call":
+                    return await self._handle_tools_call_request(data, session_id)
+                elif data["method"] == "resources/list":
+                    return await self._handle_resources_list_request(data, session_id)
+                else:
+                    return await self._handle_unknown_method(data)
+            else:
+                # This is a JSON-RPC response or notification
+                return web.Response(status=202, text="Accepted")
+
+        except json.JSONDecodeError:
+            return web.Response(status=400, text="Invalid JSON")
+        except Exception as e:
+            logger.error(f"Error handling POST request: {e}")
+            return web.Response(status=500, text="Internal Server Error")
+
+    async def _handle_get_request(self, request: Request) -> Response:
+        """Handle GET requests (SSE stream from server)."""
+        accept_header = request.headers.get("Accept", "")
+        if "text/event-stream" not in accept_header:
+            return web.Response(status=405, text="Method Not Allowed")
+
+        # Create SSE response
+        response = web.StreamResponse()
+        response.headers["Content-Type"] = "text/event-stream"
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Connection"] = "keep-alive"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+
+        await response.prepare(request)
+
+        try:
+            # Send initial connection event
+            await response.write(
+                b'data: {"type": "connected", "message": "MCP Server connected"}\n\n'
+            )
+
+            # Keep connection alive with heartbeats
+            while True:
+                await asyncio.sleep(30)
+                heartbeat = {
+                    "jsonrpc": "2.0",
+                    "method": "ping",
+                    "params": {"timestamp": int(asyncio.get_event_loop().time())},
+                }
+                await response.write(f"data: {json.dumps(heartbeat)}\n\n".encode())
+
+        except asyncio.CancelledError:
+            logger.info("SSE connection closed by client")
+        except Exception as e:
+            logger.error(f"SSE error: {e}")
+        finally:
+            await response.write_eof()
+
+        return response
+
+    async def _handle_initialize_request(
+        self, data: dict, session_id: str, protocol_version: str
+    ) -> Response:
+        """Handle MCP initialize request."""
+        # Generate new session ID if not provided
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            self.sessions[session_id] = {"protocol_version": protocol_version, "initialized": True}
+
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": data.get("id"),
+            "result": {
+                "protocolVersion": protocol_version,
+                "capabilities": {"tools": {}, "resources": {}},
+                "serverInfo": {"name": "api-tabular-mcp", "version": "1.0.0"},
+            },
+        }
+
+        response = web.json_response(response_data)
+        response.headers["Mcp-Session-Id"] = session_id
+        return response
+
+    async def _handle_tools_list_request(self, data: dict, session_id: str) -> Response:
+        """Handle tools/list request."""
+        if session_id and session_id not in self.sessions:
+            return web.Response(status=404, text="Session not found")
+
+        tools = [
+            {
+                "name": "list_datagouv_resources",
+                "description": "Browse all available datasets and resources from data.gouv.fr",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "ask_datagouv_question",
+                "description": "Ask natural language questions about available datasets and get data results",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "Natural language question about the data",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of results to return",
+                            "default": 20,
+                        },
+                    },
+                    "required": ["question"],
+                },
+            },
+        ]
+
+        response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": {"tools": tools}}
+
+        return web.json_response(response_data)
+
+    async def _handle_tools_call_request(self, data: dict, session_id: str) -> Response:
+        """Handle tools/call request."""
+        if session_id and session_id not in self.sessions:
+            return web.Response(status=404, text="Session not found")
+
+        params = data.get("params", {})
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
+
+        if tool_name == "list_datagouv_resources":
+            call_result = await self._handle_list_datagouv_resources()
+            # Convert CallToolResult to dict format for new transport
+            result = {
+                "content": [
+                    {"type": content.type, "text": content.text} for content in call_result.content
+                ],
+                "isError": call_result.isError,
+            }
+        elif tool_name == "ask_datagouv_question":
+            question = arguments.get("question", "")
+            limit = arguments.get("limit", 20)
+            call_result = await self._handle_ask_datagouv_question(question, limit)
+            # Convert CallToolResult to dict format for new transport
+            result = {
+                "content": [
+                    {"type": content.type, "text": content.text} for content in call_result.content
+                ],
+                "isError": call_result.isError,
+            }
+        else:
+            result = {
+                "content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}],
+                "isError": True,
+            }
+
+        response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": result}
+
+        return web.json_response(response_data)
+
+    async def _handle_resources_list_request(self, data: dict, session_id: str) -> Response:
+        """Handle resources/list request."""
+        if session_id and session_id not in self.sessions:
+            return web.Response(status=404, text="Session not found")
+
+        # Load resources from JSON file
+        resources = []
+        if self.resources_config_path.exists():
+            with self.resources_config_path.open("r", encoding="utf-8") as f:
+                resources_data = json.load(f)
+
+            for dataset in resources_data:
+                for resource in dataset.get("resources", []):
+                    resources.append(
+                        {
+                            "uri": f"resource://{resource['resource_id']}",
+                            "name": resource["name"],
+                            "description": f"Resource from dataset: {dataset['name']}",
+                            "mimeType": "application/json",
+                        }
+                    )
+
+        response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": {"resources": resources}}
+
+        return web.json_response(response_data)
+
+    async def _handle_unknown_method(self, data: dict) -> Response:
+        """Handle unknown JSON-RPC methods."""
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": data.get("id"),
+            "error": {"code": -32601, "message": "Method not found"},
+        }
+        return web.json_response(error_response, status=400)
 
     async def _health_check(self, request: Request) -> Response:
         """Health check endpoint."""
@@ -277,20 +511,22 @@ class HTTPMCPServer:
                 isError=True,
             )
 
-    async def run(self, host: str = "localhost", port: int = 8082):
-        """Run the HTTP MCP server."""
-        logger.info(f"🚀 Starting HTTP MCP server on http://{host}:{port}")
+    async def run(self, host: str = "127.0.0.1", port: int = 8082):
+        """Run the HTTP MCP server with security best practices."""
+        logger.info(f"🚀 Starting Standards-Compliant MCP Server on http://{host}:{port}")
         logger.info("📋 Available endpoints:")
         logger.info(f"   - GET  http://{host}:{port}/health")
-        logger.info(f"   - POST http://{host}:{port}/mcp/initialize")
-        logger.info(f"   - POST http://{host}:{port}/mcp/tools/list")
-        logger.info(f"   - POST http://{host}:{port}/mcp/tools/call")
-        logger.info(f"   - POST http://{host}:{port}/mcp/resources/list")
-        logger.info(f"   - POST http://{host}:{port}/mcp/resources/read")
+        logger.info(f"   - POST http://{host}:{port}/mcp (JSON-RPC messages)")
+        logger.info(f"   - GET  http://{host}:{port}/mcp (SSE stream)")
+        logger.info("🔒 Security features:")
+        logger.info("   - Origin header validation")
+        logger.info("   - Localhost binding only")
+        logger.info("   - Session management")
+        logger.info("   - Protocol version support")
         logger.info("🔧 Test the server:")
         logger.info(f"   curl http://{host}:{port}/health")
         logger.info(
-            f"   curl -X POST http://{host}:{port}/mcp/tools/list -H 'Content-Type: application/json' -d '{{}}'"
+            f'   curl -X POST http://{host}:{port}/mcp -H \'Accept: application/json\' -H \'Content-Type: application/json\' -d \'{{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {{}}}}\''
         )
 
         runner = web.AppRunner(self.app)

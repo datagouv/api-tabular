@@ -10,7 +10,7 @@ from aiohttp import ClientSession
 
 async def test_http_mcp_server():
     """Test the HTTP MCP server endpoints."""
-    base_url = "http://localhost:8082"
+    base_url = "http://127.0.0.1:8082"
 
     async with ClientSession() as session:
         print("🧪 Testing HTTP MCP Server")
@@ -29,11 +29,21 @@ async def test_http_mcp_server():
         # Test MCP initialize
         print("\n2. Testing MCP initialize...")
         init_data = {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "1.0.0"},
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "1.0.0"},
+            },
         }
-        async with session.post(f"{base_url}/mcp/initialize", json=init_data) as response:
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-03-26",
+            "Content-Type": "application/json",
+        }
+        async with session.post(f"{base_url}/mcp", json=init_data, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
                 print(f"✅ MCP initialize: {data}")
@@ -43,7 +53,8 @@ async def test_http_mcp_server():
 
         # Test list tools
         print("\n3. Testing list tools...")
-        async with session.post(f"{base_url}/mcp/tools/list", json={}) as response:
+        tools_data = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+        async with session.post(f"{base_url}/mcp", json=tools_data, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
                 print(f"✅ List tools: {len(data.get('tools', []))} tools found")
@@ -55,8 +66,13 @@ async def test_http_mcp_server():
 
         # Test call tool - list_datagouv_resources
         print("\n4. Testing call tool (list_datagouv_resources)...")
-        tool_data = {"name": "list_datagouv_resources", "arguments": {}}
-        async with session.post(f"{base_url}/mcp/tools/call", json=tool_data) as response:
+        tool_data = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "list_datagouv_resources", "arguments": {}},
+        }
+        async with session.post(f"{base_url}/mcp", json=tool_data, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
                 print(f"✅ Call tool: {len(data.get('content', []))} content items")
@@ -71,10 +87,15 @@ async def test_http_mcp_server():
         # Test call tool - ask_datagouv_question
         print("\n5. Testing call tool (ask_datagouv_question)...")
         tool_data = {
-            "name": "ask_datagouv_question",
-            "arguments": {"question": "Données météo du métro parisien", "limit": 10},
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "ask_datagouv_question",
+                "arguments": {"question": "Données météo du métro parisien", "limit": 10},
+            },
         }
-        async with session.post(f"{base_url}/mcp/tools/call", json=tool_data) as response:
+        async with session.post(f"{base_url}/mcp", json=tool_data, headers=headers) as response:
             if response.status == 200:
                 data = await response.json()
                 print(f"✅ Call tool: {len(data.get('content', []))} content items")
@@ -87,7 +108,10 @@ async def test_http_mcp_server():
 
         # Test list resources
         print("\n6. Testing list resources...")
-        async with session.post(f"{base_url}/mcp/resources/list", json={}) as response:
+        resources_data = {"jsonrpc": "2.0", "id": 5, "method": "resources/list", "params": {}}
+        async with session.post(
+            f"{base_url}/mcp", json=resources_data, headers=headers
+        ) as response:
             if response.status == 200:
                 data = await response.json()
                 print(f"✅ List resources: {len(data.get('resources', []))} resources found")
