@@ -36,6 +36,7 @@ class TabularMCPServer:
         self.data_accessor = None
         self.query_builder = QueryBuilder()
         self.resources_config = self._load_resources_config()
+        self.pgrest_endpoint = "http://localhost:8081"  # Default endpoint
         self._setup_handlers()
 
     def _load_resources_config(self) -> list[dict[str, any]]:
@@ -421,6 +422,8 @@ class TabularMCPServer:
                     table_name = resource["parsing_table"]
                     print(f"   🔍 Testing direct table access: {table_name}")
                     try:
+                        import httpx
+
                         test_url = f"{self.pgrest_endpoint}/{table_name}?limit=1"
                         print(f"   🔍 Test URL: {test_url}")
                         async with httpx.AsyncClient() as client:
@@ -503,15 +506,21 @@ class TabularMCPServer:
     async def run(self):
         """Run the MCP server."""
         async with stdio_server() as (read_stream, write_stream):
+            # Create a simple capabilities object
+            from mcp.types import ServerCapabilities
+
+            capabilities = ServerCapabilities(
+                tools={"list_tools": {}, "call_tool": {}},
+                resources={"list_resources": {}, "read_resource": {}},
+            )
+
             await self.server.run(
                 read_stream,
                 write_stream,
                 InitializationOptions(
                     server_name="api-tabular-mcp",
                     server_version="1.0.0",
-                    capabilities=self.server.get_capabilities(
-                        notification_options=None, experimental_capabilities={}
-                    ),
+                    capabilities=capabilities,
                 ),
             )
 
