@@ -466,9 +466,20 @@ For LM Studio, use this configuration:
 
 ### 📋 Available Endpoints
 
-- `GET /health` - Health check
+**New Streamable HTTP transport (standards-compliant):**
 - `POST /mcp` - JSON-RPC messages (client → server)
 - `GET /mcp` - SSE stream (server → client)
+
+**Backward compatibility (old HTTP+SSE transport):**
+- `POST /mcp/initialize` - Initialize MCP session
+- `POST /mcp/tools/list` - List available tools
+- `POST /mcp/tools/call` - Call a tool
+- `POST /mcp/resources/list` - List available resources
+- `POST /mcp/resources/read` - Read a resource
+- `GET /mcp/sse` - SSE stream for old transport
+
+**Utility:**
+- `GET /health` - Health check
 
 ### 🔒 Security Features
 
