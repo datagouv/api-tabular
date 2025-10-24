@@ -429,12 +429,17 @@ for i, dataset_id in enumerate(sorted(ids), 1):
         # Only add resources that were successfully processed (or all if DB population disabled)
         dataset_info["resources"] = successful_resources
 
-        data.append(dataset_info)
+        # Only add dataset to MCP config if it has resources
+        if successful_resources:
+            data.append(dataset_info)
+            print(f"   ✅ Added {len(dataset_info['resources'])} resources to MCP config")
+        else:
+            print("   ⏭️  Skipping dataset (no successful resources) - EXCLUDED from MCP")
+
         total_resources_processed += dataset_resources_processed
         total_resources_successful += dataset_resources_successful
         total_resources_excluded += dataset_resources_excluded
 
-        print(f"   ✅ Added {len(dataset_info['resources'])} resources to MCP config")
         if args.populate_db:
             print(
                 f"   📊 Dataset stats: {dataset_resources_successful} successful, {dataset_resources_excluded} excluded"
@@ -475,6 +480,9 @@ print(f"✅ {len(data)} datasets with {total_resources} total resources saved to
 
 # Print final statistics
 print("\n📊 Final Statistics:")
+print(f"   - Total datasets processed: {len(ids)}")
+print(f"   - Datasets with resources: {len(data)}")
+print(f"   - Empty datasets excluded: {len(ids) - len(data)}")
 print(f"   - Total resources processed: {total_resources_processed}")
 print(f"   - Resources successfully added to MCP: {total_resources_successful}")
 if args.populate_db:
