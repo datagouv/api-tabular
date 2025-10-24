@@ -421,6 +421,86 @@ Create a `config.toml` file in the project root or set the `CSVAPI_SETTINGS` env
 export CSVAPI_SETTINGS="/path/to/your/config.toml"
 ```
 
+## 🤖 MCP Server
+
+This project includes a Model Context Protocol (MCP) server for natural language access to tabular data.
+
+### Setup and Configuration
+
+1. **Set up Hydra database externally**
+2. **Set PGREST_ENDPOINT environment variable:**
+   ```shell
+   export PGREST_ENDPOINT="http://localhost:8081"
+   ```
+3. **Launch PostgREST:**
+   ```shell
+   docker compose -f docker-compose-hydra.yml up -d
+   ```
+4. **Start the HTTP MCP server:**
+   ```bash
+   # Start the standards-compliant HTTP MCP server (runs on port 8082)
+   uv run python api_tabular/mcp/http_mcp_server.py
+   ```
+
+### 🚀 Quick Start
+
+1. **Test the server:**
+   ```bash
+   curl http://127.0.0.1:8082/health
+   curl -X POST http://127.0.0.1:8082/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
+   ```
+
+### 🔧 LM Studio Configuration
+
+For LM Studio, use this configuration:
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "url": "http://127.0.0.1:8082/mcp"
+    }
+  }
+}
+```
+
+### 📋 Available Endpoints
+
+**New Streamable HTTP transport (standards-compliant):**
+- `POST /mcp` - JSON-RPC messages (client → server)
+- `GET /mcp` - SSE stream (server → client)
+
+**Backward compatibility (old HTTP+SSE transport):**
+- `POST /mcp/initialize` - Initialize MCP session
+- `POST /mcp/tools/list` - List available tools
+- `POST /mcp/tools/call` - Call a tool
+- `POST /mcp/resources/list` - List available resources
+- `POST /mcp/resources/read` - Read a resource
+- `GET /mcp/sse` - SSE stream for old transport
+
+**Utility:**
+- `GET /health` - Health check
+
+### 🔒 Security Features
+
+- **Origin header validation** - Prevents DNS rebinding attacks
+- **Localhost binding only** - Binds to 127.0.0.1 for security
+- **Session management** - Secure session IDs with validation
+- **Protocol versioning** - Supports MCP protocol versioning
+
+### 🛠️ Available Tools
+
+1. **`list_datagouv_resources`** - Browse all available datasets and resources
+2. **`ask_datagouv_question`** - Ask natural language questions about the data
+
+### 🧪 Testing
+
+```bash
+# Test the HTTP MCP server
+uv run python api_tabular/mcp/test_mcp.py
+```
+
+
 ## 🧪 Testing
 
 This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
