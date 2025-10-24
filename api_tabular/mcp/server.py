@@ -25,7 +25,7 @@ from api_tabular.core.data_access import DataAccessor
 from api_tabular.core.query_builder import QueryBuilder
 
 # Configuration file path
-RESOURCES_CONFIG_PATH = Path(__file__).parent / "data" / "reuses_top100.json"
+RESOURCES_CONFIG_PATH = Path(__file__).parent / "data" / "mcp_available_resources.json"
 
 
 class TabularMCPServer:
@@ -166,10 +166,13 @@ class TabularMCPServer:
             elif any(keyword in word for word in searchable_text.split()):
                 score += 0.5
 
-        # Normalize by text length to avoid bias toward longer names
-        text_length = len(searchable_text.split())
-        if text_length > 0:
-            score = score / text_length
+        # Don't normalize by text length - this penalizes longer, more specific names
+        # Instead, give bonus points for multiple keyword matches
+        if score > 0:
+            # Bonus for multiple keyword matches
+            matched_keywords = sum(1 for keyword in keywords if keyword in searchable_text)
+            if matched_keywords > 1:
+                score += matched_keywords * 0.2
 
         return score
 
@@ -184,6 +187,40 @@ class TabularMCPServer:
                 if score > best_score:
                     best_score = score
                     best_match = {"dataset": dataset, "resource": resource, "score": score}
+                elif score == best_score and score > 0:
+                    # If scores are equal, prioritize metro files
+                    if (
+                        "sg-metro-opendata" in resource["name"]
+                        and "sg-metro-opendata" not in best_match["resource"]["name"]
+                    ):
+                        best_match = {"dataset": dataset, "resource": resource, "score": score}
+
+        # Debug: Print top matches for debugging
+        print("   🔍 Top matches found:")
+        matches = []
+        metro_matches = []
+        for dataset in self.resources_config:
+            for resource in dataset["resources"]:
+                score = self._calculate_match_score(keywords, dataset, resource)
+                if score > 0.05:  # Show matches with score > 0.05
+                    matches.append((score, dataset["name"], resource["name"]))
+                # Specifically track metro files
+                if "sg-metro-opendata" in resource["name"]:
+                    metro_matches.append((score, dataset["name"], resource["name"]))
+
+        # Sort by score descending and show top 5
+        matches.sort(reverse=True)
+        for i, (score, dataset_name, resource_name) in enumerate(matches[:5]):
+            print(f"     {i+1}. {resource_name} (score: {score:.3f}) - {dataset_name}")
+
+        # Show metro-specific matches
+        if metro_matches:
+            print("   🚇 Metro files found:")
+            metro_matches.sort(reverse=True)
+            for i, (score, dataset_name, resource_name) in enumerate(metro_matches[:3]):
+                print(f"     Metro {i+1}. {resource_name} (score: {score:.3f}) - {dataset_name}")
+        else:
+            print("   🚇 No metro files found in resources!")
 
         # Only return matches with a reasonable score (lowered threshold for generic matching)
         return best_match if best_score > 0.1 else None
@@ -376,10 +413,45 @@ class TabularMCPServer:
                         best_match["resource"]["resource_id"]
                     )
 
-                    # Search through all pages to get comprehensive results
-                    data = await self._search_all_pages(
-                        data_accessor, resource, indexes, question, best_match, limit
-                    )
+                    # Debug: Print the resource and indexes
+                    print(f"   🔍 Resource: {resource}")
+                    print(f"   🔍 Indexes: {indexes}")
+
+                    # Debug: Test direct table access
+                    table_name = resource["parsing_table"]
+                    print(f"   🔍 Testing direct table access: {table_name}")
+                    try:
+                        test_url = f"{self.pgrest_endpoint}/{table_name}?limit=1"
+                        print(f"   🔍 Test URL: {test_url}")
+                        async with httpx.AsyncClient() as client:
+                            response = await client.get(test_url)
+                            print(f"   🔍 Test response status: {response.status_code}")
+                            if response.status_code == 200:
+                                test_data = response.json()
+                                print(
+                                    f"   🔍 Test data sample: {test_data[:1] if test_data else 'No data'}"
+                                )
+                            else:
+                                print(f"   🔍 Test response error: {response.text}")
+                    except Exception as e:
+                        print(f"   🔍 Test error: {e}")
+
+                    # Simplified approach: just get data from the table directly
+                    table_name = resource["parsing_table"]
+                    print(f"   🔍 Simplified query: {table_name}?limit={limit}")
+                    try:
+                        url = f"{self.pgrest_endpoint}/{table_name}?limit={limit}"
+                        async with httpx.AsyncClient() as client:
+                            response = await client.get(url)
+                            if response.status_code == 200:
+                                data = response.json()
+                                print(f"   🔍 Successfully retrieved {len(data)} records")
+                            else:
+                                print(f"   🔍 Error: {response.status_code} - {response.text}")
+                                data = []
+                    except Exception as e:
+                        print(f"   🔍 Exception: {e}")
+                        data = []
 
                     # 4. Format and return results
                     formatted_result = self._format_results(data, best_match)
