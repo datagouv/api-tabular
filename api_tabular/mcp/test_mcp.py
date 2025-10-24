@@ -1,111 +1,120 @@
 #!/usr/bin/env python3
 """
-Test script for the MCP server.
+Test script for the HTTP MCP server.
 """
 
 import asyncio
 
-from api_tabular.mcp.server import create_server
+from aiohttp import ClientSession
 
 
-async def test_list_tools():
-    """Test the list_tools functionality."""
-    print("=== Testing list_tools ===")
-    server = create_server()
+async def test_http_mcp_server():
+    """Test the HTTP MCP server endpoints."""
+    base_url = "http://localhost:8082"
 
-    tools_result = await server._list_tools()
-    print(f"Available tools: {[tool.name for tool in tools_result.tools]}")
+    async with ClientSession() as session:
+        print("🧪 Testing HTTP MCP Server")
+        print("=" * 50)
 
-    for tool in tools_result.tools:
-        print(f"  - {tool.name}: {tool.description}")
+        # Test health check
+        print("\n1. Testing health check...")
+        async with session.get(f"{base_url}/health") as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ Health check: {data}")
+            else:
+                print(f"❌ Health check failed: {response.status}")
+                return False
 
-    print("✅ list_tools test completed\n")
+        # Test MCP initialize
+        print("\n2. Testing MCP initialize...")
+        init_data = {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "1.0.0"},
+        }
+        async with session.post(f"{base_url}/mcp/initialize", json=init_data) as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ MCP initialize: {data}")
+            else:
+                print(f"❌ MCP initialize failed: {response.status}")
+                return False
 
+        # Test list tools
+        print("\n3. Testing list tools...")
+        async with session.post(f"{base_url}/mcp/tools/list", json={}) as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ List tools: {len(data.get('tools', []))} tools found")
+                for tool in data.get("tools", []):
+                    print(f"   - {tool['name']}: {tool['description']}")
+            else:
+                print(f"❌ List tools failed: {response.status}")
+                return False
 
-async def test_list_accessible_resources():
-    """Test the list_accessible_resources functionality."""
-    print("=== Testing list_accessible_resources ===")
-    server = create_server()
+        # Test call tool - list_datagouv_resources
+        print("\n4. Testing call tool (list_datagouv_resources)...")
+        tool_data = {"name": "list_datagouv_resources", "arguments": {}}
+        async with session.post(f"{base_url}/mcp/tools/call", json=tool_data) as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ Call tool: {len(data.get('content', []))} content items")
+                if data.get("content"):
+                    content = data["content"][0]
+                    print(f"   Content type: {content.get('type')}")
+                    print(f"   Content length: {len(content.get('text', ''))}")
+            else:
+                print(f"❌ Call tool failed: {response.status}")
+                return False
 
-    resources_result = await server._list_accessible_resources({})
-    print(f"Resources result type: {type(resources_result.content[0].text)}")
-    print(f"Resources result length: {len(resources_result.content[0].text)}")
+        # Test call tool - ask_datagouv_question
+        print("\n5. Testing call tool (ask_datagouv_question)...")
+        tool_data = {
+            "name": "ask_datagouv_question",
+            "arguments": {"question": "Données météo du métro parisien", "limit": 10},
+        }
+        async with session.post(f"{base_url}/mcp/tools/call", json=tool_data) as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ Call tool: {len(data.get('content', []))} content items")
+                if data.get("content"):
+                    content = data["content"][0]
+                    print(f"   Content: {content.get('text', '')[:200]}...")
+            else:
+                print(f"❌ Call tool failed: {response.status}")
+                return False
 
-    # Show first few characters of the result
-    result_text = resources_result.content[0].text
-    print(f"First 200 characters: {result_text[:200]}...")
+        # Test list resources
+        print("\n6. Testing list resources...")
+        async with session.post(f"{base_url}/mcp/resources/list", json={}) as response:
+            if response.status == 200:
+                data = await response.json()
+                print(f"✅ List resources: {len(data.get('resources', []))} resources found")
+            else:
+                print(f"❌ List resources failed: {response.status}")
+                return False
 
-    print("✅ list_accessible_resources test completed\n")
-
-
-async def test_list_resources():
-    """Test the list_resources functionality."""
-    print("=== Testing list_resources ===")
-    server = create_server()
-
-    resources = await server._list_resources()
-    print(f"Available resources count: {len(resources.resources)}")
-    print(f"First 5 resources: {[r.name for r in resources.resources[:5]]}")
-
-    for i, resource in enumerate(resources.resources[:3]):
-        print(f"  {i+1}. {resource.name} ({resource.uri})")
-        print(f"     Description: {resource.description}")
-        print(f"     MIME Type: {resource.mimeType}")
-
-    print("✅ list_resources test completed\n")
-
-
-async def test_ask_data_question():
-    """Test the ask_data_question functionality."""
-    print("=== Testing ask_data_question ===")
-    server = create_server()
-
-    question = "Données météo du métro parisien"
-    print(f"Question: {question}")
-
-    # Debug step by step
-    print("\n🔍 Step 1: Extracting keywords...")
-    keywords = server._extract_keywords(question)
-    print(f"Keywords extracted: {keywords}")
-
-    print("\n🔍 Step 2: Finding matching resource...")
-    best_match = server._find_matching_resource(keywords)
-    if best_match:
-        print("Best match found:")
-        print(f"  - Dataset: {best_match['dataset']['name']}")
-        print(f"  - Resource: {best_match['resource']['name']}")
-        print(f"  - Resource ID: {best_match['resource']['resource_id']}")
-        print(f"  - Score: {best_match['score']}")
-    else:
-        print("No matching resource found")
-
-    print("\n🔍 Step 3: Building query from question...")
-    if best_match:
-        query_parts = server._build_query_from_question(question, best_match)
-        print(f"Query parts: {query_parts}")
-
-    print("\n🔍 Step 4: Determining limit...")
-    limit = server._determine_limit(question)
-    print(f"Determined limit: {limit}")
-
-    print("\n🔍 Step 5: Running full question...")
-    question_result = await server._ask_data_question({"question": question, "limit": 5})
-    print(f"Question result: {question_result.content[0].text}")
-    print(f"Is error: {question_result.isError}")
-
-    print("✅ ask_data_question test completed\n")
+        print("\n🎉 HTTP MCP Server tests completed!")
+        return True
 
 
 async def run_all_tests():
     """Run all test functions."""
-    print("🚀 Starting MCP Server Tests\n")
+    print("🚀 Starting HTTP MCP Server Tests\n")
 
-    await test_list_tools()
-    await test_list_accessible_resources()
-    await test_list_resources()
-    await test_ask_data_question()  # Now enabled for testing
+    # Test HTTP server
+    http_success = await test_http_mcp_server()
 
-    print("🎉 All tests completed!")
+    print("\n" + "=" * 60)
+    print("📊 Test Results Summary:")
+    print(f"   HTTP MCP Server: {'✅ PASSED' if http_success else '❌ FAILED'}")
+
+    if http_success:
+        print("\n🎉 All tests completed successfully!")
+    else:
+        print("\n⚠️  Some tests failed. Check the output above for details.")
+        return False
 
 
 if __name__ == "__main__":

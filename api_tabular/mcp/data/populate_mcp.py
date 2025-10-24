@@ -157,7 +157,7 @@ def create_table_for_resource(
             # Rollback the transaction to clear the aborted state
             try:
                 cursor.connection.rollback()
-            except:
+            except Exception:
                 pass
             return None
 
@@ -166,7 +166,7 @@ def create_table_for_resource(
         # Rollback the transaction to clear the aborted state
         try:
             cursor.connection.rollback()
-        except:
+        except Exception:
             pass
         return None
 
@@ -407,7 +407,7 @@ for i, dataset_id in enumerate(sorted(ids), 1):
                         # Rollback on any error
                         try:
                             cursor.execute("ROLLBACK")
-                        except:
+                        except Exception:
                             pass
                         print(
                             f"   ❌ Error processing {resource.title}: {str(e)} - EXCLUDED from MCP"
