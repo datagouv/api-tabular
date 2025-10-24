@@ -39,9 +39,22 @@ class HTTPMCPServer:
 
     def _setup_routes(self):
         """Setup HTTP routes for MCP operations following standards."""
-        # Single MCP endpoint that handles both POST and GET
+        # New Streamable HTTP transport (standards-compliant)
         self.app.router.add_post("/mcp", self._mcp_endpoint)
         self.app.router.add_get("/mcp", self._mcp_endpoint)
+
+        # Backward compatibility: Old HTTP+SSE transport endpoints
+        self.app.router.add_post("/mcp/initialize", self._initialize)
+        self.app.router.add_post("/mcp/tools/list", self._list_tools)
+        self.app.router.add_post("/mcp/tools/call", self._call_tool)
+        self.app.router.add_post("/mcp/resources/list", self._list_resources)
+        self.app.router.add_post("/mcp/resources/read", self._read_resource)
+        self.app.router.add_get("/mcp/sse", self._sse_endpoint)
+
+        # Legacy endpoints for compatibility
+        self.app.router.add_get("/mcp/tools", self._list_tools_get)
+        self.app.router.add_post("/mcp/list_tools", self._list_tools)
+        self.app.router.add_post("/mcp/call_tool", self._call_tool)
 
         # Health check (non-standard but useful)
         self.app.router.add_get("/health", self._health_check)
@@ -142,6 +155,36 @@ class HTTPMCPServer:
                     "method": "ping",
                     "params": {"timestamp": int(asyncio.get_event_loop().time())},
                 }
+                await response.write(f"data: {json.dumps(heartbeat)}\n\n".encode())
+
+        except asyncio.CancelledError:
+            logger.info("SSE connection closed by client")
+        except Exception as e:
+            logger.error(f"SSE error: {e}")
+        finally:
+            await response.write_eof()
+
+        return response
+
+    async def _sse_endpoint(self, request: Request) -> Response:
+        """SSE endpoint for backward compatibility with old HTTP+SSE transport."""
+        response = web.StreamResponse()
+        response.headers["Content-Type"] = "text/event-stream"
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Connection"] = "keep-alive"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+
+        await response.prepare(request)
+
+        try:
+            # Send endpoint event for old transport compatibility
+            endpoint_event = {"type": "endpoint", "endpoint": "/mcp"}
+            await response.write(f"data: {json.dumps(endpoint_event)}\n\n".encode())
+
+            # Keep connection alive with heartbeats
+            while True:
+                await asyncio.sleep(30)
+                heartbeat = {"type": "heartbeat", "timestamp": int(asyncio.get_event_loop().time())}
                 await response.write(f"data: {json.dumps(heartbeat)}\n\n".encode())
 
         except asyncio.CancelledError:
@@ -516,8 +559,14 @@ class HTTPMCPServer:
         logger.info(f"🚀 Starting Standards-Compliant MCP Server on http://{host}:{port}")
         logger.info("📋 Available endpoints:")
         logger.info(f"   - GET  http://{host}:{port}/health")
+        logger.info("   🆕 New Streamable HTTP transport:")
         logger.info(f"   - POST http://{host}:{port}/mcp (JSON-RPC messages)")
         logger.info(f"   - GET  http://{host}:{port}/mcp (SSE stream)")
+        logger.info("   🔄 Backward compatibility (old HTTP+SSE transport):")
+        logger.info(f"   - POST http://{host}:{port}/mcp/initialize")
+        logger.info(f"   - POST http://{host}:{port}/mcp/tools/list")
+        logger.info(f"   - POST http://{host}:{port}/mcp/tools/call")
+        logger.info(f"   - GET  http://{host}:{port}/mcp/sse")
         logger.info("🔒 Security features:")
         logger.info("   - Origin header validation")
         logger.info("   - Localhost binding only")
