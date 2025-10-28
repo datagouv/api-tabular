@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 import aiohttp_cors
 import sentry_sdk
@@ -124,12 +125,19 @@ async def metrics_data_csv(request):
 
 @routes.get(r"/health/")
 async def get_health(request):
-    return web.HTTPOk()
+    """Return health check status"""
+    start_time = request.app["start_time"]
+    current_time = datetime.now(timezone.utc)
+    uptime_seconds = (current_time - start_time).total_seconds()
+    return web.json_response(
+        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
+    )
 
 
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
+        app["start_time"] = datetime.now(timezone.utc)
         app["app_version"] = await get_app_version()
 
         with open("metrics_swagger.yaml", "r") as f:
