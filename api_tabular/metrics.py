@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 import aiohttp_cors
 import sentry_sdk
@@ -124,12 +125,29 @@ async def metrics_data_csv(request):
 
 @routes.get(r"/health/")
 async def get_health(request):
-    return web.HTTPOk()
+    """Return health check status"""
+    # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
+    url = f"{config.PGREST_ENDPOINT}/site"
+    async with request.app["csession"].head(url) as res:
+        if not res.ok:
+            raise QueryException(
+                503,
+                None,
+                "DB unavailable",
+                "postgREST has not started yet",
+            )
+    start_time = request.app["start_time"]
+    current_time = datetime.now(timezone.utc)
+    uptime_seconds = (current_time - start_time).total_seconds()
+    return web.json_response(
+        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
+    )
 
 
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
+        app["start_time"] = datetime.now(timezone.utc)
         app["app_version"] = await get_app_version()
 
         with open("metrics_swagger.yaml", "r") as f:
