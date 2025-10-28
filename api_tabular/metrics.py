@@ -126,6 +126,16 @@ async def metrics_data_csv(request):
 @routes.get(r"/health/")
 async def get_health(request):
     """Return health check status"""
+    # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
+    url = f"{config.PGREST_ENDPOINT}/metric.organizations_total"
+    async with request.app["csession"].head(url) as res:
+        if not res.ok:
+            raise QueryException(
+                503,
+                None,
+                "DB unavailable",
+                "postgREST has not started yet",
+            )
     start_time = request.app["start_time"]
     current_time = datetime.now(timezone.utc)
     uptime_seconds = (current_time - start_time).total_seconds()
