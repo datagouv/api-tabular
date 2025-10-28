@@ -127,7 +127,7 @@ async def metrics_data_csv(request):
 async def get_health(request):
     """Return health check status"""
     # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
-    url = f"{config.PGREST_ENDPOINT}/metric.site"
+    url = f"{config.PGREST_ENDPOINT}/site"
     async with request.app["csession"].head(url) as res:
         if not res.ok:
             raise QueryException(
