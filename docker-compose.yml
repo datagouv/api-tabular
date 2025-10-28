@@ -1,6 +1,6 @@
 services:
   postgrest:
-    image: "postgrest/postgrest:v12.2.3"
+    image: "postgrest/postgrest:v14.0"
     environment:
       # connect to hydra database-csv
       - PGRST_DB_URI=postgres://csvapi:csvapi@postgres-test:5432/csvapi
