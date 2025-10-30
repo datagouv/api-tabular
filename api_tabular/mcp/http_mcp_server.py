@@ -192,8 +192,8 @@ class HTTPMCPServer:
         tools = [
             {
                 "name": "list_datagouv_resources",
-                "description": "Browse all available datasets and resources from data.gouv.fr",
-                "inputSchema": {"type": "object", "properties": {}},
+                "description": "Browse available datasets/resources from data.gouv.fr",
+                "inputSchema": {"type": "object", "properties": {}, "required": []},
             },
             {
                 "name": "ask_datagouv_question",
@@ -486,15 +486,14 @@ class HTTPMCPServer:
             return web.json_response({"error": str(e)}, status=500)
 
     async def _handle_list_datagouv_resources(self) -> CallToolResult:
-        """Handle list_datagouv_resources tool call."""
+        """Handle list_datagouv_resources tool call (simple, nested output)."""
         try:
             if self.resources_config_path.exists():
                 with self.resources_config_path.open("r", encoding="utf-8") as f:
                     resources_data = json.load(f)
-
                 result_text = json.dumps(resources_data, indent=2, ensure_ascii=False)
             else:
-                result_text = "No resources configuration found"
+                result_text = json.dumps([], indent=2, ensure_ascii=False)
 
             return CallToolResult(content=[TextContent(type="text", text=result_text)])
         except Exception as e:
@@ -506,11 +505,38 @@ class HTTPMCPServer:
     async def _handle_ask_datagouv_question(self, question: str, limit: int) -> CallToolResult:
         """Handle ask_datagouv_question tool call."""
         try:
-            # This is a simplified implementation
-            # In a full implementation, this would use the NLP logic from the original server
-            result_text = f"Question: {question}\nLimit: {limit}\n\nThis is a placeholder response. The full NLP and database query functionality would be implemented here."
+            # Minimal implementation: return first N resources with names and IDs
+            items: list[dict] = []
+            if self.resources_config_path.exists():
+                with self.resources_config_path.open("r", encoding="utf-8") as f:
+                    resources_data = json.load(f)
 
-            return CallToolResult(content=[TextContent(type="text", text=result_text)])
+                for dataset in resources_data:
+                    for resource in dataset.get("resources", []):
+                        items.append(
+                            {
+                                "dataset_id": dataset.get("dataset_id"),
+                                "dataset_name": dataset.get("name"),
+                                "resource_id": resource.get("resource_id"),
+                                "resource_name": resource.get("name"),
+                            }
+                        )
+                        if len(items) >= max(0, int(limit)):
+                            break
+                    if len(items) >= max(0, int(limit)):
+                        break
+
+            if not items:
+                text = "No resources found."
+            else:
+                lines = ["Resources:"]
+                for it in items:
+                    lines.append(
+                        f"- {it.get('resource_name') or ''} ({it.get('resource_id') or ''})"
+                    )
+                text = "\n".join(lines)
+
+            return CallToolResult(content=[TextContent(type="text", text=text)])
         except Exception as e:
             return CallToolResult(
                 content=[TextContent(type="text", text=f"Error processing question: {str(e)}")],
