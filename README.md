@@ -464,19 +464,46 @@ For LM Studio, use this configuration:
 }
 ```
 
+### 🧭 Test with MCP Inspector
+
+Use the official MCP Inspector to interactively test the server tools and resources.
+
+Prerequisites:
+- Node.js with `npx` available
+
+Steps:
+1. Start the MCP server (see above):
+   ```bash
+   uv run python api_tabular/mcp/http_mcp_server.py
+   ```
+2. In another terminal, launch the inspector with the provided config:
+   ```bash
+   npx @modelcontextprotocol/inspector --config ./api_tabular/mcp/mcp-config.json --server api-tabular
+   ```
+   - This connects to `http://127.0.0.1:8082/mcp` as defined in `api_tabular/mcp/mcp-config.json`.
+   - If the server port changes, update the config file accordingly.
+
+### 🚚 Transport support
+
+This MCP server implements the Streamable HTTP transport only. STDIO is not supported. SSE (legacy) is not supported.
+
+```
++------------------+-----------------------+------------------------------------------+
+| Transport        | Supported here        | Notes                                    |
++------------------+-----------------------+------------------------------------------+
+| Streamable HTTP  | YES (primary)         | Recommended and future-facing            |
+| STDIO            | NO                    | Not implemented in this server           |
+| SSE (legacy)     | NO                    | Removed (use Streamable HTTP instead)    |
++------------------+-----------------------+------------------------------------------+
+```
+
+Use Streamable HTTP at `http://127.0.0.1:8082/mcp` in clients (e.g. MCP Inspector).
+
 ### 📋 Available Endpoints
 
 **New Streamable HTTP transport (standards-compliant):**
 - `POST /mcp` - JSON-RPC messages (client → server)
 - `GET /mcp` - SSE stream (server → client)
-
-**Backward compatibility (old HTTP+SSE transport):**
-- `POST /mcp/initialize` - Initialize MCP session
-- `POST /mcp/tools/list` - List available tools
-- `POST /mcp/tools/call` - Call a tool
-- `POST /mcp/resources/list` - List available resources
-- `POST /mcp/resources/read` - Read a resource
-- `GET /mcp/sse` - SSE stream for old transport
 
 **Utility:**
 - `GET /health` - Health check
