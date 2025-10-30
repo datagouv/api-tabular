@@ -544,36 +544,26 @@ class HTTPMCPServer:
             )
 
     async def run(self, host: str = "127.0.0.1", port: int = 8082):
-        """Run the HTTP MCP server with security best practices."""
-        logger.info(f"🚀 Starting Standards-Compliant MCP Server on http://{host}:{port}")
+        """Run the HTTP MCP server."""
+        logger.info(f"🚀 Starting Streamable HTTP MCP Server on http://{host}:{port}")
         logger.info("📋 Available endpoints:")
         logger.info(f"   - GET  http://{host}:{port}/health")
         logger.info("   🆕 Streamable HTTP transport:")
         logger.info(f"   - POST http://{host}:{port}/mcp (JSON-RPC messages)")
         logger.info(f"   - GET  http://{host}:{port}/mcp (SSE stream)")
-        logger.info("🔒 Security features:")
-        logger.info("   - Origin header validation")
-        logger.info("   - Localhost binding only")
-        logger.info("   - Session management")
-        logger.info("   - Protocol version support")
-        logger.info("🔧 Test the server:")
-        logger.info(f"   curl http://{host}:{port}/health")
-        logger.info(
-            f'   curl -X POST http://{host}:{port}/mcp -H \'Accept: application/json\' -H \'Content-Type: application/json\' -d \'{{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {{}}}}\''
-        )
 
         runner = web.AppRunner(self.app)
         await runner.setup()
         site = web.TCPSite(runner, host, port)
         await site.start()
 
-        logger.info("✅ HTTP MCP server started successfully!")
+        logger.info("✅ MCP server started")
 
         # Keep the server running
         try:
             await asyncio.Future()  # Run forever
         except KeyboardInterrupt:
-            logger.info("🛑 Shutting down HTTP MCP server...")
+            logger.info("🛑 Shutting down MCP server...")
         finally:
             await runner.cleanup()
 
@@ -581,7 +571,9 @@ class HTTPMCPServer:
 async def main():
     """Main entry point."""
     server = HTTPMCPServer()
-    await server.run()
+    host = os.getenv("MCP_HOST", "127.0.0.1")
+    port = int(os.getenv("MCP_PORT", "8082"))
+    await server.run(host=host, port=port)
 
 
 if __name__ == "__main__":
