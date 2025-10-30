@@ -3,8 +3,6 @@ import asyncio
 import json
 import logging
 import os
-import re
-import unicodedata
 import uuid
 from pathlib import Path
 
@@ -42,8 +40,6 @@ class HTTPMCPServer:
         # New Streamable HTTP transport (standards-compliant)
         self.app.router.add_post("/mcp", self._mcp_endpoint)
         self.app.router.add_get("/mcp", self._mcp_endpoint)
-
-        # Removed legacy SSE/back-compat endpoints
 
         # Health check (non-standard but useful)
         self.app.router.add_get("/health", self._health_check)
@@ -163,8 +159,6 @@ class HTTPMCPServer:
             await response.write_eof()
 
         return response
-
-    # Legacy SSE/back-compat endpoint removed
 
     async def _handle_initialize_request(
         self, data: dict, session_id: str, protocol_version: str
