@@ -6,7 +6,20 @@ PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 50
 BATCH_SIZE = 50000
 DOC_PATH = "/api/doc"
+DATAGOUV_API_BASE_URL = "https://www.data.gouv.fr/api/"
 ALLOW_AGGREGATION = [
     "dddddddd-7777-eeee-8888-ffffffffffff",  # without indexes
     "aaaaaaaa-9999-bbbb-1010-cccccccccccc",  # with indexes
 ]  # list of resource_ids
+
+#
+# List of resource IDs exposed to MCP clients (top sources).
+# One ID per line, with a comment indicating the dataset title for context.
+#
+MCP_AVAILABLE_RESOURCE_IDS = [
+    "4bc7f1b8-4912-40ef-98b7-abd53dca970d",  # ACCO : Accords d'entreprise
+    "0ffc9136-54d7-412a-88c7-4b04c26c8915",  # Annuaire des diagnostiqueurs immobiliers
+    "299bcc8d-c132-468c-a691-01710a88a3da",  # Annuaire des diagnostiqueurs immobiliers
+    "9afa9dd2-c536-4712-821b-b9d990844a1d",  # Annuaire des diagnostiqueurs immobiliers
+    "36fc55a9-bcb8-43bf-9ed6-bd3b4f59f100",  # Annuaire des diagnostiqueurs immobiliers
+]

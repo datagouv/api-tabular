@@ -4,25 +4,18 @@ import json
 import logging
 import os
 import uuid
-from pathlib import Path
 
 from aiohttp import web
 from aiohttp.web import Request, Response
-from mcp.types import (
-    CallToolResult,
-    ListResourcesResult,
-    ListToolsResult,
-    ReadResourceResult,
-    Resource,
-    TextContent,
-    Tool,
-)
+from mcp.types import CallToolResult, TextContent
+
+from api_tabular import config
+from api_tabular.mcp import datagouv_api_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-TOP_RESOURCE_COUNT = 10  # Number of top resources exposed as dedicated tools
+MAX_TOOL_DESCRIPTION_LENGTH = 400  # Maximum length for tool descriptions
 
 
 class HTTPMCPServer:
@@ -32,8 +25,6 @@ class HTTPMCPServer:
         self.app = web.Application()
         self.sessions = {}  # Store active sessions
         self._setup_routes()
-        self.resources_config_path = Path(__file__).parent / "data" / "mcp_available_resources.json"
-        self.pgrest_endpoint = "http://localhost:8081"
 
     def _setup_routes(self):
         """Setup HTTP routes for MCP operations following standards."""
@@ -183,56 +174,67 @@ class HTTPMCPServer:
         response.headers["Mcp-Session-Id"] = session_id
         return response
 
-    def _load_top_resources(self, top_n: int = 3) -> list[dict]:
-        """Load top N resources from the config file (flattened list)."""
-        flattened: list[dict] = []
-        if self.resources_config_path.exists():
-            with self.resources_config_path.open("r", encoding="utf-8") as f:
-                resources_data = json.load(f)
-            for dataset in resources_data:
-                for resource in dataset.get("resources", []):
-                    flattened.append(
-                        {
-                            "dataset_id": dataset.get("dataset_id"),
-                            "dataset_name": dataset.get("name"),
-                            "resource_id": resource.get("resource_id"),
-                            "resource_name": resource.get("name"),
-                        }
-                    )
-        return flattened[: top_n if top_n > 0 else 0]
-
     async def _handle_tools_list_request(self, data: dict, session_id: str) -> Response:
         """Handle tools/list request."""
         if session_id and session_id not in self.sessions:
             return web.Response(status=404, text="Session not found")
 
-        # Build three tools dynamically from top resources
-        top: list[dict] = self._load_top_resources(TOP_RESOURCE_COUNT)
+        # Build tools dynamically from all configured resources
+        import aiohttp
+
         tools = []
-        for item in top:
-            resource_id = item.get("resource_id")
-            resource_name = item.get("resource_name") or "Resource"
-            tools.append(
-                {
-                    "name": f"ask_resource_{resource_id}",
-                    "description": f"Ask a question about: {resource_name}",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "question": {
-                                "type": "string",
-                                "description": "Natural language question about this resource",
+        async with aiohttp.ClientSession() as session:
+            for resource_id in config.MCP_AVAILABLE_RESOURCE_IDS:
+                try:
+                    meta = await datagouv_api_client.get_resource_and_dataset_metadata(
+                        resource_id, session=session
+                    )
+                    res = meta.get("resource", {})
+                    ds = meta.get("dataset", {})
+                    title = (res.get("title") or resource_id).strip()
+                    ds_title = (ds.get("title") or "").strip()
+                    # Prefer description_short if available, fallback to description
+                    ds_desc_short = (ds.get("description_short") or "").strip()
+                    ds_desc = (ds.get("description") or "").strip()
+                    ds_text = ds_desc_short if ds_desc_short else ds_desc
+
+                    # Compose description: "[Resource Title]" from dataset "[Dataset Title]": [Description]
+                    if ds_title and ds_text:
+                        base = f'"{title}" from dataset "{ds_title}": {ds_text}'
+                        description = (
+                            base[:MAX_TOOL_DESCRIPTION_LENGTH] + "..."
+                            if len(base) > MAX_TOOL_DESCRIPTION_LENGTH
+                            else base
+                        )
+                    elif ds_title:
+                        description = f'"{title}" from dataset "{ds_title}"'
+                    else:
+                        description = f'"{title}"'
+                except Exception as e:
+                    logger.warning(f"Failed to fetch metadata for {resource_id}: {e}")
+                    description = f"{resource_id}. Resource from data.gouv.fr"
+
+                tools.append(
+                    {
+                        "name": f"ask_resource_{resource_id.replace('-', '_')}",
+                        "description": description,
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "question": {
+                                    "type": "string",
+                                    "description": "Natural language question about this resource",
+                                },
+                                "limit": {
+                                    "type": "integer",
+                                    "description": "Maximum number of results to return",
+                                    "default": 20,
+                                },
                             },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Optional row limit for previews",
-                                "default": 20,
-                            },
+                            "required": ["question"],
                         },
-                        "required": ["question"],
-                    },
-                }
-            )
+                    }
+                )
 
         response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": {"tools": tools}}
 
@@ -249,7 +251,7 @@ class HTTPMCPServer:
 
         # Match dynamic tools: ask_resource_<resource_id>
         if tool_name and tool_name.startswith("ask_resource_"):
-            resource_id = tool_name.replace("ask_resource_", "", 1)
+            resource_id = tool_name.replace("ask_resource_", "", 1).replace("_", "-")
             question = arguments.get("question", "")
             limit = int(arguments.get("limit", 20))
             call_result = await self._handle_ask_specific_resource(resource_id, question, limit)
@@ -274,22 +276,18 @@ class HTTPMCPServer:
         if session_id and session_id not in self.sessions:
             return web.Response(status=404, text="Session not found")
 
-        # Load resources from JSON file
+        # Build resources list from configured IDs
         resources = []
-        if self.resources_config_path.exists():
-            with self.resources_config_path.open("r", encoding="utf-8") as f:
-                resources_data = json.load(f)
-
-            for dataset in resources_data:
-                for resource in dataset.get("resources", []):
-                    resources.append(
-                        {
-                            "uri": f"resource://{resource['resource_id']}",
-                            "name": resource["name"],
-                            "description": f"Resource from dataset: {dataset['name']}",
-                            "mimeType": "application/json",
-                        }
-                    )
+        ids: list[str] = config.MCP_AVAILABLE_RESOURCE_IDS or []
+        for rid in ids:
+            resources.append(
+                {
+                    "uri": f"resource://{rid}",
+                    "name": rid,
+                    "description": "Configured available resource",
+                    "mimeType": "application/json",
+                }
+            )
 
         response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": {"resources": resources}}
 
@@ -315,203 +313,13 @@ class HTTPMCPServer:
             }
         )
 
-    async def _initialize(self, request: Request) -> Response:
-        """MCP initialize endpoint."""
-        try:
-            data = await request.json()
-            logger.info(f"MCP Initialize request: {data}")
-
-            response = {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}, "resources": {}},
-                "serverInfo": {"name": "api-tabular-mcp", "version": "1.0.0"},
-            }
-            return web.json_response(response)
-        except Exception as e:
-            logger.error(f"Error in initialize: {e}")
-            return web.json_response({"error": str(e)}, status=500)
-
-    async def _list_tools(self, request: Request) -> Response:
-        """List available MCP tools."""
-        try:
-            tools_result = ListToolsResult(
-                tools=[
-                    Tool(
-                        name="list_datagouv_resources",
-                        description="Browse all available datasets and resources from data.gouv.fr",
-                        inputSchema={"type": "object", "properties": {}, "required": []},
-                    ),
-                    Tool(
-                        name="ask_datagouv_question",
-                        description="Ask natural language questions about available datasets and get data results",
-                        inputSchema={
-                            "type": "object",
-                            "properties": {
-                                "question": {
-                                    "type": "string",
-                                    "description": "Natural language question about the data",
-                                },
-                                "limit": {
-                                    "type": "integer",
-                                    "description": "Maximum number of results to return",
-                                    "default": 20,
-                                },
-                            },
-                            "required": ["question"],
-                        },
-                    ),
-                ]
-            )
-
-            # Convert to dict for JSON serialization
-            result_dict = {
-                "tools": [
-                    {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "inputSchema": tool.inputSchema,
-                    }
-                    for tool in tools_result.tools
-                ]
-            }
-
-            return web.json_response(result_dict)
-        except Exception as e:
-            logger.error(f"Error listing tools: {e}")
-            return web.json_response({"error": str(e)}, status=500)
-
-    # Legacy GET tools listing removed
-
-    async def _call_tool(self, request: Request) -> Response:
-        """Handle tool calls."""
-        try:
-            data = await request.json()
-            tool_name = data.get("name")
-            arguments = data.get("arguments", {})
-
-            logger.info(f"Tool call: {tool_name} with args: {arguments}")
-
-            if tool_name == "list_datagouv_resources":
-                result = await self._handle_list_datagouv_resources()
-            elif tool_name == "ask_datagouv_question":
-                question = arguments.get("question", "")
-                limit = arguments.get("limit", 20)
-                result = await self._handle_ask_datagouv_question(question, limit)
-            else:
-                result = CallToolResult(
-                    content=[TextContent(type="text", text=f"Unknown tool: {tool_name}")],
-                    isError=True,
-                )
-
-            # Convert to dict for JSON serialization
-            result_dict = {
-                "content": [
-                    {"type": content.type, "text": content.text} for content in result.content
-                ],
-                "isError": result.isError,
-            }
-
-            return web.json_response(result_dict)
-        except Exception as e:
-            logger.error(f"Error calling tool: {e}")
-            error_result = {
-                "content": [{"type": "text", "text": f"Error: {str(e)}"}],
-                "isError": True,
-            }
-            return web.json_response(error_result, status=500)
-
-    async def _list_resources(self, request: Request) -> Response:
-        """List available resources."""
-        try:
-            # Load resources from JSON file
-            if self.resources_config_path.exists():
-                with self.resources_config_path.open("r", encoding="utf-8") as f:
-                    resources_data = json.load(f)
-
-                resources = []
-                for dataset in resources_data:
-                    for resource in dataset.get("resources", []):
-                        resources.append(
-                            Resource(
-                                uri=f"resource://{resource['resource_id']}",
-                                name=resource["name"],
-                                description=f"Resource from dataset: {dataset['name']}",
-                                mimeType="application/json",
-                            )
-                        )
-
-                result = ListResourcesResult(resources=resources)
-            else:
-                result = ListResourcesResult(resources=[])
-
-            # Convert to dict for JSON serialization
-            result_dict = {
-                "resources": [
-                    {
-                        "uri": str(resource.uri),
-                        "name": resource.name,
-                        "description": resource.description,
-                        "mimeType": resource.mimeType,
-                    }
-                    for resource in result.resources
-                ]
-            }
-
-            return web.json_response(result_dict)
-        except Exception as e:
-            logger.error(f"Error listing resources: {e}")
-            return web.json_response({"error": str(e)}, status=500)
-
-    async def _read_resource(self, request: Request) -> Response:
-        """Read a specific resource."""
-        try:
-            data = await request.json()
-            uri = data.get("uri")
-
-            if not uri or not uri.startswith("resource://"):
-                return web.json_response({"error": "Invalid resource URI"}, status=400)
-
-            resource_id = uri.replace("resource://", "")
-
-            # For now, return a placeholder response
-            # In a full implementation, this would fetch the actual resource data
-            result = ReadResourceResult(
-                contents=[
-                    TextContent(
-                        type="text", text=f"Resource data for {resource_id} would be loaded here"
-                    )
-                ]
-            )
-
-            # Convert to dict for JSON serialization
-            result_dict = {
-                "contents": [
-                    {"type": content.type, "text": content.text} for content in result.contents
-                ]
-            }
-
-            return web.json_response(result_dict)
-        except Exception as e:
-            logger.error(f"Error reading resource: {e}")
-            return web.json_response({"error": str(e)}, status=500)
-
     async def _handle_ask_specific_resource(
         self, resource_id: str, question: str, limit: int
     ) -> CallToolResult:
         """Handle ask_resource_<id> tool calls (minimal v0)."""
         try:
-            # Find resource metadata for nicer title
-            title = resource_id
-            if self.resources_config_path.exists():
-                with self.resources_config_path.open("r", encoding="utf-8") as f:
-                    resources_data = json.load(f)
-                for dataset in resources_data:
-                    for resource in dataset.get("resources", []):
-                        if resource.get("resource_id") == resource_id:
-                            title = resource.get("name") or resource_id
-                            break
             text = (
-                f"Selected resource: {title} ({resource_id})\n"
+                f"Selected resource: {resource_id}\n"
                 f"Question: {question}\n"
                 f"Next step: client should read data for resource://{resource_id} and answer."
             )
