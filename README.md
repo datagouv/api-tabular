@@ -423,7 +423,7 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 ## 🤖 MCP Server
 
-This project includes a Model Context Protocol (MCP) server for natural language access to tabular data.
+This project includes a Model Context Protocol (MCP) server for natural language access to tabular data, using Streamable HTTP transport protocol.
 
 ### Setup and Configuration
 
@@ -442,6 +442,8 @@ This project includes a Model Context Protocol (MCP) server for natural language
    uv run python api_tabular/mcp/http_mcp_server.py
    ```
 
+> Note (production): run behind a TLS reverse proxy and set MCP_HOST/MCP_PORT (e.g., MCP_HOST=0.0.0.0). Optionally restrict allowed origins and add token auth at the proxy.
+
 ### 🚀 Quick Start
 
 1. **Test the server:**
@@ -450,9 +452,9 @@ This project includes a Model Context Protocol (MCP) server for natural language
    curl -X POST http://127.0.0.1:8082/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
    ```
 
-### 🔧 LM Studio Configuration
+### 🔧 MCP client configuration
 
-For LM Studio, use this configuration:
+Use this configuration in MCP-compatible clients (e.g., MCP Inspector, LM Studio, etc.):
 
 ```json
 {
@@ -478,9 +480,9 @@ Steps:
    ```
 2. In another terminal, launch the inspector with the provided config:
    ```bash
-   npx @modelcontextprotocol/inspector --config ./api_tabular/mcp/mcp-config.json --server api-tabular
+   npx @modelcontextprotocol/inspector --config ./api_tabular/mcp/mcp_config.json --server api-tabular
    ```
-   - This connects to `http://127.0.0.1:8082/mcp` as defined in `api_tabular/mcp/mcp-config.json`.
+   - This connects to `http://127.0.0.1:8082/mcp` as defined in `api_tabular/mcp/mcp_config.json`.
    - If the server port changes, update the config file accordingly.
 
 ### 🚚 Transport support
@@ -507,13 +509,6 @@ Use Streamable HTTP at `http://127.0.0.1:8082/mcp` in clients (e.g. MCP Inspecto
 
 **Utility:**
 - `GET /health` - Health check
-
-### 🔒 Security Features
-
-- **Origin header validation** - Prevents DNS rebinding attacks
-- **Localhost binding only** - Binds to 127.0.0.1 for security
-- **Session management** - Secure session IDs with validation
-- **Protocol versioning** - Supports MCP protocol versioning
 
 ### 🛠️ Available Tools
 
