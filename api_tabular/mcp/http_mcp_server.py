@@ -2,6 +2,9 @@
 import asyncio
 import json
 import logging
+import os
+import re
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -511,19 +514,38 @@ class HTTPMCPServer:
                 with self.resources_config_path.open("r", encoding="utf-8") as f:
                     resources_data = json.load(f)
 
+                # Normalize accents helper
+                def normalize_text(value: str) -> str:
+                    value = value or ""
+                    nfkd = unicodedata.normalize("NFKD", value)
+                    no_accents = "".join([c for c in nfkd if not unicodedata.combining(c)])
+                    return no_accents.lower()
+
+                # Extract simple keywords from the normalized question
+                normalized_question = normalize_text(question or "")
+                raw_tokens = re.findall(r"[\w-]+", normalized_question)
+                tokens = [t for t in raw_tokens if len(t) >= 3]
+
+                # Iterate and collect matches; if no tokens, fall back to first N
+                collected = 0
                 for dataset in resources_data:
+                    ds_name = normalize_text(dataset.get("name") or "")
                     for resource in dataset.get("resources", []):
-                        items.append(
-                            {
-                                "dataset_id": dataset.get("dataset_id"),
-                                "dataset_name": dataset.get("name"),
-                                "resource_id": resource.get("resource_id"),
-                                "resource_name": resource.get("name"),
-                            }
-                        )
-                        if len(items) >= max(0, int(limit)):
-                            break
-                    if len(items) >= max(0, int(limit)):
+                        res_name = normalize_text(resource.get("name") or "")
+                        haystack = f"{ds_name} {res_name}"
+                        if not tokens or any(tok in haystack for tok in tokens):
+                            items.append(
+                                {
+                                    "dataset_id": dataset.get("dataset_id"),
+                                    "dataset_name": dataset.get("name"),
+                                    "resource_id": resource.get("resource_id"),
+                                    "resource_name": resource.get("name"),
+                                }
+                            )
+                            collected += 1
+                            if collected >= max(0, int(limit)):
+                                break
+                    if collected >= max(0, int(limit)):
                         break
 
             if not items:
