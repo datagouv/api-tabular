@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-TOP_RESOURCE_COUNT = 3  # Number of top resources exposed as dedicated tools
+TOP_RESOURCE_COUNT = 10  # Number of top resources exposed as dedicated tools
 
 
 class HTTPMCPServer:
@@ -89,7 +89,7 @@ class HTTPMCPServer:
                 return web.Response(status=400, text="Content-Type must be application/json")
 
             # Get protocol version
-            protocol_version = request.headers.get("MCP-Protocol-Version", "2025-03-26")
+            protocol_version = request.headers.get("MCP-Protocol-Version", "2025-06-18")
 
             # Get session ID if present
             session_id = request.headers.get("Mcp-Session-Id")
