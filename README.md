@@ -439,7 +439,7 @@ This project includes a Model Context Protocol (MCP) server for natural language
 4. **Start the HTTP MCP server:**
    ```bash
    # Start the standards-compliant HTTP MCP server (runs on port 8082)
-   uv run python api_tabular/mcp/http_mcp_server.py
+   uv run python api_tabular/mcp/server.py
    ```
 
 > Note (production): run behind a TLS reverse proxy and set MCP_HOST/MCP_PORT (e.g., MCP_HOST=0.0.0.0). Optionally restrict allowed origins and add token auth at the proxy.
@@ -476,7 +476,7 @@ Prerequisites:
 Steps:
 1. Start the MCP server (see above):
    ```bash
-   uv run python api_tabular/mcp/http_mcp_server.py
+   uv run python api_tabular/mcp/server.py
    ```
 2. In another terminal, launch the inspector with the provided config:
    ```bash
@@ -512,8 +512,11 @@ Use Streamable HTTP at `http://127.0.0.1:8082/mcp` in clients (e.g. MCP Inspecto
 
 ### 🛠️ Available Tools
 
-1. **`list_datagouv_resources`** - Browse all available datasets and resources
-2. **`ask_datagouv_question`** - Ask natural language questions about the data
+The MCP server dynamically generates tools based on resources configured in `config.toml` or `config_default.toml` under `MCP_AVAILABLE_RESOURCE_IDS`. Each resource gets its own tool:
+
+- **`ask_resource_{resource_id}`** - Ask natural language questions about a specific resource
+
+Tools include metadata from data.gouv.fr (resource title, dataset title, and description) to help the LLM select the appropriate resource.
 
 ### 🧪 Testing
 
