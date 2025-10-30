@@ -487,7 +487,9 @@ print(f"   - Total resources processed: {total_resources_processed}")
 print(f"   - Resources successfully added to MCP: {total_resources_successful}")
 if args.populate_db:
     print(f"   - Resources excluded from MCP: {total_resources_excluded}")
-    print(f"   - Success rate: {(total_resources_successful/total_resources_processed*100):.1f}%")
+    print(
+        f"   - Success rate: {(total_resources_successful / total_resources_processed * 100):.1f}%"
+    )
 else:
     print("   - All resources included (database population disabled)")
 

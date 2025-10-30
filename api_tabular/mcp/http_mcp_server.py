@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-HTTP-based MCP server that runs as a persistent service.
-This implements the MCP protocol over HTTP for better stability.
-"""
-
 import asyncio
 import json
 import logging
@@ -43,18 +38,7 @@ class HTTPMCPServer:
         self.app.router.add_post("/mcp", self._mcp_endpoint)
         self.app.router.add_get("/mcp", self._mcp_endpoint)
 
-        # Backward compatibility: Old HTTP+SSE transport endpoints
-        self.app.router.add_post("/mcp/initialize", self._initialize)
-        self.app.router.add_post("/mcp/tools/list", self._list_tools)
-        self.app.router.add_post("/mcp/tools/call", self._call_tool)
-        self.app.router.add_post("/mcp/resources/list", self._list_resources)
-        self.app.router.add_post("/mcp/resources/read", self._read_resource)
-        self.app.router.add_get("/mcp/sse", self._sse_endpoint)
-
-        # Legacy endpoints for compatibility
-        self.app.router.add_get("/mcp/tools", self._list_tools_get)
-        self.app.router.add_post("/mcp/list_tools", self._list_tools)
-        self.app.router.add_post("/mcp/call_tool", self._call_tool)
+        # Removed legacy SSE/back-compat endpoints
 
         # Health check (non-standard but useful)
         self.app.router.add_get("/health", self._health_check)
@@ -62,16 +46,25 @@ class HTTPMCPServer:
     async def _validate_origin(self, request: Request) -> bool:
         """Validate Origin header to prevent DNS rebinding attacks."""
         origin = request.headers.get("Origin")
-        if origin:
-            # For local development, allow localhost origins
-            allowed_origins = [
-                "http://localhost:3000",
-                "http://127.0.0.1:3000",
-                "http://localhost:8080",
-                "http://127.0.0.1:8080",
-            ]
-            return origin in allowed_origins
-        return True  # Allow requests without Origin header
+        if not origin:
+            return True  # Allow requests without Origin header
+
+        # Allow common localhost variants and desktop app schemes
+        if origin == "null":
+            return True
+        if origin.startswith("app://"):
+            return True
+        if origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+            return True
+
+        # Backward-compatible explicit allowlist (dev UIs)
+        allowed_origins = {
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        }
+        return origin in allowed_origins
 
     async def _mcp_endpoint(self, request: Request) -> Response:
         """Single MCP endpoint handling both POST and GET requests."""
@@ -89,10 +82,10 @@ class HTTPMCPServer:
     async def _handle_post_request(self, request: Request) -> Response:
         """Handle POST requests (JSON-RPC messages from client)."""
         try:
-            # Check for required headers
-            accept_header = request.headers.get("Accept", "")
-            if "application/json" not in accept_header and "text/event-stream" not in accept_header:
-                return web.Response(status=400, text="Missing required Accept header")
+            # Require JSON payload but don't enforce Accept header (clients often send */* or omit)
+            content_type = request.headers.get("Content-Type", "")
+            if "application/json" not in content_type:
+                return web.Response(status=400, text="Content-Type must be application/json")
 
             # Get protocol version
             protocol_version = request.headers.get("MCP-Protocol-Version", "2025-03-26")
@@ -166,35 +159,7 @@ class HTTPMCPServer:
 
         return response
 
-    async def _sse_endpoint(self, request: Request) -> Response:
-        """SSE endpoint for backward compatibility with old HTTP+SSE transport."""
-        response = web.StreamResponse()
-        response.headers["Content-Type"] = "text/event-stream"
-        response.headers["Cache-Control"] = "no-cache"
-        response.headers["Connection"] = "keep-alive"
-        response.headers["Access-Control-Allow-Origin"] = "*"
-
-        await response.prepare(request)
-
-        try:
-            # Send endpoint event for old transport compatibility
-            endpoint_event = {"type": "endpoint", "endpoint": "/mcp"}
-            await response.write(f"data: {json.dumps(endpoint_event)}\n\n".encode())
-
-            # Keep connection alive with heartbeats
-            while True:
-                await asyncio.sleep(30)
-                heartbeat = {"type": "heartbeat", "timestamp": int(asyncio.get_event_loop().time())}
-                await response.write(f"data: {json.dumps(heartbeat)}\n\n".encode())
-
-        except asyncio.CancelledError:
-            logger.info("SSE connection closed by client")
-        except Exception as e:
-            logger.error(f"SSE error: {e}")
-        finally:
-            await response.write_eof()
-
-        return response
+    # Legacy SSE/back-compat endpoint removed
 
     async def _handle_initialize_request(
         self, data: dict, session_id: str, protocol_version: str
@@ -405,9 +370,7 @@ class HTTPMCPServer:
             logger.error(f"Error listing tools: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
-    async def _list_tools_get(self, request: Request) -> Response:
-        """List tools via GET (legacy endpoint)."""
-        return await self._list_tools(request)
+    # Legacy GET tools listing removed
 
     async def _call_tool(self, request: Request) -> Response:
         """Handle tool calls."""
@@ -559,14 +522,9 @@ class HTTPMCPServer:
         logger.info(f"🚀 Starting Standards-Compliant MCP Server on http://{host}:{port}")
         logger.info("📋 Available endpoints:")
         logger.info(f"   - GET  http://{host}:{port}/health")
-        logger.info("   🆕 New Streamable HTTP transport:")
+        logger.info("   🆕 Streamable HTTP transport:")
         logger.info(f"   - POST http://{host}:{port}/mcp (JSON-RPC messages)")
         logger.info(f"   - GET  http://{host}:{port}/mcp (SSE stream)")
-        logger.info("   🔄 Backward compatibility (old HTTP+SSE transport):")
-        logger.info(f"   - POST http://{host}:{port}/mcp/initialize")
-        logger.info(f"   - POST http://{host}:{port}/mcp/tools/list")
-        logger.info(f"   - POST http://{host}:{port}/mcp/tools/call")
-        logger.info(f"   - GET  http://{host}:{port}/mcp/sse")
         logger.info("🔒 Security features:")
         logger.info("   - Origin header validation")
         logger.info("   - Localhost binding only")
