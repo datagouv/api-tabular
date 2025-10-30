@@ -17,9 +17,54 @@ ALLOW_AGGREGATION = [
 # One ID per line, with a comment indicating the dataset title for context.
 #
 MCP_AVAILABLE_RESOURCE_IDS = [
-    "4bc7f1b8-4912-40ef-98b7-abd53dca970d",  # ACCO : Accords d'entreprise
-    "0ffc9136-54d7-412a-88c7-4b04c26c8915",  # Annuaire des diagnostiqueurs immobiliers
-    "299bcc8d-c132-468c-a691-01710a88a3da",  # Annuaire des diagnostiqueurs immobiliers
-    "9afa9dd2-c536-4712-821b-b9d990844a1d",  # Annuaire des diagnostiqueurs immobiliers
-    "36fc55a9-bcb8-43bf-9ed6-bd3b4f59f100",  # Annuaire des diagnostiqueurs immobiliers
+    "3b6b2281-b9d9-4959-ae9d-c2c166dff118",  # Répertoire national des élus
+    "d5f400de-ae3f-4966-8cb6-a85c70c6c24a",  # Répertoire national des élus
+    "41d95d7d-b172-4636-ac44-32656367cdc7",  # Répertoire national des élus
+    "601ef073-d986-4582-8e1a-ed14dc857fba",  # Répertoire national des élus
+    "430e13f9-834b-4411-a1a8-da0b4b6e715c",  # Répertoire national des élus
+    "a595be27-cfab-4810-b9d4-22e193bffe35",  # Répertoire national des élus
+    "70957bb0-f19f-40c5-b97b-90b3d4d71f9e",  # Répertoire national des élus
+    "b78f8945-509f-4609-a4a7-3048b8370479",  # Répertoire national des élus
+    "1ac42ff4-1336-44f8-a221-832039dbc142",  # Répertoire national des élus
+    "2876a346-d50c-4911-934e-19ee07b0e503",  # Répertoire national des élus
+    "84949a7b-53e0-4d78-9a66-8446f5ab6ad4",  # Répertoire national des élus
+    "41cea915-fa63-46f2-825f-97fa354a26bc",  # Répertoire national des élus
+    "e01dfa84-51e7-41ae-9828-3823d4c887a5",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "cda1eed1-b83b-49aa-8a2a-28d5b400e307",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "68033408-e1c6-4e0d-8eb9-c74be82b3467",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "d9f2cd00-4507-465f-be6c-e699f2fd8888",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "5a4673d7-0b22-4a0c-b3f2-475e4017f32e",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "97d3125e-0c21-457f-8975-1b2045b47248",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "481c073d-28f5-41ce-8956-eb28136f8495",  # Base Adresse Nationale
+    "7c841a55-eac7-4d85-a9d9-a179581beef3",  # Base Adresse Nationale
+    "8737578f-560f-4f98-a347-2a0c5c2f1f8a",  # Base Adresse Nationale
+    "40e010b2-1d37-4180-8dac-f8a34c7737d5",  # Base Adresse Nationale
+    "825f4199-cadd-486c-ac46-a65a8ea1a047",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "350182c9-148a-46e0-8389-76c2ec1374a3",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "d8c31348-8630-4918-b6d1-5dd689b05f29",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "ec0a0d5f-5d52-4603-a712-b6821076abf0",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "88fbb6b4-0320-443e-b739-b4376a012c32",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "2b3a0c79-f97b-46b8-ac02-8be6c1f01a8c",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "0651fb76-bcf3-4f6a-a38d-bc04fa708576",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "a29c1297-1f92-4e2a-8f6b-8c902ce96c5f",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "0835cd60-2c2a-497b-bc64-404de704ce89",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "1b9290ed-d0bc-461f-ba31-0250a99cc140",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "9c4d5d9c-4bbb-4b9c-837a-6155cb589e26",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "6ea8c0d2-a4b9-4ea2-ba63-7ec89c2dd4f4",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "269ca056-4132-4b7a-9b90-b1a65fb7d259",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "e089a8d3-61d6-464a-a241-9cc11bbca618",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "cd90dc24-72cf-4850-b04b-2bff3ba6f734",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "65946639-3150-4492-a988-944e2633531e",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "48e55481-82cf-4d90-9db0-49612e15c36c",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "c813daa5-a259-4a7f-b7dc-7f438a90f08e",  # Base Sirene des entreprises et de leurs établissements (SIREN, SIRET)
+    "4d741143-8331-4b59-95c2-3b24a7bdbe3c",  # Demandes de valeurs foncières
+    "af812b0e-a898-4226-8cc8-5a570b257326",  # Demandes de valeurs foncières
+    "cc8a50e4-c8d1-4ac2-8de2-c1e4b3c44c86",  # Demandes de valeurs foncières
+    "8c8abe23-2a82-4b95-8174-1c1e0734c921",  # Demandes de valeurs foncières
+    "e117fe7d-f7fb-4c52-8089-231e755d19d3",  # Demandes de valeurs foncières
+    "8d771135-57c8-480f-a853-3d1d00ea0b69",  # Demandes de valeurs foncières
+    "087ec735-74fd-48a7-a82e-0b1cd3ea6fe9",  # Demandes de valeurs foncières
+    "99549bdd-91f1-4a99-ac00-855b9a14e5f6",  # Demandes de valeurs foncières
+    "d573456c-76eb-4276-b91c-e6b9c89d6656",  # Demandes de valeurs foncières
+    "2cacd01a-3492-47aa-8750-1b58535ad20b",  # Demandes de valeurs foncières
 ]
