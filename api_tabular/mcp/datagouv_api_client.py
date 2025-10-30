@@ -78,3 +78,32 @@ async def get_resource_and_dataset_metadata(
     finally:
         if own and session:
             await session.close()
+
+
+async def get_resources_for_dataset(
+    dataset_id: str, session: aiohttp.ClientSession | None = None
+) -> dict[str, Any]:
+    """
+    Get all resources for a given dataset.
+
+    Returns:
+        dict with 'dataset' metadata and 'resources' list of resource IDs and titles
+    """
+    own = session is None
+    if own:
+        session = aiohttp.ClientSession()
+    try:
+        ds = await get_dataset_metadata(dataset_id, session=session)
+        # Fetch resources from API v1
+        url = f"{_base_url()}1/datasets/{dataset_id}/"
+        data = await _fetch_json(session, url)
+        resources = data.get("resources", [])
+        res_list = [
+            (res.get("id"), res.get("title", "") or res.get("name", ""))
+            for res in resources
+            if res.get("id")
+        ]
+        return {"dataset": ds, "resources": res_list}
+    finally:
+        if own and session:
+            await session.close()
