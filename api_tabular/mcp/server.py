@@ -20,9 +20,11 @@ from mcp.types import (
     Tool,
 )
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+TOP_RESOURCE_COUNT = 3  # Number of top resources exposed as dedicated tools
 
 
 class HTTPMCPServer:
@@ -187,37 +189,56 @@ class HTTPMCPServer:
         response.headers["Mcp-Session-Id"] = session_id
         return response
 
+    def _load_top_resources(self, top_n: int = 3) -> list[dict]:
+        """Load top N resources from the config file (flattened list)."""
+        flattened: list[dict] = []
+        if self.resources_config_path.exists():
+            with self.resources_config_path.open("r", encoding="utf-8") as f:
+                resources_data = json.load(f)
+            for dataset in resources_data:
+                for resource in dataset.get("resources", []):
+                    flattened.append(
+                        {
+                            "dataset_id": dataset.get("dataset_id"),
+                            "dataset_name": dataset.get("name"),
+                            "resource_id": resource.get("resource_id"),
+                            "resource_name": resource.get("name"),
+                        }
+                    )
+        return flattened[: top_n if top_n > 0 else 0]
+
     async def _handle_tools_list_request(self, data: dict, session_id: str) -> Response:
         """Handle tools/list request."""
         if session_id and session_id not in self.sessions:
             return web.Response(status=404, text="Session not found")
 
-        tools = [
-            {
-                "name": "list_datagouv_resources",
-                "description": "Browse available datasets/resources from data.gouv.fr",
-                "inputSchema": {"type": "object", "properties": {}, "required": []},
-            },
-            {
-                "name": "ask_datagouv_question",
-                "description": "Ask natural language questions about available datasets and get data results",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "question": {
-                            "type": "string",
-                            "description": "Natural language question about the data",
+        # Build three tools dynamically from top resources
+        top: list[dict] = self._load_top_resources(TOP_RESOURCE_COUNT)
+        tools = []
+        for item in top:
+            resource_id = item.get("resource_id")
+            resource_name = item.get("resource_name") or "Resource"
+            tools.append(
+                {
+                    "name": f"ask_resource_{resource_id}",
+                    "description": f"Ask a question about: {resource_name}",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "Natural language question about this resource",
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Optional row limit for previews",
+                                "default": 20,
+                            },
                         },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of results to return",
-                            "default": 20,
-                        },
+                        "required": ["question"],
                     },
-                    "required": ["question"],
-                },
-            },
-        ]
+                }
+            )
 
         response_data = {"jsonrpc": "2.0", "id": data.get("id"), "result": {"tools": tools}}
 
@@ -232,20 +253,12 @@ class HTTPMCPServer:
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
-        if tool_name == "list_datagouv_resources":
-            call_result = await self._handle_list_datagouv_resources()
-            # Convert CallToolResult to dict format for new transport
-            result = {
-                "content": [
-                    {"type": content.type, "text": content.text} for content in call_result.content
-                ],
-                "isError": call_result.isError,
-            }
-        elif tool_name == "ask_datagouv_question":
+        # Match dynamic tools: ask_resource_<resource_id>
+        if tool_name and tool_name.startswith("ask_resource_"):
+            resource_id = tool_name.replace("ask_resource_", "", 1)
             question = arguments.get("question", "")
-            limit = arguments.get("limit", 20)
-            call_result = await self._handle_ask_datagouv_question(question, limit)
-            # Convert CallToolResult to dict format for new transport
+            limit = int(arguments.get("limit", 20))
+            call_result = await self._handle_ask_specific_resource(resource_id, question, limit)
             result = {
                 "content": [
                     {"type": content.type, "text": content.text} for content in call_result.content
@@ -488,80 +501,30 @@ class HTTPMCPServer:
             logger.error(f"Error reading resource: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
-    async def _handle_list_datagouv_resources(self) -> CallToolResult:
-        """Handle list_datagouv_resources tool call (simple, nested output)."""
+    async def _handle_ask_specific_resource(
+        self, resource_id: str, question: str, limit: int
+    ) -> CallToolResult:
+        """Handle ask_resource_<id> tool calls (minimal v0)."""
         try:
+            # Find resource metadata for nicer title
+            title = resource_id
             if self.resources_config_path.exists():
                 with self.resources_config_path.open("r", encoding="utf-8") as f:
                     resources_data = json.load(f)
-                result_text = json.dumps(resources_data, indent=2, ensure_ascii=False)
-            else:
-                result_text = json.dumps([], indent=2, ensure_ascii=False)
-
-            return CallToolResult(content=[TextContent(type="text", text=result_text)])
-        except Exception as e:
-            return CallToolResult(
-                content=[TextContent(type="text", text=f"Error loading resources: {str(e)}")],
-                isError=True,
-            )
-
-    async def _handle_ask_datagouv_question(self, question: str, limit: int) -> CallToolResult:
-        """Handle ask_datagouv_question tool call."""
-        try:
-            # Minimal implementation: return first N resources with names and IDs
-            items: list[dict] = []
-            if self.resources_config_path.exists():
-                with self.resources_config_path.open("r", encoding="utf-8") as f:
-                    resources_data = json.load(f)
-
-                # Normalize accents helper
-                def normalize_text(value: str) -> str:
-                    value = value or ""
-                    nfkd = unicodedata.normalize("NFKD", value)
-                    no_accents = "".join([c for c in nfkd if not unicodedata.combining(c)])
-                    return no_accents.lower()
-
-                # Extract simple keywords from the normalized question
-                normalized_question = normalize_text(question or "")
-                raw_tokens = re.findall(r"[\w-]+", normalized_question)
-                tokens = [t for t in raw_tokens if len(t) >= 3]
-
-                # Iterate and collect matches; if no tokens, fall back to first N
-                collected = 0
                 for dataset in resources_data:
-                    ds_name = normalize_text(dataset.get("name") or "")
                     for resource in dataset.get("resources", []):
-                        res_name = normalize_text(resource.get("name") or "")
-                        haystack = f"{ds_name} {res_name}"
-                        if not tokens or any(tok in haystack for tok in tokens):
-                            items.append(
-                                {
-                                    "dataset_id": dataset.get("dataset_id"),
-                                    "dataset_name": dataset.get("name"),
-                                    "resource_id": resource.get("resource_id"),
-                                    "resource_name": resource.get("name"),
-                                }
-                            )
-                            collected += 1
-                            if collected >= max(0, int(limit)):
-                                break
-                    if collected >= max(0, int(limit)):
-                        break
-
-            if not items:
-                text = "No resources found."
-            else:
-                lines = ["Resources:"]
-                for it in items:
-                    lines.append(
-                        f"- {it.get('resource_name') or ''} ({it.get('resource_id') or ''})"
-                    )
-                text = "\n".join(lines)
-
+                        if resource.get("resource_id") == resource_id:
+                            title = resource.get("name") or resource_id
+                            break
+            text = (
+                f"Selected resource: {title} ({resource_id})\n"
+                f"Question: {question}\n"
+                f"Next step: client should read data for resource://{resource_id} and answer."
+            )
             return CallToolResult(content=[TextContent(type="text", text=text)])
         except Exception as e:
             return CallToolResult(
-                content=[TextContent(type="text", text=f"Error processing question: {str(e)}")],
+                content=[TextContent(type="text", text=f"Error: {str(e)}")],
                 isError=True,
             )
 
