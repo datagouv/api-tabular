@@ -429,16 +429,16 @@ This project uses [pytest](https://pytest.org/) for testing with async support a
 
 ```shell
 # Run all tests
-poetry run pytest
+uv run pytest
 
 # Run specific test file
-poetry run pytest tests/test_api.py
+uv run pytest tests/test_api.py
 
 # Run tests with verbose output
-poetry run pytest -v
+uv run pytest -v
 
 # Run tests and show print statements
-poetry run pytest -s
+uv run pytest -s
 ```
 
 ### Tests Structure
@@ -462,7 +462,7 @@ This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/
 
 ```shell
 # Lint and sort imports, and format code
-poetry run ruff check  --select I --fix && poetry run ruff format
+uv run ruff check  --select I --fix && uv run ruff format
 ```
 
 ### 🔗 Pre-commit Hooks
@@ -471,9 +471,9 @@ This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and
 
 **Install pre-commit hooks:**
 ```shell
-poetry run pre-commit install
+uv run pre-commit install
 ```
-The re-commit hook that automatically:
+The pre-commit hook that automatically:
 - Check YAML syntax
 - Fix end-of-file issues
 - Remove trailing whitespace
@@ -485,15 +485,28 @@ The re-commit hook that automatically:
 **Pull requests cannot be merged unless all CI/CD tests pass.**
 Tests are automatically run on every pull request and push to main branch. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration, and the [🧪 Testing](#-testing) section above for detailed testing commands.
 
-### 📦 Version Management
+### 🏷️ Releases and versioning
 
-The release process uses [bump'X](https://github.com/datagouv/bumpx):
-```shell
-# To perform a dry run of version bumping
-poetry run bumpx -v -d
-# To bump version
-poetry run bumpx
+The release process uses the [`tag_version.sh`](tag_version.sh) script to create git tags, GitHub releases and update [CHANGELOG.md](CHANGELOG.md) automatically. Package version numbers are automatically derived from git tags using [setuptools_scm](https://github.com/pypa/setuptools_scm), so no manual version updates are needed in `pyproject.toml`.
+
+**Prerequisites**: [GitHub CLI](https://cli.github.com/) must be installed and authenticated, and you must be on the main branch with a clean working directory.
+
+```bash
+# Create a new release
+./tag_version.sh <version>
+
+# Example
+./tag_version.sh 2.5.0
+
+# Dry run to see what would happen
+./tag_version.sh 2.5.0 --dry-run
 ```
+
+The script automatically:
+- Extracts commits since the last tag and formats them for CHANGELOG.md
+- Identifies breaking changes (commits with `!:` in the subject)
+- Creates a git tag and pushes it to the remote repository
+- Creates a GitHub release with the changelog content
 
 ## 📄 License
 
