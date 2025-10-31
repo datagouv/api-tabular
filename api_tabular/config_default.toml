@@ -1,4 +1,4 @@
-PGREST_ENDPOINT = "http://localhost:8081"
+PGREST_ENDPOINT = "http://localhost:8080"
 SERVER_NAME = "localhost:8005"
 SCHEME = "http"
 SENTRY_DSN = ""
