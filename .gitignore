@@ -75,8 +75,10 @@ coverage.xml
 .noseids
 Procfile
 
-# PyCharm
+# IDEs
 .idea
+.vscode
+.cursor
 
 # Config
 config.toml

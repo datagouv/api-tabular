@@ -22,20 +22,21 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 1. **Start the Infrastructure**
 
-   Start this project via `docker compose`:
+   Start the test CSV database and test PostgREST container:
    ```shell
-   docker compose up
+   docker compose --profile test up -d
    ```
-
-   This starts PostgREST container and PostgreSQL container with fake test data. You can access the raw PostgREST API on http://localhost:8080.
+   The `--profile test` flag tells Docker Compose to start the PostgREST and PostgreSQL services for the test CSV database. This starts PostgREST on port 8080, connecting to the test CSV database. You can access the raw PostgREST API on http://localhost:8080.
 
 2. **Launch the main API proxy**
 
    Install dependencies and start the proxy services:
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-   uv run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
+   uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
+   uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
+   # Optional: MCP server
+   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -53,27 +54,32 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
 
-1. **Configure the PostgREST endpoint** to point to your Hydra database:
+1. **Start the real Hydra CSV database locally:**
 
+   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
+
+2. **Start PostgREST pointing to your local Hydra database:**
    ```shell
-   export PGREST_ENDPOINT="http://your-hydra-postgrest:8080"
+   docker compose --profile hydra up -d
+   ```
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for the real Hydra CSV database (instead of the test services). This starts PostgREST on port 8080, connecting to your local Hydra CSV database.
+
+3. **Configure the API to use it:**
+   ```shell
+   export PGREST_ENDPOINT="http://localhost:8080"
    ```
 
-   Or create a `config.toml` file:
-   ```toml
-   PGREST_ENDPOINT = "http://your-hydra-postgrest:8080"
-   ```
-
-2. **Start only the API services** (skip the fake database):
+4. **Start the API services:**
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/app.py
-   uv run adev runserver -p8006 api_tabular/metrics.py
+   uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
+   uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
+   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
    ```
 
-3. **Use real resource IDs** from your Hydra database instead of the test IDs.
+5. **Use real resource IDs** from your Hydra database instead of the test IDs.
 
-**Note:** Make sure your Hydra PostgREST instance is accessible and the database schema matches the expected structure (tables in the `csvapi` schema).
+**Note:** Make sure your Hydra CSV database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
 
 
 ## 📚 API Documentation
@@ -421,9 +427,120 @@ Create a `config.toml` file in the project root or set the `CSVAPI_SETTINGS` env
 export CSVAPI_SETTINGS="/path/to/your/config.toml"
 ```
 
+## 🤖 MCP Server
+
+This project includes a Model Context Protocol (MCP) server for natural language access to tabular data, using Streamable HTTP transport protocol.
+
+### Setup and Configuration
+
+1. **Start the real Hydra CSV database locally:**
+
+   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
+
+2. **Start PostgREST pointing to your local Hydra database:**
+   ```shell
+   docker compose --profile hydra up -d
+   ```
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for the real Hydra CSV database. This starts PostgREST on port 8080, connecting to your local Hydra CSV database.
+
+3. **Configure the API endpoint:**
+   ```shell
+   export PGREST_ENDPOINT="http://localhost:8080"
+   ```
+
+4. **Start the HTTP MCP server:**
+   ```bash
+   uv run adev runserver -p8007 api_tabular/mcp/server.py
+   ```
+   The MCP server runs on port 8007 by default (or use `MCP_PORT` environment variable).
+
+> Note (production): run behind a TLS reverse proxy and set MCP_HOST/MCP_PORT (e.g., MCP_HOST=0.0.0.0). Optionally restrict allowed origins and add token auth at the proxy.
+
+### 🚀 Quick Start
+
+1. **Test the server:**
+   ```bash
+   curl http://127.0.0.1:8007/health
+   curl -X POST http://127.0.0.1:8007/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
+   ```
+
+### 🔧 MCP client configuration
+
+Use this configuration in MCP-compatible clients (e.g., MCP Inspector, LM Studio, etc.):
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "url": "http://127.0.0.1:8007/mcp"
+    }
+  }
+}
+```
+
+### 🧭 Test with MCP Inspector
+
+Use the official MCP Inspector to interactively test the server tools and resources.
+
+Prerequisites:
+- Node.js with `npx` available
+
+Steps:
+1. Start the MCP server (see above):
+   ```bash
+   uv run adev runserver -p8007 api_tabular/mcp/server.py
+   ```
+2. In another terminal, launch the inspector with the provided config:
+   ```bash
+   npx @modelcontextprotocol/inspector --config ./api_tabular/mcp/mcp_config.json --server api-tabular
+   ```
+   - This connects to `http://127.0.0.1:8007/mcp` as defined in `api_tabular/mcp/mcp_config.json`.
+   - If the server port changes, update the config file accordingly.
+
+### 🚚 Transport support
+
+This MCP server implements the Streamable HTTP transport only. STDIO is not supported. SSE (legacy) is not supported.
+
+```
++------------------+-----------------------+------------------------------------------+
+| Transport        | Supported here        | Notes                                    |
++------------------+-----------------------+------------------------------------------+
+| Streamable HTTP  | YES (primary)         | Recommended and future-facing            |
+| STDIO            | NO                    | Not implemented in this server           |
+| SSE (legacy)     | NO                    | Removed (use Streamable HTTP instead)    |
++------------------+-----------------------+------------------------------------------+
+```
+
+Use Streamable HTTP at `http://127.0.0.1:8007/mcp` in clients (e.g. MCP Inspector).
+
+### 📋 Available Endpoints
+
+**New Streamable HTTP transport (standards-compliant):**
+- `POST /mcp` - JSON-RPC messages (client → server)
+- `GET /mcp` - SSE stream (server → client)
+
+**Utility:**
+- `GET /health` - Health check
+
+### 🛠️ Available Tools
+
+The MCP server dynamically generates tools based on resources configured in `config.toml` or `config_default.toml` under `MCP_AVAILABLE_RESOURCE_IDS`. Each resource gets its own tool:
+
+- **`ask_resource_{resource_id}`** - Ask natural language questions about a specific resource
+
+Tools include metadata from data.gouv.fr (resource title, dataset title, and description) to help the LLM select the appropriate resource.
+
+### 🧪 Testing
+
+```bash
+# Test the HTTP MCP server
+uv run python api_tabular/mcp/test_mcp.py
+```
+
+
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
 
 ### Running Tests
 
