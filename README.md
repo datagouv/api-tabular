@@ -22,12 +22,11 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 1. **Start the Infrastructure**
 
-   Start this project via `docker compose`:
+   Start the test CSV database and test PostgREST container:
    ```shell
-   docker compose up
+   docker compose --profile test up -d
    ```
-
-   This starts PostgREST container and PostgreSQL container with fake test data. You can access the raw PostgREST API on http://localhost:8080.
+   The `--profile test` flag tells Docker Compose to start the PostgREST and PostgreSQL services for the test CSV database. This starts PostgREST on port 8080, connecting to the test CSV database. You can access the raw PostgREST API on http://localhost:8080.
 
 2. **Launch the main API proxy**
 
@@ -53,27 +52,31 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
 
-1. **Configure the PostgREST endpoint** to point to your Hydra database:
+1. **Start the real Hydra CSV database locally:**
 
+   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
+
+2. **Start PostgREST pointing to your local Hydra database:**
    ```shell
-   export PGREST_ENDPOINT="http://your-hydra-postgrest:8080"
+   docker compose --profile hydra up -d
+   ```
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for the real Hydra CSV database (instead of the test services). This starts PostgREST on port 8080, connecting to your local Hydra CSV database.
+
+3. **Configure the API to use it:**
+   ```shell
+   export PGREST_ENDPOINT="http://localhost:8080"
    ```
 
-   Or create a `config.toml` file:
-   ```toml
-   PGREST_ENDPOINT = "http://your-hydra-postgrest:8080"
-   ```
-
-2. **Start only the API services** (skip the fake database):
+4. **Start the API services:**
    ```shell
    uv sync
    uv run adev runserver -p8005 api_tabular/tabular/app.py
    uv run adev runserver -p8006 api_tabular/metrics/app.py
    ```
 
-3. **Use real resource IDs** from your Hydra database instead of the test IDs.
+5. **Use real resource IDs** from your Hydra database instead of the test IDs.
 
-**Note:** Make sure your Hydra PostgREST instance is accessible and the database schema matches the expected structure (tables in the `csvapi` schema).
+**Note:** Make sure your Hydra CSV database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
 
 
 ## 📚 API Documentation
@@ -441,7 +444,7 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two tests containers running for the tests to run.
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
 
 ### Running Tests
 
