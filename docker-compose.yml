@@ -1,5 +1,23 @@
 services:
+  # PostgREST for real Hydra database (used for development with real data)
   postgrest:
+    image: "postgrest/postgrest:v14.0"
+    environment:
+      # Connect to Hydra CSV database
+      - PGRST_DB_URI=postgres://postgres:postgres@host.docker.internal:5434/postgres
+      - PGRST_SERVER_PORT=8080
+      - PGRST_DB_ANON_ROLE=postgres
+      - PGRST_DB_SCHEMA=public
+      - PGRST_DB_AGGREGATES_ENABLED=true
+    ports:
+      - 8080:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - hydra
+
+  # PostgREST for test database (used for running tests)
+  postgrest-test:
     image: "postgrest/postgrest:v14.0"
     environment:
       # connect to hydra database-csv
@@ -13,6 +31,10 @@ services:
       - 8080:8080
     depends_on:
       - postgres-test
+    profiles:
+      - test
+
+  # Test database (used for running tests)
   postgres-test:
     image: "postgres:15"
     volumes:
@@ -23,3 +45,5 @@ services:
       - POSTGRES_DB=csvapi
       - POSTGRES_USER=csvapi
       - POSTGRES_PASSWORD=csvapi
+    profiles:
+      - test
