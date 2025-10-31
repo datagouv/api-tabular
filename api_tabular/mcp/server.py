@@ -330,38 +330,29 @@ class HTTPMCPServer:
                 isError=True,
             )
 
-    async def run(self, host: str = "127.0.0.1", port: int = 8082):
-        """Run the HTTP MCP server."""
-        logger.info(f"🚀 Starting Streamable HTTP MCP Server on http://{host}:{port}")
+
+async def app_factory():
+    """App factory for use with adev runserver."""
+    server = HTTPMCPServer()
+
+    async def on_startup(app):
+        """Log startup information."""
+        logger.info("🚀 Starting Streamable HTTP MCP Server")
         logger.info("📋 Available endpoints:")
-        logger.info(f"   - GET  http://{host}:{port}/health")
-        logger.info("   🆕 Streamable HTTP transport:")
-        logger.info(f"   - POST http://{host}:{port}/mcp (JSON-RPC messages)")
-        logger.info(f"   - GET  http://{host}:{port}/mcp (SSE stream)")
-
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
-        await site.start()
-
+        logger.info("   - GET  /health")
+        logger.info("🆕 Streamable HTTP transport:")
+        logger.info("   - POST /mcp (JSON-RPC messages)")
+        logger.info("   - GET  /mcp (SSE stream)")
         logger.info("✅ MCP server started")
 
-        # Keep the server running
-        try:
-            await asyncio.Future()  # Run forever
-        except KeyboardInterrupt:
-            logger.info("🛑 Shutting down MCP server...")
-        finally:
-            await runner.cleanup()
+    server.app.on_startup.append(on_startup)
+    return server.app
 
 
-async def main():
-    """Main entry point."""
-    server = HTTPMCPServer()
-    host = os.getenv("MCP_HOST", "127.0.0.1")
-    port = int(os.getenv("MCP_PORT", "8082"))
-    await server.run(host=host, port=port)
+def run():
+    """Run the application."""
+    web.run_app(app_factory(), path=os.environ.get("CSVAPI_APP_SOCKET_PATH"))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run()
