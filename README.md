@@ -430,15 +430,21 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 ### Setup and Configuration
 
-1. **Set up Hydra database externally**
-2. **Set PGREST_ENDPOINT environment variable:**
+1. **Start the real Hydra CSV database locally:**
+
+   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
+
+2. **Start PostgREST pointing to your local Hydra database:**
    ```shell
-   export PGREST_ENDPOINT="http://localhost:8081"
+   docker compose --profile hydra up -d
    ```
-3. **Launch PostgREST:**
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for the real Hydra CSV database. This starts PostgREST on port 8080, connecting to your local Hydra CSV database.
+
+3. **Configure the API endpoint:**
    ```shell
-   docker compose -f docker-compose-hydra.yml up -d
+   export PGREST_ENDPOINT="http://localhost:8080"
    ```
+
 4. **Start the HTTP MCP server:**
    ```bash
    # Start the standards-compliant HTTP MCP server (runs on port 8082)
