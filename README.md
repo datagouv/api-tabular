@@ -76,7 +76,7 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
 
 5. **Use real resource IDs** from your Hydra database instead of the test IDs.
 
-**Note:** Make sure your Hydra database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
+**Note:** Make sure your Hydra CSV database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
 
 
 ## 📚 API Documentation
@@ -537,7 +537,7 @@ uv run python api_tabular/mcp/test_mcp.py
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
+This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
 
 ### Running Tests
 
