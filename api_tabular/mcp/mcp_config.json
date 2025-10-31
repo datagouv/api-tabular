@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "api-tabular": {
-      "url": "http://127.0.0.1:8082/mcp"
+      "url": "http://127.0.0.1:8007/mcp"
     }
   }
 }

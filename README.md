@@ -33,8 +33,10 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    Install dependencies and start the proxy services:
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/app.py        # Api related to apified CSV files by udata-hydra
-   uv run adev runserver -p8006 api_tabular/metrics.py    # Api related to udata's metrics
+   uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
+   uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
+   # Optional: MCP server
+   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -70,8 +72,9 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
 4. **Start the API services:**
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/app.py
-   uv run adev runserver -p8006 api_tabular/metrics.py
+   uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
+   uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
+   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
    ```
 
 5. **Use real resource IDs** from your Hydra database instead of the test IDs.
@@ -447,9 +450,9 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 4. **Start the HTTP MCP server:**
    ```bash
-   # Start the standards-compliant HTTP MCP server (runs on port 8082)
-   uv run python api_tabular/mcp/server.py
+   uv run adev runserver -p8007 api_tabular/mcp/server.py
    ```
+   The MCP server runs on port 8007 by default (or use `MCP_PORT` environment variable).
 
 > Note (production): run behind a TLS reverse proxy and set MCP_HOST/MCP_PORT (e.g., MCP_HOST=0.0.0.0). Optionally restrict allowed origins and add token auth at the proxy.
 
@@ -457,8 +460,8 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 1. **Test the server:**
    ```bash
-   curl http://127.0.0.1:8082/health
-   curl -X POST http://127.0.0.1:8082/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
+   curl http://127.0.0.1:8007/health
+   curl -X POST http://127.0.0.1:8007/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
    ```
 
 ### 🔧 MCP client configuration
@@ -469,7 +472,7 @@ Use this configuration in MCP-compatible clients (e.g., MCP Inspector, LM Studio
 {
   "mcpServers": {
     "api-tabular": {
-      "url": "http://127.0.0.1:8082/mcp"
+      "url": "http://127.0.0.1:8007/mcp"
     }
   }
 }
@@ -485,13 +488,13 @@ Prerequisites:
 Steps:
 1. Start the MCP server (see above):
    ```bash
-   uv run python api_tabular/mcp/server.py
+   uv run adev runserver -p8007 api_tabular/mcp/server.py
    ```
 2. In another terminal, launch the inspector with the provided config:
    ```bash
    npx @modelcontextprotocol/inspector --config ./api_tabular/mcp/mcp_config.json --server api-tabular
    ```
-   - This connects to `http://127.0.0.1:8082/mcp` as defined in `api_tabular/mcp/mcp_config.json`.
+   - This connects to `http://127.0.0.1:8007/mcp` as defined in `api_tabular/mcp/mcp_config.json`.
    - If the server port changes, update the config file accordingly.
 
 ### 🚚 Transport support
@@ -508,7 +511,7 @@ This MCP server implements the Streamable HTTP transport only. STDIO is not supp
 +------------------+-----------------------+------------------------------------------+
 ```
 
-Use Streamable HTTP at `http://127.0.0.1:8082/mcp` in clients (e.g. MCP Inspector).
+Use Streamable HTTP at `http://127.0.0.1:8007/mcp` in clients (e.g. MCP Inspector).
 
 ### 📋 Available Endpoints
 
