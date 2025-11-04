@@ -530,7 +530,7 @@ The MCP server dynamically generates tools based on resources configured in `con
 
 Tools include metadata from data.gouv.fr (resource title, dataset title, and description) to help the LLM select the appropriate resource.
 
-### 🧪 Testing
+### 🧪 Test the MCP server
 
 ```bash
 # Test the HTTP MCP server
