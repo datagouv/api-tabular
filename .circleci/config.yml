@@ -38,9 +38,9 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Start containers
+          name: Start test containers
           command: |
-            docker compose up -d
+            docker compose --profile test up -d
       - run:
           name: Wait for PostgreSQL to be ready
           command: |
