@@ -60,7 +60,7 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
    ```shell
    docker compose --profile hydra up -d
    ```
-   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for the real Hydra CSV database (instead of the test services). By default, this starts PostgREST on port 8080. You can customize the port using the `PGREST_PORT` environment variable:
+   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for a local real Hydra CSV database (instead of the test one provided by the docker compose in this repo). By default, this starts PostgREST on port 8080. You can customize the port using the `PGREST_PORT` environment variable:
    ```shell
    # Use default port 8080
    docker compose --profile hydra up -d
