@@ -8,12 +8,24 @@ from aiohttp.web_response import Response
 from api_tabular import config
 
 TYPE_POSSIBILITIES = {
-    "string": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
+    "string": [
+        "compare",
+        "contains",
+        "notcontains",
+        "differs",
+        "exact",
+        "in",
+        "notin",
+        "sort",
+        "groupby",
+        "count",
+    ],
     "float": [
         "compare",
         "differs",
         "exact",
         "in",
+        "notin",
         "sort",
         "groupby",
         "count",
@@ -27,6 +39,7 @@ TYPE_POSSIBILITIES = {
         "differs",
         "exact",
         "in",
+        "notin",
         "sort",
         "groupby",
         "count",
@@ -35,10 +48,33 @@ TYPE_POSSIBILITIES = {
         "min",
         "sum",
     ],
-    "bool": ["differs", "exact", "in", "sort", "groupby", "count"],
-    "date": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
-    "datetime": ["compare", "contains", "differs", "exact", "in", "sort", "groupby", "count"],
-    "json": ["contains", "differs", "exact", "in", "groupby", "count"],
+    "bool": ["differs", "exact", "sort", "groupby", "count"],
+    "date": [
+        "compare",
+        "contains",
+        "notcontains",
+        "differs",
+        "exact",
+        "in",
+        "notin",
+        "sort",
+        "groupby",
+        "count",
+    ],
+    "datetime": [
+        "compare",
+        "contains",
+        "notcontains",
+        "differs",
+        "exact",
+        "in",
+        "notin",
+        "sort",
+        "groupby",
+        "count",
+    ],
+    # TODO: JSON needs special treatment for operators to work
+    "json": [],
 }
 
 MAP_TYPES = {
@@ -61,9 +97,17 @@ OPERATORS_DESCRIPTIONS = {
         "name": "{}__contains",
         "description": "String contains in column: {} ({}__contains=value)",
     },
+    "notcontains": {
+        "name": "{}__notcontains",
+        "description": "String does not contain in column: {} ({}__notcontains=value)",
+    },
     "in": {
         "name": "{}__in",
         "description": "Value in list in column: {} ({}__in=value1,value2,...)",
+    },
+    "notin": {
+        "name": "{}__notin",
+        "description": "Value not in list in column: {} ({}__notin=value1,value2,...)",
     },
     "groupby": {
         "name": "{}__groupby",
@@ -114,7 +158,7 @@ def build_sql_query_string(
     request_arg: list,
     resource_id: str | None = None,
     indexes: set | None = None,
-    page_size: int = None,
+    page_size: int | None = None,
     offset: int = 0,
 ) -> str:
     sql_query = []
@@ -190,8 +234,12 @@ def add_filter(argument: str, value: str, indexes: set | None) -> tuple[str | No
             return f"{column}=neq.{value}", False
         elif normalized_comparator == "contains":
             return f"{column}=ilike.*{value}*", False
+        elif normalized_comparator == "notcontains":
+            return f"{column}=not.ilike.*{value}*", False
         elif normalized_comparator == "in":
             return f"{column}=in.({value})", False
+        elif normalized_comparator == "notin":
+            return f"{column}=not.in.({value})", False
         elif normalized_comparator == "less":
             return f"{column}=lte.{value}", False
         elif normalized_comparator == "greater":
