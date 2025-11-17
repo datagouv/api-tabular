@@ -75,8 +75,9 @@ coverage.xml
 .noseids
 Procfile
 
-# PyCharm
+# editor
 .idea
+.vscode/
 
 # Config
 config.toml
