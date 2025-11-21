@@ -210,7 +210,7 @@ Returns OpenAPI/Swagger documentation specific to this resource.
 
 ### Query Operators
 
-The data endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameter):
+The data endpoint can be queried with the following operators as query string (replacing `column_name` with the name of an actual column), if the column type allows it (see the swagger for each column's allowed parameters):
 
 #### Filtering Operators
 ```
@@ -220,11 +220,17 @@ column_name__exact=value
 # differs
 column_name__differs=value
 
-# contains (for strings only)
+# contains
 column_name__contains=value
+
+# notcontains (value does not contain)
+column_name__notcontains=value
 
 # in (value in list)
 column_name__in=value1,value2,value3
+
+# notin (value not in list)
+column_name__notin=value1,value2,value3
 
 # less
 column_name__less=value
@@ -270,6 +276,8 @@ column_name__sum
 ```
 
 > **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
+
+> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now.
 
 #### Pagination
 ```

@@ -308,7 +308,9 @@ async def test_api_exception_resource_no_indexes(client, base_url, tables_index_
     assert res.status == 200
 
     # checking that the resource can be filtered on all columns
-    for col in detection["columns"].keys():
+    for col, results in detection["columns"].items():
+        if results["python_type"] == "json":
+            continue
         res = await client.get(
             f"{base_url}/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
@@ -316,7 +318,9 @@ async def test_api_exception_resource_no_indexes(client, base_url, tables_index_
 
     # if aggregation is allowed:
     # checking whether aggregation is allowed on all columns or none
-    for col in detection["columns"].keys():
+    for col, results in detection["columns"].items():
+        if results["python_type"] == "json":
+            continue
         res = await client.get(
             f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
