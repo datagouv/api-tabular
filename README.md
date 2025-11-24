@@ -466,17 +466,74 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 ### 🔧 MCP client configuration
 
-Use this configuration in MCP-compatible clients (e.g., MCP Inspector, LM Studio, etc.):
+The MCP server configuration depends on your client. Use the appropriate configuration format for your client:
+
+#### Gemini CLI
+
+```bash
+gemini mcp add --transport http api-tabular http://127.0.0.1:8007/mcp
+```
+
+Alternatively, add the following to your `~/.gemini/settings.json` file:
 
 ```json
 {
   "mcpServers": {
     "api-tabular": {
-      "url": "http://127.0.0.1:8007/mcp"
+      "httpUrl": "http://127.0.0.1:8007/mcp"
     }
   }
 }
 ```
+
+#### Claude Desktop
+
+Add the following to your Claude Desktop configuration file (typically `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://127.0.0.1:8007/mcp"
+      ]
+    }
+  }
+}
+```
+
+#### VS Code
+
+Add the following to your VS Code `settings.json`:
+
+```json
+{
+  "servers": {
+    "api-tabular": {
+      "url": "http://127.0.0.1:8007/mcp",
+      "type": "http"
+    }
+  }
+}
+```
+
+#### Windsurf
+
+Add the following to your `~/.codeium/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "api-tabular": {
+      "serverUrl": "http://127.0.0.1:8007/mcp"
+    }
+  }
+}
+```
+
+**Note:** Replace `http://127.0.0.1:8007/mcp` with your actual server URL if running on a different host or port. For production deployments, use `https://` and configure the appropriate hostname.
 
 ### 🧭 Test with MCP Inspector
 
