@@ -468,6 +468,8 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 The MCP server configuration depends on your client. Use the appropriate configuration format for your client:
 
+> **Note:** If you want to create or modify datasets/resources, you'll need a data.gouv.fr API key. You can get one from your [profile settings](https://www.data.gouv.fr/fr/account/). Add it to your client configuration as shown in the examples below.
+
 #### Gemini CLI
 
 ```bash
@@ -480,7 +482,10 @@ Alternatively, add the following to your `~/.gemini/settings.json` file:
 {
   "mcpServers": {
     "api-tabular": {
-      "httpUrl": "http://127.0.0.1:8007/mcp"
+      "httpUrl": "http://127.0.0.1:8007/mcp",
+      "args": {
+        "apiKey": "your-data-gouv-api-key-here"
+      }
     }
   }
 }
@@ -497,8 +502,29 @@ Add the following to your Claude Desktop configuration file (typically `~/Librar
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://127.0.0.1:8007/mcp"
+        "http://127.0.0.1:8007/mcp",
+        "--header",
+        "X-MCP-Config: {\"apiKey\":\"your-data-gouv-api-key-here\"}"
       ]
+    }
+  }
+}
+```
+
+Or if your client supports direct configuration:
+
+```json
+{
+  "mcpServers": {
+    "data-gouv": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://127.0.0.1:8007/mcp"
+      ],
+      "config": {
+        "apiKey": "your-data-gouv-api-key-here"
+      }
     }
   }
 }
@@ -513,7 +539,10 @@ Add the following to your VS Code `settings.json`:
   "servers": {
     "data-gouv": {
       "url": "http://127.0.0.1:8007/mcp",
-      "type": "http"
+      "type": "http",
+      "config": {
+        "apiKey": "your-data-gouv-api-key-here"
+      }
     }
   }
 }
@@ -527,7 +556,10 @@ Add the following to your `~/.codeium/mcp_config.json`:
 {
   "mcpServers": {
     "data-gouv": {
-      "serverUrl": "http://127.0.0.1:8007/mcp"
+      "serverUrl": "http://127.0.0.1:8007/mcp",
+      "config": {
+        "apiKey": "your-data-gouv-api-key-here"
+      }
     }
   }
 }
@@ -546,13 +578,19 @@ Cursor supports MCP servers through its settings. To configure the server:
   "mcpServers": {
     "data-gouv": {
       "url": "http://127.0.0.1:8007/mcp",
-      "transport": "http"
+      "transport": "http",
+      "config": {
+        "apiKey": "your-data-gouv-api-key-here"
+      }
     }
   }
 }
 ```
 
-**Note:** Replace `http://127.0.0.1:8007/mcp` with your actual server URL if running on a different host or port. For production deployments, use `https://` and configure the appropriate hostname.
+**Note:**
+- Replace `http://127.0.0.1:8007/mcp` with your actual server URL if running on a different host or port. For production deployments, use `https://` and configure the appropriate hostname.
+- Replace `your-data-gouv-api-key-here` with your actual API key from [data.gouv.fr account settings](https://www.data.gouv.fr/fr/account/).
+- The API key is only required for tools that create or modify datasets/resources. Read-only operations (like `search_datasets`) work without an API key.
 
 ### 🧭 Test with MCP Inspector
 

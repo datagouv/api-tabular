@@ -6,7 +6,7 @@ PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 50
 BATCH_SIZE = 50000
 DOC_PATH = "/api/doc"
-DATAGOUV_API_BASE_URL = "https://www.data.gouv.fr/api/"
+DATAGOUV_API_BASE_URL = "https://demo.data.gouv.fr/api/"
 ALLOW_AGGREGATION = [
     "dddddddd-7777-eeee-8888-ffffffffffff",  # without indexes
     "aaaaaaaa-9999-bbbb-1010-cccccccccccc",  # with indexes
