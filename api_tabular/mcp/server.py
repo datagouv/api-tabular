@@ -57,4 +57,25 @@ async def search_datasets(query: str, page: int = 1, page_size: int = 20) -> str
 
 # Run with streamable HTTP transport
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    import os
+    import sys
+
+    # Get port from environment variable
+    if "MCP_PORT" not in os.environ:
+        print("Error: MCP_PORT environment variable must be set", file=sys.stderr)
+        print("Usage: MCP_PORT=8007 uv run api_tabular/mcp/server.py", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        port = int(os.environ["MCP_PORT"])
+    except ValueError:
+        print(
+            f"Error: Invalid MCP_PORT environment variable: {os.environ['MCP_PORT']}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Use uvicorn to run the Starlette app with custom port
+    import uvicorn
+
+    uvicorn.run(mcp.streamable_http_app(), host="0.0.0.0", port=port, log_level="info")

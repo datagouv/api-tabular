@@ -449,19 +449,13 @@ This project includes a Model Context Protocol (MCP) server for natural language
    ```
 
 4. **Start the HTTP MCP server:**
+
+   The port must be specified via the `MCP_PORT` environment variable:
    ```bash
-   uv run api_tabular/mcp/server.py
-   ```
-   The MCP server runs on port 8007 by default. To specify a different port, use:
-   ```bash
-   PORT=8007 uv run api_tabular/mcp/server.py
-   ```
-   Or use uvicorn directly:
-   ```bash
-   uv run uvicorn api_tabular.mcp.server:mcp.streamable_http_app --port 8007
+   MCP_PORT=8007 uv run api_tabular/mcp/server.py
    ```
 
-> Note (production): For production deployments, run behind a TLS reverse proxy. Use environment variables to configure the host and port (e.g., `HOST=0.0.0.0 PORT=8007 uv run api_tabular/mcp/server.py`). Optionally restrict allowed origins and add token authentication at the proxy level.
+> Note (production): For production deployments, run behind a TLS reverse proxy. Use environment variables to configure the host and port (e.g., `HOST=0.0.0.0 MCP_PORT=8007 uv run api_tabular/mcp/server.py`). Optionally restrict allowed origins and add token authentication at the proxy level.
 
 ### 🚀 Quick Start
 
