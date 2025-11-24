@@ -8,7 +8,7 @@
 An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV or tabular resources.
 
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
-The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
+The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
 
 ## 🛠️ Installation & Setup
 
@@ -493,7 +493,7 @@ Add the following to your Claude Desktop configuration file (typically `~/Librar
 ```json
 {
   "mcpServers": {
-    "api-tabular": {
+    "data-gouv": {
       "command": "npx",
       "args": [
         "mcp-remote",
@@ -511,7 +511,7 @@ Add the following to your VS Code `settings.json`:
 ```json
 {
   "servers": {
-    "api-tabular": {
+    "data-gouv": {
       "url": "http://127.0.0.1:8007/mcp",
       "type": "http"
     }
@@ -526,8 +526,27 @@ Add the following to your `~/.codeium/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "api-tabular": {
+    "data-gouv": {
       "serverUrl": "http://127.0.0.1:8007/mcp"
+    }
+  }
+}
+```
+
+#### Cursor
+
+Cursor supports MCP servers through its settings. To configure the server:
+
+1. Open Cursor Settings (Cmd/Ctrl + ,)
+2. Search for "MCP" or "Model Context Protocol"
+3. Add a new MCP server with the following configuration:
+
+```json
+{
+  "mcpServers": {
+    "data-gouv": {
+      "url": "http://127.0.0.1:8007/mcp",
+      "transport": "http"
     }
   }
 }
@@ -556,17 +575,8 @@ Steps:
 
 ### 🚚 Transport support
 
-This MCP server uses FastMCP and implements the Streamable HTTP transport only. STDIO and SSE are not supported.
-
-```
-+------------------+-----------------------+------------------------------------------+
-| Transport        | Supported here        | Notes                                    |
-+------------------+-----------------------+------------------------------------------+
-| Streamable HTTP  | YES (primary)         | Recommended and future-facing            |
-| STDIO            | NO                    | Not implemented in this server           |
-| SSE (legacy)     | NO                    | Removed (use Streamable HTTP instead)    |
-+------------------+-----------------------+------------------------------------------+
-```
+This MCP server uses FastMCP and implements the Streamable HTTP transport only.
+STDIO and SSE are not supported.
 
 Use Streamable HTTP at `http://127.0.0.1:8007/mcp` in clients (e.g. MCP Inspector).
 
@@ -688,11 +698,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/datagouv/api-tabular/issues)
-- **Discussion**: Use the discussion section at the end of the [production API page](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/)
+- **Discussion**: Use the discussion section at the end of the [production API page](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-beta/)
 - **Contact Form**: [Support form](https://support.data.gouv.fr/)
 
 ## 🌐 Production Resources
 
 - **Production API**: [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api)
-- **Product Documentation**: [API tabulaire data.gouv.fr (beta)](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French)
+- **Product Documentation**: [API tabulaire data.gouv.fr (beta)](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-beta/) (in French)
 - **Technical Documentation**: [Swagger/OpenAPI docs](https://tabular-api.data.gouv.fr/api/doc)
