@@ -107,3 +107,75 @@ async def get_resources_for_dataset(
     finally:
         if own and session:
             await session.close()
+
+
+async def search_datasets(
+    query: str,
+    page: int = 1,
+    page_size: int = 20,
+    session: aiohttp.ClientSession | None = None,
+) -> dict[str, Any]:
+    """
+    Search for datasets on data.gouv.fr.
+
+    Args:
+        query: Search query string (searches in title, description, tags)
+        page: Page number (default: 1)
+        page_size: Number of results per page (default: 20, max: 100)
+
+    Returns:
+        dict with 'data' (list of datasets), 'page', 'page_size', and 'total'
+    """
+    own = session is None
+    if own:
+        session = aiohttp.ClientSession()
+    assert session is not None
+    try:
+        # Use API v1 for dataset search
+        url = f"{_base_url()}1/datasets/"
+        params = {
+            "q": query,
+            "page": page,
+            "page_size": min(page_size, 100),  # API limit
+        }
+        async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+
+        datasets = data.get("data", [])
+        # Extract relevant fields for each dataset
+        results = []
+        for ds in datasets:
+            # Handle tags - can be strings or objects with "name" field
+            tags = []
+            for tag in ds.get("tags", []):
+                if isinstance(tag, str):
+                    tags.append(tag)
+                elif isinstance(tag, dict):
+                    tags.append(tag.get("name", ""))
+
+            results.append(
+                {
+                    "id": ds.get("id"),
+                    "title": ds.get("title") or ds.get("name", ""),
+                    "description": ds.get("description", ""),
+                    "description_short": ds.get("description_short", ""),
+                    "slug": ds.get("slug", ""),
+                    "organization": ds.get("organization", {}).get("name")
+                    if ds.get("organization")
+                    else None,
+                    "tags": tags,
+                    "resources_count": len(ds.get("resources", [])),
+                    "url": f"https://www.data.gouv.fr/datasets/{ds.get('slug', ds.get('id', ''))}",
+                }
+            )
+
+        return {
+            "data": results,
+            "page": page,
+            "page_size": len(results),
+            "total": data.get("total", len(results)),
+        }
+    finally:
+        if own:
+            await session.close()
