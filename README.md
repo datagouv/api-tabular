@@ -36,7 +36,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
    uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
    # Optional: MCP server
-   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
+   uv run api_tabular/mcp/server.py                       # MCP Server (port 8007)
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -74,7 +74,7 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
    uv sync
    uv run adev runserver -p8005 api_tabular/app.py        # Tabular API (port 8005)
    uv run adev runserver -p8006 api_tabular/metrics.py    # Metrics API (port 8006)
-   uv run adev runserver -p8007 api_tabular/mcp/server.py # MCP Server (port 8007)
+   uv run api_tabular/mcp/server.py                       # MCP Server (port 8007)
    ```
 
 5. **Use real resource IDs** from your Hydra database instead of the test IDs.
@@ -429,7 +429,7 @@ export CSVAPI_SETTINGS="/path/to/your/config.toml"
 
 ## 🤖 MCP Server
 
-This project includes a Model Context Protocol (MCP) server for natural language access to tabular data, using Streamable HTTP transport protocol.
+This project includes a Model Context Protocol (MCP) server for natural language access to data.gouv.fr datasets, built with [FastMCP](https://github.com/jlowin/fastmcp) and using Streamable HTTP transport protocol.
 
 ### Setup and Configuration
 
@@ -450,17 +450,23 @@ This project includes a Model Context Protocol (MCP) server for natural language
 
 4. **Start the HTTP MCP server:**
    ```bash
-   uv run adev runserver -p8007 api_tabular/mcp/server.py
+   uv run api_tabular/mcp/server.py
    ```
-   The MCP server runs on port 8007 by default (or use `MCP_PORT` environment variable).
+   The MCP server runs on port 8007 by default. To specify a different port, use:
+   ```bash
+   PORT=8007 uv run api_tabular/mcp/server.py
+   ```
+   Or use uvicorn directly:
+   ```bash
+   uv run uvicorn api_tabular.mcp.server:mcp.streamable_http_app --port 8007
+   ```
 
-> Note (production): run behind a TLS reverse proxy and set MCP_HOST/MCP_PORT (e.g., MCP_HOST=0.0.0.0). Optionally restrict allowed origins and add token auth at the proxy.
+> Note (production): For production deployments, run behind a TLS reverse proxy. Use environment variables to configure the host and port (e.g., `HOST=0.0.0.0 PORT=8007 uv run api_tabular/mcp/server.py`). Optionally restrict allowed origins and add token authentication at the proxy level.
 
 ### 🚀 Quick Start
 
 1. **Test the server:**
    ```bash
-   curl http://127.0.0.1:8007/health
    curl -X POST http://127.0.0.1:8007/mcp -H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}'
    ```
 
@@ -545,7 +551,7 @@ Prerequisites:
 Steps:
 1. Start the MCP server (see above):
    ```bash
-   uv run adev runserver -p8007 api_tabular/mcp/server.py
+   uv run api_tabular/mcp/server.py
    ```
 2. In another terminal, launch the inspector with the provided config:
    ```bash
@@ -556,7 +562,7 @@ Steps:
 
 ### 🚚 Transport support
 
-This MCP server implements the Streamable HTTP transport only. STDIO is not supported. SSE (legacy) is not supported.
+This MCP server uses FastMCP and implements the Streamable HTTP transport only. STDIO and SSE are not supported.
 
 ```
 +------------------+-----------------------+------------------------------------------+
@@ -572,20 +578,19 @@ Use Streamable HTTP at `http://127.0.0.1:8007/mcp` in clients (e.g. MCP Inspecto
 
 ### 📋 Available Endpoints
 
-**New Streamable HTTP transport (standards-compliant):**
+**Streamable HTTP transport (standards-compliant):**
 - `POST /mcp` - JSON-RPC messages (client → server)
-- `GET /mcp` - SSE stream (server → client)
-
-**Utility:**
-- `GET /health` - Health check
 
 ### 🛠️ Available Tools
 
-The MCP server dynamically generates tools based on resources configured in `config.toml` or `config_default.toml` under `MCP_AVAILABLE_RESOURCE_IDS`. Each resource gets its own tool:
+The MCP server provides tools to interact with data.gouv.fr datasets:
 
-- **`ask_resource_{resource_id}`** - Ask natural language questions about a specific resource
+- **`search_datasets`** - Search for datasets on data.gouv.fr by keywords. Returns a list of datasets matching the search query with their metadata, including title, description, organization, tags, and resource count. Use this to discover datasets before querying their data.
 
-Tools include metadata from data.gouv.fr (resource title, dataset title, and description) to help the LLM select the appropriate resource.
+  Parameters:
+  - `query` (required): Search query string (searches in title, description, tags)
+  - `page` (optional, default: 1): Page number
+  - `page_size` (optional, default: 20, max: 100): Number of results per page
 
 ### 🧪 Test the MCP server
 
