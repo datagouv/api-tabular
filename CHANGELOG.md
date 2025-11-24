@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.9 (2025-11-24)
+
+- Add operators and fix discrepancies ([#76](https://github.com/datagouv/api-tabular/pull/76))
+- chore: update docker compose to bump postgrest version from 12 to 14 ([#71](https://github.com/datagouv/api-tabular/pull/71))
+- ci: use latest debian version for docker containers in CI ([#70](https://github.com/datagouv/api-tabular/pull/70))
+- docs: fix README ([#73](https://github.com/datagouv/api-tabular/pull/73))
+- feat: better health check for metrics API ([#72](https://github.com/datagouv/api-tabular/pull/72))
+- fix: dynamic version and fix app name in Swagger ([#69](https://github.com/datagouv/api-tabular/pull/69))
+
+
 ## 0.2.8 (2025-10-21)
 
 - docs: fix python versions constraints inconsistencies ([#67](https://github.com/datagouv/api-tabular/pull/67))

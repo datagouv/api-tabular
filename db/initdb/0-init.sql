@@ -59,7 +59,7 @@ CREATE TABLE "csvapi".eb7a008177131590c2f1a2ca0 (
     decompte integer,
     is_true boolean,
     birth character varying,
-    liste character varying
+    liste JSON
 );
 
 
@@ -1214,7 +1214,7 @@ CREATE TABLE "csvapi".s34fff81a3a7292c64a77e5cz (
     decompte integer,
     is_true boolean,
     birth character varying,
-    liste character varying
+    liste JSON
 );
 
 
@@ -1299,7 +1299,7 @@ CREATE TABLE "csvapi".aa2zoa2zfb243p45azj33ap1o (
     decompte integer,
     is_true boolean,
     birth character varying,
-    liste character varying
+    liste JSON
 );
 
 
@@ -1384,7 +1384,7 @@ CREATE TABLE "csvapi".p34zej8pnq446k2ejfz2m3dqz (
     decompte integer,
     is_true boolean,
     birth character varying,
-    liste character varying
+    liste JSON
 );
 
 
