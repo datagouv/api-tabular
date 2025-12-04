@@ -162,7 +162,9 @@ done <<< "$COMMIT_HASHES"
 # Sort breaking changes (sort by first line only, keep blocks together)
 BREAKING_CHANGES=""
 if [ -n "$BREAKING_CHANGES_RAW" ]; then
-    BREAKING_CHANGES=$(echo "$BREAKING_CHANGES_RAW" | awk -v delim="$COMMIT_DELIMITER" '
+    # Use gawk if available (required for asort function), fallback to awk
+    AWK_CMD=$(command -v gawk || command -v awk)
+    BREAKING_CHANGES=$(echo "$BREAKING_CHANGES_RAW" | $AWK_CMD -v delim="$COMMIT_DELIMITER" '
         BEGIN { RS=delim"\n"; ORS="" }
         NF { commits[NR] = $0; keys[NR] = $0; sub(/\n.*/, "", keys[NR]) }
         END {
@@ -203,7 +205,7 @@ $SORTED_COMMITS
 # Prepare release notes for GitHub
 RELEASE_NOTES="$SORTED_COMMITS"
 
-# Update CHANGELOG.md and version in pyproject.toml
+# Update CHANGELOG.md
 if [ "$DRY_RUN" = true ]; then
     echo "Would update CHANGELOG.md with:"
     echo "$NEW_ENTRY"
@@ -234,7 +236,7 @@ echo "CHANGELOG.md updated with commits from $LAST_TAG to HEAD"
 git add CHANGELOG.md
 git commit -m "chore: release $VERSION (CHANGELOG)"
 
-echo "✓ Committed pyproject.toml and CHANGELOG.md"
+echo "✓ Committed CHANGELOG.md"
 
 # Create the git tag
 git tag -a "v$VERSION" -m "Version $VERSION"
