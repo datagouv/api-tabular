@@ -19,7 +19,7 @@ requires-python = "<3.14,>=3.11"
 license = "MIT"
 readme = "README.md"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "aiohttp-devtools<2.0.0,>=1.0.post0",
     "aioresponses<1.0.0,>=0.7.4",
