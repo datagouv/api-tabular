@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.10 (2025-12-08)
+
+- feat: better sentry config sending envs ([#79](https://github.com/datagouv/api-tabular/pull/79))
+
+
 ## 0.2.9 (2025-11-24)
 
 - Add operators and fix discrepancies ([#76](https://github.com/datagouv/api-tabular/pull/76))
