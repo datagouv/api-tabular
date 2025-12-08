@@ -1,7 +1,6 @@
 PGREST_ENDPOINT = "http://localhost:8080"
 SERVER_NAME = "localhost:8005"
 SCHEME = "http"
-ENVIRONMENT = "local"
 SENTRY_DSN = ""
 SENTRY_SAMPLE_RATE = 1.0
 PAGE_SIZE_DEFAULT = 20
