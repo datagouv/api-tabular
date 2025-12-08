@@ -22,7 +22,12 @@ routes = web.RouteTableDef()
 sentry_sdk.init(
     dsn=config.SENTRY_DSN,
     integrations=[AioHttpIntegration()],
-    traces_sample_rate=1.0,
+    environment=config.ENVIRONMENT or "unknown",
+    # Set traces_sample_rate to 1.0 to capture 100%
+    # of transactions for performance monitoring.
+    # Sentry recommends adjusting this value in production.
+    traces_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
+    profiles_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
 )
 
 
