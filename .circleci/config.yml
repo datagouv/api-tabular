@@ -22,8 +22,8 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install dependencies and dev dependencies
-          command: uv sync --frozen --extra dev
+          name: Install Python dependencies
+          command: uv sync --frozen
       - run:
           name: Lint and format code and sort imports
           # ruff check --select I . : check linting and imports sorting without fixing (to fix, use --fix)
@@ -57,7 +57,7 @@ jobs:
             curl -LsSf https://astral.sh/uv/install.sh | sh
             export PATH="$HOME/.local/bin:$PATH"
             uv python install << pipeline.parameters.python-version >>
-            uv sync --frozen --extra dev
+            uv sync --frozen
       - run:
           name: Start service
           command: |
