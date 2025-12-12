@@ -168,7 +168,7 @@ def build_sql_query_string(
         _split = arg.split("=")
         # filters are expected to have the syntax `<column_name>__<operator>=<value>`
         if len(_split) == 2:
-            _filter, _sorted = add_filter(*_split, indexes)
+            _filter, _sorted = add_filter(*_split)
             if _filter:
                 sorted = sorted or _sorted
                 sql_query.append(_filter)
@@ -218,14 +218,13 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
     return column, normalized_comparator
 
 
-def add_filter(argument: str, value: str, indexes: set | None) -> tuple[str | None, bool]:
+def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         return None, False
     if argument == "columns":
         return f"select={value}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
-        raise_if_not_index(column, indexes)
         if normalized_comparator == "sort":
             return f"order={column}.{value}", True
         elif normalized_comparator == "exact":

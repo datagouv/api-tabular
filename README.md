@@ -253,7 +253,7 @@ column_name__sort=desc
 ```
 
 #### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint.
+> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint, and on columns that have an index.
 
 ```
 # group by values

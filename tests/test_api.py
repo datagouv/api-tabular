@@ -259,22 +259,21 @@ async def test_api_exception_resource_indexes(
     res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
-    # checking that the resource can be filtered on indexed columns
-    for idx in indexes:
+    # checking that the resource can be filtered on any columns
+    for col in detection["columns"].keys():
+        if detection["columns"][col]["python_type"] == "json":
+            # can't handle json type for now
+            continue
         res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{idx}__greater=1&page=1&page_size=1"
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
         assert res.status == 200
 
-    # checking that the resource cannot be filtered nor aggregated on a non-indexed column
+    # checking that the resource cannot be aggregated on a non-indexed column
     non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
     for col in non_indexed_cols:
         res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__greater=1&page=1&page_size=1"
-        )
-        assert res.status == 403
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby=1&page=1&page_size=1"
+            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
         assert res.status == 403
 
