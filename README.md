@@ -279,7 +279,7 @@ column_name__sum
 
 > **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
-> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now.
+> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except to filter `NULL` with `exact=null` and `differs=null`.
 
 #### Pagination
 ```
