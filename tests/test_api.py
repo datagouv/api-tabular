@@ -406,8 +406,10 @@ async def test_api_resource_with_null_values(client, base_url):
         )
         body = await res.json()
         assert len(body["data"]) == 2
+        assert all(row[col] is None for row in body["data"])
         res = await client.get(
             f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs=null"
         )
         body = await res.json()
         assert len(body["data"]) == 8
+        assert all(row[col] is not None for row in body["data"])
