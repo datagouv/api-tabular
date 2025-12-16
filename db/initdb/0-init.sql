@@ -1118,12 +1118,6 @@ ALTER TABLE ONLY "csvapi".eb7a008177131590c2f1a2ca0
 
 
 --
--- PostgreSQL database dump complete
---
-
-
-
---
 -- Name: a6311c164ebfb165ddc828ded; Type: TABLE; Schema: csvapi; Owner: csvapi
 --
 
@@ -1195,12 +1189,6 @@ SELECT pg_catalog.setval('"csvapi".a6311c164ebfb165ddc828ded___id_seq', 21777, t
 
 ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded
     ADD CONSTRAINT a6311c164ebfb165ddc828ded_pkey PRIMARY KEY (__id);
-
-
---
--- PostgreSQL database dump complete
---
-
 
 
 --
@@ -1283,12 +1271,6 @@ ALTER TABLE ONLY "csvapi".s34fff81a3a7292c64a77e5cz
 
 
 --
--- PostgreSQL database dump complete
---
-
-
-
---
 -- Name: aa2zoa2zfb243p45azj33ap1o; Type: TABLE; Schema: csvapi; Owner: csvapi
 --
 
@@ -1368,12 +1350,6 @@ ALTER TABLE ONLY "csvapi".aa2zoa2zfb243p45azj33ap1o
 
 
 --
--- PostgreSQL database dump complete
---
-
-
-
---
 -- Name: p34zej8pnq446k2ejfz2m3dqz; Type: TABLE; Schema: csvapi; Owner: csvapi
 --
 
@@ -1450,6 +1426,85 @@ SELECT pg_catalog.setval('"csvapi".p34zej8pnq446k2ejfz2m3dqz___id_seq', 21777, t
 
 ALTER TABLE ONLY "csvapi".p34zej8pnq446k2ejfz2m3dqz
     ADD CONSTRAINT p34zej8pnq446k2ejfz2m3dqz_pkey PRIMARY KEY (__id);
+
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn; Type: TABLE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE TABLE "csvapi".i97jza75dn7sh55kzn9yz6uzn (
+    __id integer NOT NULL,
+    id character varying,
+    score float,
+    decompte integer,
+    is_true boolean,
+    birth character varying,
+    liste JSON
+);
+
+
+ALTER TABLE "csvapi".i97jza75dn7sh55kzn9yz6uzn OWNER TO "csvapi";
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn___id_seq; Type: SEQUENCE; Schema: csvapi; Owner: csvapi
+--
+
+CREATE SEQUENCE "csvapi".i97jza75dn7sh55kzn9yz6uzn___id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE "csvapi".i97jza75dn7sh55kzn9yz6uzn___id_seq OWNER TO "csvapi";
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn___id_seq; Type: SEQUENCE OWNED BY; Schema: csvapi; Owner: csvapi
+--
+
+ALTER SEQUENCE "csvapi".i97jza75dn7sh55kzn9yz6uzn___id_seq OWNED BY "csvapi".i97jza75dn7sh55kzn9yz6uzn.__id;
+
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn __id; Type: DEFAULT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".i97jza75dn7sh55kzn9yz6uzn ALTER COLUMN __id SET DEFAULT nextval('"csvapi".i97jza75dn7sh55kzn9yz6uzn___id_seq'::regclass);
+
+
+--
+-- Data for Name: i97jza75dn7sh55kzn9yz6uzn; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
+--
+
+COPY "csvapi".i97jza75dn7sh55kzn9yz6uzn (__id, id, score, decompte, is_true, birth, liste) FROM stdin;
+1	\N	0.701	34	False	\N	[0]
+2	e84713cd-b7dc-4b4b-9328-2abacc6d22a2	0.379	93	False	1978-05-24	[0, 1, 2]
+3	10f222d2-798e-4a48-a9fd-d25d8620c5b0	0.64	\N	False	1920-04-04	\N
+4	b9eee08b-801e-42a4-8d4b-ecc32bc0f203	0.349	24	True	1950-09-16	[0, 1]
+5	1aa8ab12-bb30-4e52-ba86-6dd2ace02d72	0.541	\N	True	1924-08-08	\N
+6	15adf685-262b-4304-8c17-8fe2166a3c7b	0.023	8	\N	1910-06-04	[0, 1]
+7	f4aa1082-bf0b-4891-ab8d-a276552ebb88	0.947	10	True	\N	[0, 1, 2]
+8	069aadf8-e0c2-453e-a81d-7fcf9804496a	\N	17	\N	\N	[0]
+9	\N	0.24	76	False	1957-03-03	[0]
+10	dd610c3f-f82e-4d1b-b2d4-38b8eaa9debe	\N	58	False	1981-07-28	[0, 1]
+\.
+
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn___id_seq; Type: SEQUENCE SET; Schema: csvapi; Owner: csvapi
+--
+
+SELECT pg_catalog.setval('"csvapi".i97jza75dn7sh55kzn9yz6uzn___id_seq', 21777, true);
+
+
+--
+-- Name: i97jza75dn7sh55kzn9yz6uzn i97jza75dn7sh55kzn9yz6uzn_pkey; Type: CONSTRAINT; Schema: csvapi; Owner: csvapi
+--
+
+ALTER TABLE ONLY "csvapi".i97jza75dn7sh55kzn9yz6uzn
+    ADD CONSTRAINT i97jza75dn7sh55kzn9yz6uzn_pkey PRIMARY KEY (__id);
 
 
 --
