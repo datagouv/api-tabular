@@ -228,8 +228,12 @@ def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
         if normalized_comparator == "sort":
             return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
+            if value == "null":
+                return f"{column}=is.{value}", False
             return f"{column}=eq.{value}", False
         elif normalized_comparator == "differs":
+            if value == "null":
+                return f"{column}=not.is.{value}", False
             return f"{column}=neq.{value}", False
         elif normalized_comparator == "contains":
             return f"{column}=ilike.*{value}*", False
