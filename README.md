@@ -420,6 +420,10 @@ export PGREST_ENDPOINT="http://my-postgrest:8080"
 export PAGE_SIZE_DEFAULT=50
 export SENTRY_DSN="https://your-sentry-dsn"
 ```
+Once the containers are up and running, you can directly query PostgREST on:
+`<PGREST_ENDPOINT>/<table_name>?<filters>`
+like for example:
+`http://localhost:8080/eb7a008177131590c2f1a2ca0?decompte=eq.10`
 
 ### Custom Configuration File
 
