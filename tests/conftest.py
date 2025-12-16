@@ -19,6 +19,7 @@ INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
 AGG_ALLOWED_RESOURCE_ID = "dddddddd-7777-eeee-8888-ffffffffffff"
 AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
 DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
+NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
 
 
 @pytest.fixture
