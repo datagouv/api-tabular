@@ -234,7 +234,7 @@ def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
         elif normalized_comparator == "differs":
             if value == "null":
                 return f"{column}=not.is.{value}", False
-            return f"{column}=neq.{value}", False
+            return f"{column}=isdistinct.{value}", False
         elif normalized_comparator == "contains":
             return f"{column}=ilike.*{value}*", False
         elif normalized_comparator == "notcontains":
