@@ -275,6 +275,8 @@ column_name__max
 column_name__sum
 ```
 
+> **Note**: You may use the keyword `null` for filters `exact` and `differs` to respectively get only or exclude `NULL` values, for instance: `score__exact=null`.
+
 > **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
 > ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now.
