@@ -413,3 +413,14 @@ async def test_api_resource_with_null_values(client, base_url):
         body = await res.json()
         assert len(body["data"]) == 8
         assert all(row[col] is not None for row in body["data"])
+        # checking that `differs` can return NULL values
+        if profile["profile"]["columns"][col]["python_type"] == "json":
+            # except for json type
+            continue
+        value = 1
+        res = await client.get(
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
+        )
+        body = await res.json()
+        assert all(row[col] != value for row in body["data"])
+        assert len([row for row in body["data"] if row[col] is None]) == 2
