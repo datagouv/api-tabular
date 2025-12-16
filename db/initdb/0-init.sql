@@ -1482,10 +1482,10 @@ COPY "csvapi".i97jza75dn7sh55kzn9yz6uzn (__id, id, score, decompte, is_true, bir
 1	\N	0.701	34	False	\N	[0]
 2	e84713cd-b7dc-4b4b-9328-2abacc6d22a2	0.379	93	False	1978-05-24	[0, 1, 2]
 3	10f222d2-798e-4a48-a9fd-d25d8620c5b0	0.64	\N	False	1920-04-04	\N
-4	b9eee08b-801e-42a4-8d4b-ecc32bc0f203	0.349	24	True	1950-09-16	[0, 1]
+4	b9eee08b-801e-42a4-8d4b-ecc32bc0f203	0.349	24	True	1950-09-16	[0, 2]
 5	1aa8ab12-bb30-4e52-ba86-6dd2ace02d72	0.541	\N	True	1924-08-08	\N
 6	15adf685-262b-4304-8c17-8fe2166a3c7b	0.023	8	\N	1910-06-04	[0, 1]
-7	f4aa1082-bf0b-4891-ab8d-a276552ebb88	0.947	10	True	\N	[0, 1, 2]
+7	f4aa1082-bf0b-4891-ab8d-a276552ebb88	0.947	10	True	1957-03-03	[0, 1, 2]
 8	069aadf8-e0c2-453e-a81d-7fcf9804496a	\N	17	\N	\N	[0]
 9	\N	0.24	76	False	1957-03-03	[0]
 10	dd610c3f-f82e-4d1b-b2d4-38b8eaa9debe	\N	58	False	1981-07-28	[0, 1]
