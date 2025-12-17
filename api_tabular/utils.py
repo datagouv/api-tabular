@@ -9,6 +9,8 @@ from api_tabular import config
 
 TYPE_POSSIBILITIES = {
     "string": [
+        "isnull",
+        "isnotnull",
         "compare",
         "contains",
         "notcontains",
@@ -21,6 +23,8 @@ TYPE_POSSIBILITIES = {
         "count",
     ],
     "float": [
+        "isnull",
+        "isnotnull",
         "compare",
         "differs",
         "exact",
@@ -35,6 +39,8 @@ TYPE_POSSIBILITIES = {
         "sum",
     ],
     "int": [
+        "isnull",
+        "isnotnull",
         "compare",
         "differs",
         "exact",
@@ -48,8 +54,10 @@ TYPE_POSSIBILITIES = {
         "min",
         "sum",
     ],
-    "bool": ["differs", "exact", "sort", "groupby", "count"],
+    "bool": ["isnull", "isnotnull", "differs", "exact", "sort", "groupby", "count"],
     "date": [
+        "isnull",
+        "isnotnull",
         "compare",
         "contains",
         "notcontains",
@@ -62,6 +70,8 @@ TYPE_POSSIBILITIES = {
         "count",
     ],
     "datetime": [
+        "isnull",
+        "isnotnull",
         "compare",
         "contains",
         "notcontains",
@@ -74,7 +84,10 @@ TYPE_POSSIBILITIES = {
         "count",
     ],
     # TODO: JSON needs special treatment for operators to work
-    "json": [],
+    "json": [
+        "isnull",
+        "isnotnull",
+    ],
 }
 
 MAP_TYPES = {
@@ -92,6 +105,14 @@ OPERATORS_DESCRIPTIONS = {
     "differs": {
         "name": "{}__differs",
         "description": "Differs from in column: {} ({}__differs=value)",
+    },
+    "isnull": {
+        "name": "{}__isnull",
+        "description": "Is `NULL` in column: {} ({}__isnull)",
+    },
+    "isnotnull": {
+        "name": "{}__isnotnull",
+        "description": "Is not `NULL` in column: {} ({}__isnotnull)",
     },
     "contains": {
         "name": "{}__contains",
@@ -173,10 +194,15 @@ def build_sql_query_string(
                 sorted = sorted or _sorted
                 sql_query.append(_filter)
         # aggregators are expected to have the syntax `<column_name>__<operator>`
+        # is(not)null also has this syntax but is a filter
         elif len(_split) == 1:
-            column, operator = add_aggregator(_split[0], indexes)
-            if column:
-                aggregators[operator].append(column)
+            if _split[0].split("__")[1] in ["isnull", "isnotnull"]:
+                _filter, _ = add_filter(_split[0], None)
+                sql_query.append(_filter)
+            else:    
+                column, operator = add_aggregator(_split[0], indexes)
+                if column:
+                    aggregators[operator].append(column)
         else:
             raise ValueError(f"argument '{arg}' could not be parsed")
     if aggregators:
@@ -228,13 +254,13 @@ def add_filter(argument: str, value: str) -> tuple[str | None, bool]:
         if normalized_comparator == "sort":
             return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
-            if value == "null":
-                return f"{column}=is.{value}", False
             return f"{column}=eq.{value}", False
         elif normalized_comparator == "differs":
-            if value == "null":
-                return f"{column}=not.is.{value}", False
             return f"{column}=isdistinct.{value}", False
+        elif normalized_comparator == "isnull":
+            return f"{column}=is.null", False
+        elif normalized_comparator == "isnotnull":
+            return f"{column}=not.is.null", False
         elif normalized_comparator == "contains":
             return f"{column}=ilike.*{value}*", False
         elif normalized_comparator == "notcontains":
