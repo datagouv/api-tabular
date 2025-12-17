@@ -199,7 +199,7 @@ def build_sql_query_string(
             if _split[0].split("__")[1] in ["isnull", "isnotnull"]:
                 _filter, _ = add_filter(_split[0], None)
                 sql_query.append(_filter)
-            else:    
+            else:
                 column, operator = add_aggregator(_split[0], indexes)
                 if column:
                     aggregators[operator].append(column)
