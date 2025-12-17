@@ -214,16 +214,22 @@ The data endpoint can be queried with the following operators as query string (r
 
 #### Filtering Operators
 ```
-# exact value
+# exact
 column_name__exact=value
 
 # differs
 column_name__differs=value
 
+# is `null`
+column_name__isnull
+
+# is not `null`
+column_name__isnotnull
+
 # contains
 column_name__contains=value
 
-# notcontains (value does not contain)
+# does not contain (value does not contain)
 column_name__notcontains=value
 
 # in (value in list)
@@ -275,11 +281,9 @@ column_name__max
 column_name__sum
 ```
 
-> **Note**: You may use the keyword `null` for filters `exact` and `differs` to respectively get only or exclude `NULL` values, for instance: `score__exact=null`.
-
 > **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
 
-> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except to filter `NULL` with `exact=null` and `differs=null`.
+> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except `isnull` and `isnotnull`.
 
 #### Pagination
 ```
