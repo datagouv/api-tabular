@@ -402,13 +402,13 @@ async def test_api_resource_with_null_values(client, base_url):
     columns = [col for col in profile["profile"]["columns"].keys()]
     for col in columns:
         res = await client.get(
-            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__exact=null"
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull"
         )
         body = await res.json()
         assert len(body["data"]) == 2
         assert all(row[col] is None for row in body["data"])
         res = await client.get(
-            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs=null"
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull"
         )
         body = await res.json()
         assert len(body["data"]) == 8
