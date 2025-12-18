@@ -376,12 +376,15 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
                             "schema": {"type": "string"},
                         }
                         | (
-                            # aggregators don't need a value
+                            # aggregators and is(not)null don't need a value
                             {
-                                "schema": {"type": "boolean", "default": False},
+                                "schema": {"type": "boolean"},
                                 "allowEmptyValue": True,
                             }
-                            if OPERATORS_DESCRIPTIONS[op].get("is_aggregator")
+                            if (
+                                op in ["isnull", "isnotnull"]
+                                or OPERATORS_DESCRIPTIONS[op].get("is_aggregator")
+                            )
                             else {}
                         ),
                     ]
