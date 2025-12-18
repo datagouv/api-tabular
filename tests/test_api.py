@@ -11,6 +11,7 @@ from .conftest import (
     AGG_ALLOWED_RESOURCE_ID,
     DELETED_RESOURCE_ID,
     INDEXED_RESOURCE_ID,
+    NULL_VALUES_RESOURCE_ID,
     PGREST_ENDPOINT,
     RESOURCE_ID,
     UNKNOWN_RESOURCE_ID,
@@ -392,3 +393,34 @@ async def test_api_json_export(client, base_url, tables_index_rows, _resource_id
     for row in rows:
         # __id is added by tabular-api
         assert list(row.keys()) == ["__id"] + list(detection["columns"])
+
+
+async def test_api_resource_with_null_values(client, base_url):
+    # in this table we have exactly two NULL values per column, 10 rows in total
+    response = await client.get(f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/profile/")
+    profile = await response.json()
+    columns = [col for col in profile["profile"]["columns"].keys()]
+    for col in columns:
+        res = await client.get(
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull"
+        )
+        body = await res.json()
+        assert len(body["data"]) == 2
+        assert all(row[col] is None for row in body["data"])
+        res = await client.get(
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull"
+        )
+        body = await res.json()
+        assert len(body["data"]) == 8
+        assert all(row[col] is not None for row in body["data"])
+        # checking that `differs` can return NULL values
+        if profile["profile"]["columns"][col]["python_type"] == "json":
+            # except for json type
+            continue
+        value = 1
+        res = await client.get(
+            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
+        )
+        body = await res.json()
+        assert all(row[col] != value for row in body["data"])
+        assert len([row for row in body["data"] if row[col] is None]) == 2

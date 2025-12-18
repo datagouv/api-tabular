@@ -54,7 +54,19 @@ def test_query_build_exact():
 def test_query_build_differs():
     query_str = ["column_name__differs=BIDULE"]
     result = build_sql_query_string(query_str, page_size=50)
-    assert result == '"column_name"=neq.BIDULE&limit=50&order=__id.asc'
+    assert result == '"column_name"=isdistinct.BIDULE&limit=50&order=__id.asc'
+
+
+def test_query_build_isnull():
+    query_str = ["column_name__isnull"]
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == '"column_name"=is.null&limit=50&order=__id.asc'
+
+
+def test_query_build_isnotnull():
+    query_str = ["column_name__isnotnull"]
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == '"column_name"=not.is.null&limit=50&order=__id.asc'
 
 
 def test_query_build_contains():
