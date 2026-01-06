@@ -10,7 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
 
 from api_tabular import config
-from api_tabular.app import app_factory
+from api_tabular.tabular.app import app_factory
 
 PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"

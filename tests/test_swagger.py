@@ -3,7 +3,7 @@ import json
 import pytest
 import yaml
 
-from api_tabular.utils import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
+from api_tabular.core.swagger import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
 
 from .conftest import (
     AGG_ALLOWED_INDEXED_RESOURCE_ID,
