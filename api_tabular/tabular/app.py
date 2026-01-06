@@ -11,7 +11,8 @@ from api_tabular import config
 from api_tabular.core.error import QueryException
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.sentry import sentry_kwargs
-from api_tabular.core.url import build_link_with_page
+from api_tabular.core.swagger import build_swagger_file
+from api_tabular.core.url import build_link_with_page, url_for
 from api_tabular.core.version import get_app_version
 from api_tabular.tabular.utils import (
     get_potential_indexes,

@@ -3,7 +3,6 @@ from typing import AsyncGenerator
 from aiohttp import ClientSession, web
 
 from api_tabular import config
-from api_tabular.core.data import get_record_and_total
 from api_tabular.core.error import handle_exception
 from api_tabular.core.utils import process_total
 
