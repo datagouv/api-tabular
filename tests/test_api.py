@@ -424,3 +424,168 @@ async def test_api_resource_with_null_values(client, base_url):
         body = await res.json()
         assert all(row[col] != value for row in body["data"])
         assert len([row for row in body["data"] if row[col] is None]) == 2
+
+
+async def test_api_csv_export_with_batches(setup, fake_client, rmock, tables_index_rows):
+    """Test that CSV export correctly concatenates multiple batches."""
+    resource_id = RESOURCE_ID
+    detection = json.loads(tables_index_rows[resource_id]["csv_detective"])
+    table_name = tables_index_rows[resource_id]["parsing_table"]
+
+    # Use a small batch size to force multiple batches
+    batch_size = 3
+    total_rows = min(detection["total_lines"], 10)  # Limit to 10 rows for testing
+    num_batches = (total_rows + batch_size - 1) // batch_size
+
+    # Build the base SQL query (empty query string means just order=__id.asc)
+    sql_query = "order=__id.asc"
+    base_url = f"{PGREST_ENDPOINT}/{table_name}?{sql_query}"
+
+    # Mock the HEAD request to get total count
+    rmock.head(
+        f"{base_url}&limit=1&",
+        status=200,
+        headers={"Content-Range": f"0-0/{total_rows}"},
+    )
+
+    # Mock GET requests for each batch
+    for batch_num in range(num_batches):
+        offset = batch_num * batch_size
+        limit = min(batch_size, total_rows - offset)
+
+        # Generate CSV data for this batch (each batch includes headers from PostgREST)
+        batch_rows = []
+        for i in range(limit):
+            row_num = offset + i
+            # Create rows matching the actual column structure
+            row_data = [f"id_{row_num}"] + [f"row_{row_num}_{col}" for col in detection["columns"]]
+            batch_rows.append(",".join(row_data))
+
+        # Each batch from PostgREST includes headers
+        columns = ["__id"] + list(detection["columns"])
+        csv_data = ",".join(columns) + "\n" + "\n".join(batch_rows) + "\n"
+
+        rmock.get(
+            f"{base_url}&limit={limit}&offset={offset}",
+            status=200,
+            body=csv_data.encode("utf-8"),
+            headers={"Content-Type": "text/csv"},
+        )
+
+    # Mock the resource lookup
+    rmock.get(
+        f"{PGREST_ENDPOINT}/tables_index?select=parsing_table,deleted_at,dataset_id&resource_id=eq.{resource_id}&order=created_at.desc",
+        status=200,
+        payload=[{"parsing_table": table_name, "deleted_at": None, "dataset_id": None}],
+    )
+
+    # Temporarily override batch size
+    original_batch_size = config.BATCH_SIZE
+    config.override(BATCH_SIZE=batch_size)
+
+    try:
+        res = await fake_client.get(f"/api/resources/{resource_id}/data/csv/")
+        assert res.status == 200
+        content = await res.text()
+
+        # Verify CSV structure
+        reader = csv.reader(StringIO(content))
+        columns = next(reader)
+        rows = [r for r in reader]
+
+        # Check that headers appear only once
+        assert columns == ["__id"] + list(detection["columns"])
+
+        # Check that all rows are present
+        assert len(rows) == total_rows
+
+        # Verify that rows are in correct order (no duplicates, no missing)
+        for i, row in enumerate(rows):
+            # Each row should have the correct number of columns
+            assert len(row) == len(columns)
+            # Verify row content matches expected pattern
+            assert row[0] == f"id_{i}"
+    finally:
+        config.override(BATCH_SIZE=original_batch_size)
+
+
+async def test_api_json_export_with_batches(setup, fake_client, rmock, tables_index_rows):
+    """Test that JSON export correctly concatenates multiple batches into a valid array."""
+    resource_id = RESOURCE_ID
+    detection = json.loads(tables_index_rows[resource_id]["csv_detective"])
+    table_name = tables_index_rows[resource_id]["parsing_table"]
+
+    # Use a small batch size to force multiple batches
+    batch_size = 3
+    total_rows = min(detection["total_lines"], 10)  # Limit to 10 rows for testing
+    num_batches = (total_rows + batch_size - 1) // batch_size
+
+    # Build the base SQL query (empty query string means just order=__id.asc)
+    sql_query = "order=__id.asc"
+    base_url = f"{PGREST_ENDPOINT}/{table_name}?{sql_query}"
+
+    # Mock the HEAD request to get total count
+    rmock.head(
+        f"{base_url}&limit=1&",
+        status=200,
+        headers={"Content-Range": f"0-0/{total_rows}"},
+    )
+
+    # Mock GET requests for each batch
+    for batch_num in range(num_batches):
+        offset = batch_num * batch_size
+        limit = min(batch_size, total_rows - offset)
+
+        # Generate JSON data for this batch
+        batch_data = []
+        for i in range(limit):
+            row_num = offset + i
+            batch_data.append(
+                {
+                    "__id": f"id_{row_num}",
+                    **{col: f"row_{row_num}_{col}" for col in detection["columns"]},
+                }
+            )
+
+        # Each batch returns a complete JSON array
+        json_data = json.dumps(batch_data, ensure_ascii=False)
+
+        rmock.get(
+            f"{base_url}&limit={limit}&offset={offset}",
+            status=200,
+            body=json_data.encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+    # Mock the resource lookup
+    rmock.get(
+        f"{PGREST_ENDPOINT}/tables_index?select=parsing_table,deleted_at,dataset_id&resource_id=eq.{resource_id}&order=created_at.desc",
+        status=200,
+        payload=[{"parsing_table": table_name, "deleted_at": None, "dataset_id": None}],
+    )
+
+    # Temporarily override batch size
+    original_batch_size = config.BATCH_SIZE
+    config.override(BATCH_SIZE=batch_size)
+
+    try:
+        res = await fake_client.get(f"/api/resources/{resource_id}/data/json/")
+        assert res.status == 200
+        content = await res.text()
+
+        # Verify JSON is valid and parseable
+        rows = json.loads(content)
+        assert isinstance(rows, list)
+
+        # Check that all rows are present
+        assert len(rows) == total_rows
+
+        # Verify that rows are in correct order (no duplicates, no missing)
+        for i, row in enumerate(rows):
+            assert isinstance(row, dict)
+            # Each row should have the correct keys
+            assert list(row.keys()) == ["__id"] + list(detection["columns"])
+            # Verify row content matches expected pattern
+            assert row["__id"] == f"id_{i}"
+    finally:
+        config.override(BATCH_SIZE=original_batch_size)
