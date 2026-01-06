@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.11 (2026-01-06)
+
+- chore: move pyproject optional-dependencies to dependency-groups ([#78](https://github.com/datagouv/api-tabular/pull/78))
+- chore: remove trailing slashes in changelog entries
+- fix: fix tag_version.sh to work with MacOS ([#77](https://github.com/datagouv/api-tabular/pull/77))
+- fix: move aiohttp-devtools to production dependencies ([#84](https://github.com/datagouv/api-tabular/pull/84))
+- Handle `null` values in filters ([#82](https://github.com/datagouv/api-tabular/pull/82))
+- Lift filter restriction on indexed tables ([#81](https://github.com/datagouv/api-tabular/pull/81))
+
+
 ## 0.2.10 (2025-12-08)
 
 - feat: better sentry config sending envs ([#79](https://github.com/datagouv/api-tabular/pull/79))
