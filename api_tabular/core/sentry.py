@@ -2,7 +2,6 @@ from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 from api_tabular import config
 
-
 sentry_kwargs = {
     "dsn": config.SENTRY_DSN,
     "integrations": [AioHttpIntegration()],

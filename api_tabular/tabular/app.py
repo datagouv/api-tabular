@@ -1,11 +1,11 @@
 import os
 from datetime import datetime, timezone
 
-from aiohttp import ClientSession, web
 import aiohttp_cors
-from aiohttp_swagger import setup_swagger
 import sentry_sdk
 import yaml
+from aiohttp import ClientSession, web
+from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
 from api_tabular.core.error import QueryException

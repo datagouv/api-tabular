@@ -2,7 +2,6 @@ import yaml
 
 from api_tabular.core.utils import is_aggregation_allowed
 
-
 TYPE_POSSIBILITIES = {
     "string": [
         "isnull",
