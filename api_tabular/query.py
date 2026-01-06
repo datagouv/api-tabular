@@ -51,15 +51,16 @@ async def get_resource_data(
         return record, total
 
 
-async def get_resource_data_streamed(
+async def _get_data_streamed(
     session: ClientSession,
-    model: dict,
+    table_name: str,
     sql_query: str,
     accept_format: str = "text/csv",
     batch_size: int = config.BATCH_SIZE,
 ) -> AsyncGenerator[bytes, None]:
+    """Common function to stream data from a table in batches, properly concatenating CSV/JSON."""
     headers = {"Accept": accept_format, "Prefer": "count=exact"}
-    url = f"{config.PGREST_ENDPOINT}/{model['parsing_table']}?{sql_query}"
+    url = f"{config.PGREST_ENDPOINT}/{table_name}?{sql_query}"
     res = await session.head(f"{url}&limit=1&", headers=headers)
     if not res.ok:
         handle_exception(res.status, "Database error", await res.json(), None)
@@ -128,6 +129,20 @@ async def get_resource_data_streamed(
                 yield b"[]"
             else:
                 yield b"]"
+
+
+async def get_resource_data_streamed(
+    session: ClientSession,
+    model: dict,
+    sql_query: str,
+    accept_format: str = "text/csv",
+    batch_size: int = config.BATCH_SIZE,
+) -> AsyncGenerator[bytes, None]:
+    """Stream resource data in batches, properly concatenating CSV/JSON."""
+    async for chunk in _get_data_streamed(
+        session, model["parsing_table"], sql_query, accept_format, batch_size
+    ):
+        yield chunk
 
 
 async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
