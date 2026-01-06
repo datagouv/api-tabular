@@ -540,13 +540,13 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "aiohttp-cors" },
+    { name = "aiohttp-devtools" },
     { name = "aiohttp-swagger" },
     { name = "sentry-sdk" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "aiohttp-devtools" },
     { name = "aioresponses" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -558,13 +558,13 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.4,<4.0.0" },
     { name = "aiohttp-cors", specifier = "==0.7.0" },
+    { name = "aiohttp-devtools", specifier = ">=1.0.post0,<2.0.0" },
     { name = "aiohttp-swagger", specifier = "==1.0.16" },
     { name = "sentry-sdk", specifier = ">=2.13.0,<3.0.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "aiohttp-devtools", specifier = ">=1.0.post0,<2.0.0" },
     { name = "aioresponses", specifier = ">=0.7.4,<1.0.0" },
     { name = "pytest", specifier = ">=7.2.1,<8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.20.3,<1.0.0" },
