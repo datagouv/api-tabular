@@ -134,7 +134,12 @@ async def app_factory():
 
 
 def run():
-    web.run_app(app_factory(), path=os.environ.get("CSVAPI_APP_SOCKET_PATH"))
+    socket_path = os.environ.get("CSVAPI_APP_SOCKET_PATH")
+    if socket_path:
+        web.run_app(app_factory(), path=socket_path)
+    else:
+        port = int(os.environ.get("CSVAPI_APP_PORT", "8006"))
+        web.run_app(app_factory(), port=port)
 
 
 if __name__ == "__main__":
