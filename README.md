@@ -38,7 +38,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    uv run adev runserver -p8006 api_tabular/metrics/app.py    # Api related to udata's metrics (dev server)
    ```
 
-   **Note:** For production, use `python -m api_tabular.tabular.app` and `python -m api_tabular.metrics.app` instead of `adev`.
+   **Note:** For production, use `uv run python -m api_tabular.tabular.app` and `uv run python -m api_tabular.metrics.app` instead of `adev`.
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
 
@@ -73,7 +73,7 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
    uv run adev runserver -p8006 api_tabular/metrics/app.py     # Dev server
    ```
 
-   **Note:** For production, use `python -m api_tabular.tabular.app` and `python -m api_tabular.metrics.app` instead of `adev`.
+   **Note:** For production, use `uv run python -m api_tabular.tabular.app` and `uv run python -m api_tabular.metrics.app` instead of `adev`.
 
 3. **Use real resource IDs** from your Hydra database instead of the test IDs.
 
