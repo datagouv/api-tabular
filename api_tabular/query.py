@@ -1,3 +1,4 @@
+import json
 from typing import AsyncGenerator
 
 from aiohttp import ClientSession, web
@@ -57,20 +58,76 @@ async def get_resource_data_streamed(
     accept_format: str = "text/csv",
     batch_size: int = config.BATCH_SIZE,
 ) -> AsyncGenerator[bytes, None]:
+    headers = {"Accept": accept_format, "Prefer": "count=exact"}
     url = f"{config.PGREST_ENDPOINT}/{model['parsing_table']}?{sql_query}"
-    res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
+    res = await session.head(f"{url}&limit=1&", headers=headers)
     if not res.ok:
         handle_exception(res.status, "Database error", await res.json(), None)
     total = process_total(res)
-    for i in range(0, total, batch_size):
-        async with session.get(
-            url=f"{url}&limit={batch_size}&offset={i}", headers={"Accept": accept_format}
-        ) as res:
-            if not res.ok:
-                handle_exception(res.status, "Database error", await res.json(), None)
-            async for chunk in res.content.iter_chunked(1024):
-                yield chunk
-            yield b"\n"
+
+    is_json = accept_format == "application/json"
+    is_first_batch = True
+    has_emitted_data = False  # Track if we've emitted any data for JSON
+
+    try:
+        for i in range(0, total, batch_size):
+            async with session.get(
+                url=f"{url}&limit={batch_size}&offset={i}", headers=headers
+            ) as res:
+                if not res.ok:
+                    handle_exception(res.status, "Database error", await res.json(), None)
+
+                if is_json:
+                    # For JSON, we need to parse each batch and reconstruct a valid array
+                    batch_data = await res.json()
+                    if not isinstance(batch_data, list):
+                        batch_data = [batch_data]
+
+                    if is_first_batch:
+                        # First batch: open the JSON array
+                        if batch_data:
+                            json_str = json.dumps(batch_data, ensure_ascii=False)
+                            yield json_str[:-1].encode("utf-8")  # Remove the final ']'
+                            has_emitted_data = True
+                        else:
+                            yield b"["
+                        is_first_batch = False
+                    else:
+                        # Subsequent batches: add a comma and elements without brackets
+                        if batch_data:
+                            if has_emitted_data:
+                                yield b","
+                            json_str = json.dumps(batch_data, ensure_ascii=False)
+                            yield json_str[1:-1].encode("utf-8")  # Remove '[' and ']'
+                            has_emitted_data = True
+                else:
+                    # For CSV, we need to handle headers
+                    if is_first_batch:
+                        # First batch: include everything (headers + data)
+                        async for chunk in res.content.iter_chunked(1024):
+                            yield chunk
+                        is_first_batch = False
+                    else:
+                        # Subsequent batches: skip the first line (headers)
+                        first_line = True
+                        buffer = b""
+                        async for chunk in res.content.iter_chunked(1024):
+                            buffer += chunk
+                            while b"\n" in buffer:
+                                line, buffer = buffer.split(b"\n", 1)
+                                if not first_line:
+                                    yield line + b"\n"
+                                first_line = False
+                        # Emit remaining buffer if there's anything left after the first line
+                        if buffer and not first_line:
+                            yield buffer
+    finally:
+        # For JSON, close the array at the end (or emit an empty array if no batches)
+        if is_json:
+            if is_first_batch:
+                yield b"[]"
+            else:
+                yield b"]"
 
 
 async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
