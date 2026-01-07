@@ -3,7 +3,7 @@ from aiohttp.web_request import Request
 
 from api_tabular import config
 from api_tabular.core.data import stream_data
-from api_tabular.core.error import handle_exception, QueryException
+from api_tabular.core.error import QueryException, handle_exception
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.utils import process_total
 
@@ -96,7 +96,6 @@ async def stream_resource_data(request: Request, format: str):
     }
     response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
-
 
     async for chunk in stream_data(
         session=request.app["csession"],

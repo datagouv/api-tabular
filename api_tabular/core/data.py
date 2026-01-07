@@ -7,7 +7,10 @@ from api_tabular.core.utils import process_total
 
 
 async def stream_data(
-    session: ClientSession, url: str, batch_size: int, accept_format: str,
+    session: ClientSession,
+    url: str,
+    batch_size: int,
+    accept_format: str,
 ) -> AsyncGenerator[bytes, None]:
     res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
     if not res.ok:
