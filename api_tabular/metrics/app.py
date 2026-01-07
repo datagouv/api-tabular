@@ -10,10 +10,11 @@ from aiohttp_swagger import setup_swagger
 from api_tabular import config
 from api_tabular.core.data import stream_data
 from api_tabular.core.error import QueryException, handle_exception
+from api_tabular.core.health import check_health
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.sentry import sentry_kwargs
 from api_tabular.core.url import build_link_with_page
-from api_tabular.core.utils import process_total
+from api_tabular.core.utils import process_total, build_offset
 from api_tabular.core.version import get_app_version
 
 routes = web.RouteTableDef()
@@ -42,17 +43,7 @@ async def metrics_data(request):
     page = int(request.query.get("page", "1"))
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
-    if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(
-            400,
-            None,
-            "Invalid query string",
-            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
-        )
-    if page > 1:
-        offset = page_size * (page - 1)
-    else:
-        offset = 0
+    offset = build_offset(page, page_size)
     try:
         sql_query = build_sql_query_string(query_string, page_size=page_size, offset=offset)
     except ValueError as e:
@@ -105,21 +96,7 @@ async def metrics_data_csv(request):
 async def get_health(request):
     """Return health check status"""
     # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
-    url = f"{config.PGREST_ENDPOINT}/site"
-    async with request.app["csession"].head(url) as res:
-        if not res.ok:
-            raise QueryException(
-                503,
-                None,
-                "DB unavailable",
-                "postgREST has not started yet",
-            )
-    start_time = request.app["start_time"]
-    current_time = datetime.now(timezone.utc)
-    uptime_seconds = (current_time - start_time).total_seconds()
-    return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
-    )
+    return await check_health(request, f"{config.PGREST_ENDPOINT}/site")
 
 
 async def app_factory():

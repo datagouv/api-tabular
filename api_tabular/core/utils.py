@@ -1,9 +1,10 @@
 from aiohttp.web_response import Response
 
 from api_tabular import config
+from api_tabular.core.error import QueryException
 
 
-def is_aggregation_allowed(resource_id: str):
+def is_aggregation_allowed(resource_id: str) -> bool:
     return resource_id in config.ALLOW_AGGREGATION
 
 
@@ -13,3 +14,14 @@ def process_total(res: Response) -> int:
     raw_total = res.headers.get("Content-Range")
     _, str_total = raw_total.split("/")
     return int(str_total)
+
+
+def build_offset(page: int, page_size: int) -> int:
+    if page_size > config.PAGE_SIZE_MAX:
+        raise QueryException(
+            400,
+            None,
+            "Invalid query string",
+            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
+        )
+    return page_size * (page - 1) if page > 1 else 0
