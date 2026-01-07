@@ -45,14 +45,14 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
      --bind 0.0.0.0:8005 \
      --worker-class aiohttp.GunicornWebWorker \
      --workers 4 \
-     --accesslog -
+     --access-logfile -
 
    # Metrics API (port 8006)
    uv run gunicorn api_tabular.metrics.app:app_factory \
      --bind 0.0.0.0:8006 \
      --worker-class aiohttp.GunicornWebWorker \
      --workers 4 \
-     --accesslog -
+     --access-logfile -
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -95,14 +95,14 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
      --bind 0.0.0.0:8005 \
      --worker-class aiohttp.GunicornWebWorker \
      --workers 4 \
-     --accesslog -
+     --access-logfile -
 
    # Metrics API (port 8006)
    uv run gunicorn api_tabular.metrics.app:app_factory \
      --bind 0.0.0.0:8006 \
      --worker-class aiohttp.GunicornWebWorker \
      --workers 4 \
-     --accesslog -
+     --access-logfile -
    ```
 
 3. **Use real resource IDs** from your Hydra database instead of the test IDs.
