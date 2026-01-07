@@ -6,29 +6,20 @@ import sentry_sdk
 import yaml
 from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
-from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 from api_tabular import config
-from api_tabular.error import QueryException, handle_exception
-from api_tabular.utils import (
-    build_link_with_page,
-    build_sql_query_string,
-    get_app_version,
-    process_total,
-)
+from api_tabular.core.data import stream_data
+from api_tabular.core.error import QueryException, handle_exception
+from api_tabular.core.health import check_health
+from api_tabular.core.query import build_sql_query_string
+from api_tabular.core.sentry import sentry_kwargs
+from api_tabular.core.url import build_link_with_page
+from api_tabular.core.utils import build_offset, process_total
+from api_tabular.core.version import get_app_version
 
 routes = web.RouteTableDef()
 
-sentry_sdk.init(
-    dsn=config.SENTRY_DSN,
-    integrations=[AioHttpIntegration()],
-    environment=config.ENVIRONMENT or "unknown",
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for performance monitoring.
-    # Sentry recommends adjusting this value in production.
-    traces_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
-    profiles_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
-)
+sentry_sdk.init(**sentry_kwargs)
 
 
 async def get_object_data(session: ClientSession, model: str, sql_query: str):
@@ -42,28 +33,6 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
         return record, total
 
 
-async def get_object_data_streamed(
-    session: ClientSession,
-    model: str,
-    sql_query: str,
-    accept_format: str = "text/csv",
-    batch_size: int = config.BATCH_SIZE,
-):
-    headers = {"Accept": accept_format, "Prefer": "count=exact"}
-    url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
-    res = await session.head(f"{url}&limit=1&", headers=headers)
-    if not res.ok:
-        handle_exception(res.status, "Database error", await res.json(), None)
-    total = process_total(res)
-    for i in range(0, total, batch_size):
-        async with session.get(url=f"{url}&limit={batch_size}&offset={i}", headers=headers) as res:
-            if not res.ok:
-                handle_exception(res.status, "Database error", await res.json(), None)
-            async for chunk in res.content.iter_chunked(1024):
-                yield chunk
-            yield b"\n"
-
-
 @routes.get(r"/api/{model}/data/")
 async def metrics_data(request):
     """
@@ -74,17 +43,7 @@ async def metrics_data(request):
     page = int(request.query.get("page", "1"))
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
-    if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(
-            400,
-            None,
-            "Invalid query string",
-            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
-        )
-    if page > 1:
-        offset = page_size * (page - 1)
-    else:
-        offset = 0
+    offset = build_offset(page, page_size)
     try:
         sql_query = build_sql_query_string(query_string, page_size=page_size, offset=offset)
     except ValueError as e:
@@ -122,7 +81,12 @@ async def metrics_data_csv(request):
     response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
 
-    async for chunk in get_object_data_streamed(request.app["csession"], model, sql_query):
+    async for chunk in stream_data(
+        session=request.app["csession"],
+        url=f"{config.PGREST_ENDPOINT}/{model}?{sql_query}",
+        batch_size=config.BATCH_SIZE,
+        accept_format="text/csv",
+    ):
         await response.write(chunk)
 
     return response
@@ -132,21 +96,7 @@ async def metrics_data_csv(request):
 async def get_health(request):
     """Return health check status"""
     # pinging a specific metrics table that we know always exists, managed by a DAG (https://github.com/datagouv/datagouvfr_data_pipelines/blob/main/dgv/metrics/sql/create_tables.sql)
-    url = f"{config.PGREST_ENDPOINT}/site"
-    async with request.app["csession"].head(url) as res:
-        if not res.ok:
-            raise QueryException(
-                503,
-                None,
-                "DB unavailable",
-                "postgREST has not started yet",
-            )
-    start_time = request.app["start_time"]
-    current_time = datetime.now(timezone.utc)
-    uptime_seconds = (current_time - start_time).total_seconds()
-    return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
-    )
+    return await check_health(request, f"{config.PGREST_ENDPOINT}/site")
 
 
 async def app_factory():

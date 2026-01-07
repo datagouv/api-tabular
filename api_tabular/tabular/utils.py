@@ -1,10 +1,11 @@
-from typing import AsyncGenerator
-
 from aiohttp import ClientSession, web
+from aiohttp.web_request import Request
 
 from api_tabular import config
-from api_tabular.error import handle_exception
-from api_tabular.utils import process_total
+from api_tabular.core.data import stream_data
+from api_tabular.core.error import QueryException, handle_exception
+from api_tabular.core.query import build_sql_query_string
+from api_tabular.core.utils import process_total
 
 
 async def get_resource(session: ClientSession, resource_id: str, columns: list) -> dict:
@@ -50,29 +51,6 @@ async def get_resource_data(
         return record, total
 
 
-async def get_resource_data_streamed(
-    session: ClientSession,
-    model: dict,
-    sql_query: str,
-    accept_format: str = "text/csv",
-    batch_size: int = config.BATCH_SIZE,
-) -> AsyncGenerator[bytes, None]:
-    url = f"{config.PGREST_ENDPOINT}/{model['parsing_table']}?{sql_query}"
-    res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
-    if not res.ok:
-        handle_exception(res.status, "Database error", await res.json(), None)
-    total = process_total(res)
-    for i in range(0, total, batch_size):
-        async with session.get(
-            url=f"{url}&limit={batch_size}&offset={i}", headers={"Accept": accept_format}
-        ) as res:
-            if not res.ok:
-                handle_exception(res.status, "Database error", await res.json(), None)
-            async for chunk in res.content.iter_chunked(1024):
-                yield chunk
-            yield b"\n"
-
-
 async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
     q = f"select=table_indexes&resource_id=eq.{resource_id}"
     url = f"{config.PGREST_ENDPOINT}/resources_exceptions?{q}"
@@ -85,3 +63,47 @@ async def get_potential_indexes(session: ClientSession, resource_id: str) -> set
         # indexes look like {"column_name": "index_type", ...} or None
         indexes: dict = record[0].get("table_indexes", {})
         return set(indexes.keys()) if indexes else None
+
+
+async def try_build_query(
+    request: Request,
+    query_string: list[str],
+    resource_id: str,
+    page_size: int | None = None,
+    offset: int = 0,
+):
+    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+    try:
+        sql_query = build_sql_query_string(query_string, resource_id, indexes, page_size, offset)
+    except ValueError as e:
+        raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
+    except PermissionError as e:
+        raise QueryException(403, None, "Unauthorized parameters", str(e))
+    return sql_query
+
+
+async def stream_resource_data(request: Request, format: str):
+    resource_id = request.match_info["rid"]
+    query_string = request.query_string.split("&") if request.query_string else []
+
+    sql_query = await try_build_query(request, query_string, resource_id)
+    resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
+
+    mime = "application/json" if format == "json" else "text/csv"
+    response_headers = {
+        "Content-Disposition": f'attachment; filename="{resource_id}.{format}"',
+        "Content-Type": mime,
+    }
+    response = web.StreamResponse(headers=response_headers)
+    await response.prepare(request)
+
+    async for chunk in stream_data(
+        session=request.app["csession"],
+        url=f"{config.PGREST_ENDPOINT}/{resource['parsing_table']}?{sql_query}",
+        batch_size=config.BATCH_SIZE,
+        accept_format=mime,
+    ):
+        await response.write(chunk)
+
+    await response.write_eof()
+    return response

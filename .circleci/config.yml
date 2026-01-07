@@ -62,7 +62,7 @@ jobs:
           name: Start service
           command: |
             export PATH="$HOME/.local/bin:$PATH"
-            nohup uv run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/app.py > server.log 2>&1 &
+            nohup uv run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/tabular/app.py > server.log 2>&1 &
             sleep 5
       - run:
           name: Run tests

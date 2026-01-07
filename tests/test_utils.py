@@ -1,6 +1,6 @@
 from aiohttp.test_utils import make_mocked_request
 
-from api_tabular.utils import build_link_with_page, external_url, url_for
+from api_tabular.core.url import build_link_with_page, external_url, url_for
 
 
 def test_build_link_with_page():

@@ -1,6 +1,6 @@
 import pytest
 
-from api_tabular.utils import build_sql_query_string
+from api_tabular.core.query import build_sql_query_string
 
 from .conftest import RESOURCE_ID
 

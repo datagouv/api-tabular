@@ -6,36 +6,25 @@ import sentry_sdk
 import yaml
 from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
-from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 from api_tabular import config
-from api_tabular.error import QueryException
-from api_tabular.query import (
+from api_tabular.core.health import check_health
+from api_tabular.core.sentry import sentry_kwargs
+from api_tabular.core.swagger import build_swagger_file
+from api_tabular.core.url import build_link_with_page, url_for
+from api_tabular.core.utils import build_offset
+from api_tabular.core.version import get_app_version
+from api_tabular.tabular.utils import (
     get_potential_indexes,
     get_resource,
     get_resource_data,
-    get_resource_data_streamed,
-)
-from api_tabular.utils import (
-    build_link_with_page,
-    build_sql_query_string,
-    build_swagger_file,
-    get_app_version,
-    url_for,
+    stream_resource_data,
+    try_build_query,
 )
 
 routes = web.RouteTableDef()
 
-sentry_sdk.init(
-    dsn=config.SENTRY_DSN,
-    integrations=[AioHttpIntegration()],
-    environment=config.SERVER_NAME or "unknown",
-    # Set traces_sample_rate to 1.0 to capture 100%
-    # of transactions for performance monitoring.
-    # Sentry recommends adjusting this value in production.
-    traces_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
-    profiles_sample_rate=config.SENTRY_SAMPLE_RATE or 1.0,
-)
+sentry_sdk.init(**sentry_kwargs)
 
 
 @routes.get(r"/api/resources/{rid}/", name="meta")
@@ -111,25 +100,9 @@ async def resource_data(request):
     page = int(request.query.get("page", "1"))
     page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
 
-    if page_size > config.PAGE_SIZE_MAX:
-        raise QueryException(
-            400,
-            None,
-            "Invalid query string",
-            f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
-        )
-    if page > 1:
-        offset = page_size * (page - 1)
-    else:
-        offset = 0
+    offset = build_offset(page, page_size)
 
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
-    try:
-        sql_query = build_sql_query_string(query_string, resource_id, indexes, page_size, offset)
-    except ValueError as e:
-        raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
-    except PermissionError as e:
-        raise QueryException(403, None, "Unauthorized parameters", str(e))
+    sql_query = await try_build_query(request, query_string, resource_id, page_size, offset)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
 
@@ -158,84 +131,19 @@ async def resource_data(request):
 
 @routes.get(r"/api/resources/{rid}/data/csv/", name="csv")
 async def resource_data_csv(request):
-    resource_id = request.match_info["rid"]
-    query_string = request.query_string.split("&") if request.query_string else []
-
-    try:
-        sql_query = build_sql_query_string(query_string, resource_id)
-    except ValueError:
-        raise QueryException(400, None, "Invalid query string", "Malformed query")
-    except PermissionError as e:
-        raise QueryException(403, None, "Unauthorized parameters", str(e))
-
-    resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
-
-    response_headers = {
-        "Content-Disposition": f'attachment; filename="{resource_id}.csv"',
-        "Content-Type": "text/csv",
-    }
-    response = web.StreamResponse(headers=response_headers)
-    await response.prepare(request)
-
-    async for chunk in get_resource_data_streamed(request.app["csession"], resource, sql_query):
-        await response.write(chunk)
-
-    await response.write_eof()
-    return response
+    return await stream_resource_data(request, format="csv")
 
 
 @routes.get(r"/api/resources/{rid}/data/json/", name="json")
 async def resource_data_json(request):
-    resource_id = request.match_info["rid"]
-    query_string = request.query_string.split("&") if request.query_string else []
-
-    try:
-        sql_query = build_sql_query_string(query_string, resource_id)
-    except ValueError:
-        raise QueryException(400, None, "Invalid query string", "Malformed query")
-    except PermissionError as e:
-        raise QueryException(403, None, "Unauthorized parameters", str(e))
-
-    resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
-
-    response_headers = {
-        "Content-Disposition": f'attachment; filename="{resource_id}.json"',
-        "Content-Type": "application/json",
-    }
-    response = web.StreamResponse(headers=response_headers)
-    await response.prepare(request)
-
-    async for chunk in get_resource_data_streamed(
-        request.app["csession"],
-        resource,
-        sql_query,
-        accept_format="application/json",
-    ):
-        await response.write(chunk)
-
-    await response.write_eof()
-    return response
+    return await stream_resource_data(request, format="json")
 
 
 @routes.get(r"/health/")
 async def get_health(request):
     """Return health check status"""
     # pinging a specific table that we know always exists
-    url = f"{config.PGREST_ENDPOINT}/migrations_csv"
-    async with request.app["csession"].head(url) as res:
-        if not res.ok:
-            raise QueryException(
-                503,
-                None,
-                "DB unavailable",
-                "postgREST has not started yet",
-            )
-    start_time = request.app["start_time"]
-    current_time = datetime.now(timezone.utc)
-    uptime_seconds = (current_time - start_time).total_seconds()
-    return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
-    )
+    return await check_health(request, f"{config.PGREST_ENDPOINT}/migrations_csv")
 
 
 @routes.get(r"/api/aggregation-exceptions/")
