@@ -8,6 +8,7 @@ from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
+from api_tabular.core.data import stream_data
 from api_tabular.core.error import QueryException, handle_exception
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.sentry import sentry_kwargs
@@ -29,28 +30,6 @@ async def get_object_data(session: ClientSession, model: str, sql_query: str):
         record = await res.json()
         total = process_total(res)
         return record, total
-
-
-async def get_object_data_streamed(
-    session: ClientSession,
-    model: str,
-    sql_query: str,
-    accept_format: str = "text/csv",
-    batch_size: int = config.BATCH_SIZE,
-):
-    headers = {"Accept": accept_format, "Prefer": "count=exact"}
-    url = f"{config.PGREST_ENDPOINT}/{model}?{sql_query}"
-    res = await session.head(f"{url}&limit=1&", headers=headers)
-    if not res.ok:
-        handle_exception(res.status, "Database error", await res.json(), None)
-    total = process_total(res)
-    for i in range(0, total, batch_size):
-        async with session.get(url=f"{url}&limit={batch_size}&offset={i}", headers=headers) as res:
-            if not res.ok:
-                handle_exception(res.status, "Database error", await res.json(), None)
-            async for chunk in res.content.iter_chunked(1024):
-                yield chunk
-            yield b"\n"
 
 
 @routes.get(r"/api/{model}/data/")
@@ -111,7 +90,12 @@ async def metrics_data_csv(request):
     response = web.StreamResponse(headers=response_headers)
     await response.prepare(request)
 
-    async for chunk in get_object_data_streamed(request.app["csession"], model, sql_query):
+    async for chunk in stream_data(
+        session=request.app["csession"],
+        url=f"{config.PGREST_ENDPOINT}/{model}?{sql_query}",
+        batch_size=config.BATCH_SIZE,
+        accept_format="text/csv",
+    ):
         await response.write(chunk)
 
     return response
