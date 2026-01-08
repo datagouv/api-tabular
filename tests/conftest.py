@@ -28,7 +28,7 @@ def rmock():
 
 
 @pytest_asyncio.fixture
-async def fake_client() -> AsyncGenerator[TestClient, Any]:
+async def client() -> AsyncGenerator[TestClient, Any]:
     app = await app_factory()
     async with TestClient(TestServer(app)) as client:
         yield client
