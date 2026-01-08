@@ -16,12 +16,18 @@ async def stream_data(
     if not res.ok:
         handle_exception(res.status, "Database error", await res.json(), None)
     total = process_total(res)
-    for i in range(0, total, batch_size):
-        async with session.get(
-            url=f"{url}&limit={batch_size}&offset={i}", headers={"Accept": accept_format}
-        ) as res:
-            if not res.ok:
-                handle_exception(res.status, "Database error", await res.json(), None)
-            async for chunk in res.content.iter_chunked(1024):
-                yield chunk
-            yield b"\n"
+    if total > batch_size:
+        handle_exception(
+            403,
+            "Output is too long",
+            f"The output has more than {batch_size} rows, please consider using the source file directly",
+            None,
+        )
+    async with session.get(
+        url=f"{url}&limit={batch_size}", headers={"Accept": accept_format}
+    ) as res:
+        if not res.ok:
+            handle_exception(res.status, "Database error", await res.json(), None)
+        async for chunk in res.content.iter_chunked(1024):
+            yield chunk
+        yield b"\n"
