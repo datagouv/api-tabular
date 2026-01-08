@@ -348,15 +348,18 @@ async def test_aggregation_exceptions(client):
 
 
 @pytest.mark.parametrize(
-    "_resource_id",
+    "_resource_id,batch_size",
     [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
+        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
+        (AGG_ALLOWED_RESOURCE_ID, None),
+        (INDEXED_RESOURCE_ID, None),
+        (RESOURCE_ID, None),
+        (RESOURCE_ID, 5),
     ],
 )
-async def test_api_csv_export(client, tables_index_rows, _resource_id):
+async def test_api_csv_export(client, mocker, tables_index_rows, _resource_id, batch_size):
+    if batch_size is not None:
+        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     res = await client.get(f"/api/resources/{_resource_id}/data/csv/")
     assert res.status == 200
@@ -370,15 +373,18 @@ async def test_api_csv_export(client, tables_index_rows, _resource_id):
 
 
 @pytest.mark.parametrize(
-    "_resource_id",
+    "_resource_id,batch_size",
     [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
+        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
+        (AGG_ALLOWED_RESOURCE_ID, None),
+        (INDEXED_RESOURCE_ID, None),
+        (RESOURCE_ID, None),
+        (RESOURCE_ID, 5),
     ],
 )
-async def test_api_json_export(client, tables_index_rows, _resource_id):
+async def test_api_json_export(client, mocker, tables_index_rows, _resource_id, batch_size):
+    if batch_size is not None:
+        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     res = await client.get(f"/api/resources/{_resource_id}/data/json/")
     assert res.status == 200
