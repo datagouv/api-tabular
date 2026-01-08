@@ -240,9 +240,7 @@ async def test_api_with_unsupported_args(client):
         (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
     ],
 )
-async def test_api_exception_resource_indexes(
-    client, tables_index_rows, exceptions_rows, params
-):
+async def test_api_exception_resource_indexes(client, tables_index_rows, exceptions_rows, params):
     _resource_id, forbidden = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
@@ -402,9 +400,7 @@ async def test_api_resource_with_null_values(client):
         body = await res.json()
         assert len(body["data"]) == 2
         assert all(row[col] is None for row in body["data"])
-        res = await client.get(
-            f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull"
-        )
+        res = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull")
         body = await res.json()
         assert len(body["data"]) == 8
         assert all(row[col] is not None for row in body["data"])
