@@ -1,10 +1,8 @@
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from re import M
 from typing import Any, AsyncGenerator, Generator
 
-import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
