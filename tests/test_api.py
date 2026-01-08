@@ -12,7 +12,6 @@ from .conftest import (
     DELETED_RESOURCE_ID,
     INDEXED_RESOURCE_ID,
     NULL_VALUES_RESOURCE_ID,
-    PGREST_ENDPOINT,
     RESOURCE_ID,
     UNKNOWN_RESOURCE_ID,
 )
@@ -29,8 +28,8 @@ pytestmark = pytest.mark.asyncio
         RESOURCE_ID,
     ],
 )
-async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_id):
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/")
+async def test_api_resource_meta(fake_client, base_url, tables_index_rows, _resource_id):
+    res = await fake_client.get(f"/api/resources/{_resource_id}/")
     assert res.status == 200
     assert await res.json() == {
         "created_at": tables_index_rows[_resource_id]["created_at"],
@@ -55,17 +54,17 @@ async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_
     }
 
 
-async def test_api_resource_meta_deleted(client, base_url):
+async def test_api_resource_meta_deleted(fake_client):
     """Test that deleted resources return 410 Gone for metadata endpoint"""
-    res = await client.get(f"{base_url}/api/resources/{DELETED_RESOURCE_ID}/")
+    res = await fake_client.get(f"api/resources/{DELETED_RESOURCE_ID}/")
     assert res.status == 410
     text = await res.text()
     assert "permanently deleted" in text
     assert DELETED_RESOURCE_ID in text
 
 
-async def test_api_resource_meta_not_found(client, base_url):
-    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/")
+async def test_api_resource_meta_not_found(fake_client):
+    res = await fake_client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert res.status == 404
 
 
@@ -78,15 +77,13 @@ async def test_api_resource_meta_not_found(client, base_url):
         RESOURCE_ID,
     ],
 )
-async def test_api_resource_profile(
-    client, base_url, tables_index_rows, exceptions_rows, _resource_id
-):
+async def test_api_resource_profile(fake_client, tables_index_rows, exceptions_rows, _resource_id):
     indexes = (
         list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
         if _resource_id in exceptions_rows
         else None
     )
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     body = await res.json()
     assert body["profile"] == json.loads(tables_index_rows[_resource_id]["csv_detective"])
@@ -96,14 +93,14 @@ async def test_api_resource_profile(
         assert sorted(body["indexes"]) == sorted(indexes)
 
 
-async def test_api_resource_profile_not_found(client, base_url):
-    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
+async def test_api_resource_profile_not_found(fake_client):
+    res = await fake_client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
     assert res.status == 404
 
 
-async def test_api_resource_data(client, base_url, tables_index_rows):
+async def test_api_resource_data(fake_client, base_url, tables_index_rows):
     detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/")
     assert res.status == 200
     body = await res.json()
     assert all(key in body for key in ["data", "links", "meta"])
@@ -128,10 +125,10 @@ async def test_api_resource_data(client, base_url, tables_index_rows):
         {"page": 4, "page_size": 5},
     ],
 )
-async def test_api_resource_data_with_meta_args(client, base_url, tables_index_rows, args):
+async def test_api_resource_data_with_meta_args(fake_client, base_url, tables_index_rows, args):
     detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
     params = "&".join(f"{k}={v}" for k, v in args.items())
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{params}")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
     assert res.status == 200
     body = await res.json()
     assert len(body["data"]) == args.get("page_size", config.PAGE_SIZE_DEFAULT)
@@ -167,9 +164,9 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
         [("is_true", "differs", False), ("score", "greater", 0.7)],
     ],
 )
-async def test_api_resource_data_with_data_args(client, base_url, filters):
+async def test_api_resource_data_with_data_args(fake_client, filters):
     args = "&".join(f"{col}__{comp}={str(val).lower()}" for col, comp, val in filters)
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 200
     body = await res.json()
     # only checking first page
@@ -185,9 +182,9 @@ async def test_api_resource_data_with_data_args(client, base_url, filters):
                 assert row[col] >= val
 
 
-async def test_api_resource_data_with_args_error(client, base_url):
+async def test_api_resource_data_with_args_error(fake_client):
     args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
         "errors": [
@@ -200,9 +197,9 @@ async def test_api_resource_data_with_args_error(client, base_url):
     }
 
 
-async def test_api_resource_data_with_page_size_error(client, base_url):
+async def test_api_resource_data_with_page_size_error(fake_client):
     args = f"page=1&page_size={config.PAGE_SIZE_MAX + 1}"
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{args}")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
     assert await res.json() == {
         "errors": [
@@ -215,14 +212,14 @@ async def test_api_resource_data_with_page_size_error(client, base_url):
     }
 
 
-async def test_api_resource_data_not_found(client, base_url):
-    res = await client.get(f"{base_url}/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
+async def test_api_resource_data_not_found(fake_client):
+    res = await fake_client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
     assert res.status == 404
 
 
-async def test_api_with_unsupported_args(client, base_url):
+async def test_api_with_unsupported_args(fake_client):
     arg = "limit=1"
-    res = await client.get(f"{base_url}/api/resources/{RESOURCE_ID}/data/?{arg}")
+    res = await fake_client.get(f"/api/resources/{RESOURCE_ID}/data/?{arg}")
     assert res.status == 400
     body = {
         "errors": [
@@ -244,12 +241,12 @@ async def test_api_with_unsupported_args(client, base_url):
     ],
 )
 async def test_api_exception_resource_indexes(
-    client, base_url, tables_index_rows, exceptions_rows, params
+    fake_client, tables_index_rows, exceptions_rows, params
 ):
     _resource_id, forbidden = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     content = await res.json()
     assert content["profile"] == detection
@@ -257,7 +254,7 @@ async def test_api_exception_resource_indexes(
     assert sorted(indexes) == list(sorted(content["indexes"]))
 
     # checking that the resource is readable with no filter
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/?page=1&page_size=1")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
     # checking that the resource can be filtered on any columns
@@ -265,23 +262,23 @@ async def test_api_exception_resource_indexes(
         if detection["columns"][col]["python_type"] == "json":
             # can't handle json type for now
             continue
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
+        res = await fake_client.get(
+            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
         assert res.status == 200
 
     # checking that the resource cannot be aggregated on a non-indexed column
     non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
     for col in non_indexed_cols:
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
+        res = await fake_client.get(
+            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
         assert res.status == 403
 
     # checking whether aggregation is allowed on indexed columns
     for idx in indexes:
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
+        res = await fake_client.get(
+            f"/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
         )
         assert res.status == 403 if forbidden else 200
 
@@ -293,26 +290,26 @@ async def test_api_exception_resource_indexes(
         (AGG_ALLOWED_RESOURCE_ID, False),
     ],
 )
-async def test_api_exception_resource_no_indexes(client, base_url, tables_index_rows, params):
+async def test_api_exception_resource_no_indexes(fake_client, tables_index_rows, params):
     _resource_id, forbidden = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     # checking that we have an `indexes` key in the profile endpoint
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/profile/")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     content = await res.json()
     assert content["profile"] == detection
     assert content["indexes"] is None
 
     # checking that the resource is readable with no filter
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/?page=1&page_size=1")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
     # checking that the resource can be filtered on all columns
     for col, results in detection["columns"].items():
         if results["python_type"] == "json":
             continue
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
+        res = await fake_client.get(
+            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
         assert res.status == 200
 
@@ -321,8 +318,8 @@ async def test_api_exception_resource_no_indexes(client, base_url, tables_index_
     for col, results in detection["columns"].items():
         if results["python_type"] == "json":
             continue
-        res = await client.get(
-            f"{base_url}/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
+        res = await fake_client.get(
+            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
         assert res.status == 403 if forbidden else 200
 
@@ -334,10 +331,10 @@ async def test_api_exception_resource_no_indexes(client, base_url, tables_index_
         (200, 200, ["status", "version", "uptime_seconds"]),
     ],
 )
-async def test_health(setup, fake_client, rmock, params):
+async def test_health(fake_client, rmock, params):
     postgrest_resp_code, api_expected_resp_code, expected_keys = params
     rmock.head(
-        f"{PGREST_ENDPOINT}/migrations_csv",
+        f"{config.PGREST_ENDPOINT}/migrations_csv",
         status=postgrest_resp_code,
     )
     res = await fake_client.get("/health/")
@@ -346,8 +343,8 @@ async def test_health(setup, fake_client, rmock, params):
     assert all(key in res_json for key in expected_keys)
 
 
-async def test_aggregation_exceptions(client, base_url):
-    res = await client.get(f"{base_url}/api/aggregation-exceptions/")
+async def test_aggregation_exceptions(fake_client):
+    res = await fake_client.get(f"/api/aggregation-exceptions/")
     exceptions = await res.json()
     assert exceptions == config.ALLOW_AGGREGATION
 
@@ -361,9 +358,9 @@ async def test_aggregation_exceptions(client, base_url):
         RESOURCE_ID,
     ],
 )
-async def test_api_csv_export(client, base_url, tables_index_rows, _resource_id):
+async def test_api_csv_export(fake_client, tables_index_rows, _resource_id):
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/csv/")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/data/csv/")
     assert res.status == 200
     content = await res.text()
     reader = csv.reader(StringIO(content))
@@ -383,9 +380,9 @@ async def test_api_csv_export(client, base_url, tables_index_rows, _resource_id)
         RESOURCE_ID,
     ],
 )
-async def test_api_json_export(client, base_url, tables_index_rows, _resource_id):
+async def test_api_json_export(fake_client, tables_index_rows, _resource_id):
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"{base_url}/api/resources/{_resource_id}/data/json/")
+    res = await fake_client.get(f"/api/resources/{_resource_id}/data/json/")
     assert res.status == 200
     content = await res.text()
     rows = json.loads(content)
@@ -395,20 +392,18 @@ async def test_api_json_export(client, base_url, tables_index_rows, _resource_id
         assert list(row.keys()) == ["__id"] + list(detection["columns"])
 
 
-async def test_api_resource_with_null_values(client, base_url):
+async def test_api_resource_with_null_values(fake_client):
     # in this table we have exactly two NULL values per column, 10 rows in total
-    response = await client.get(f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/profile/")
+    response = await fake_client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/profile/")
     profile = await response.json()
     columns = [col for col in profile["profile"]["columns"].keys()]
     for col in columns:
-        res = await client.get(
-            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull"
-        )
+        res = await fake_client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull")
         body = await res.json()
         assert len(body["data"]) == 2
         assert all(row[col] is None for row in body["data"])
-        res = await client.get(
-            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull"
+        res = await fake_client.get(
+            f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull"
         )
         body = await res.json()
         assert len(body["data"]) == 8
@@ -418,8 +413,8 @@ async def test_api_resource_with_null_values(client, base_url):
             # except for json type
             continue
         value = 1
-        res = await client.get(
-            f"{base_url}/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
+        res = await fake_client.get(
+            f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
         )
         body = await res.json()
         assert all(row[col] != value for row in body["data"])
