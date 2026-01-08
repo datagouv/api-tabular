@@ -21,7 +21,6 @@ async def stream_data(
             403,
             "Output is too long",
             f"The output has more than {batch_size} rows, please consider downloading the source file directly",
-
             None,
         )
     async with session.get(
