@@ -79,7 +79,7 @@ async def metrics_data_csv(request):
         "Content-Disposition": f'attachment; filename="{model}.csv"',
         "Content-Type": mime,
     }
-    
+
     return await stream_data(
         session=request.app["csession"],
         request=request,

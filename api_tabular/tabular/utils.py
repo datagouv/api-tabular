@@ -94,7 +94,7 @@ async def stream_resource_data(request: Request, format: str):
         "Content-Disposition": f'attachment; filename="{resource_id}.{format}"',
         "Content-Type": mime,
     }
-    
+
     return await stream_data(
         session=request.app["csession"],
         request=request,
