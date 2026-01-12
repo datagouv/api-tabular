@@ -1,7 +1,7 @@
 services:
   # PostgREST for real Hydra database (used for development with real data)
   postgrest:
-    image: "postgrest/postgrest:v14.0"
+    image: "postgrest/postgrest:v14.3"
     environment:
       # Connect to Hydra CSV database
       - PGRST_DB_URI=postgres://postgres:postgres@host.docker.internal:5434/postgres
