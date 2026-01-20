@@ -94,16 +94,11 @@ async def stream_resource_data(request: Request, format: str):
         "Content-Disposition": f'attachment; filename="{resource_id}.{format}"',
         "Content-Type": mime,
     }
-    response = web.StreamResponse(headers=response_headers)
-    await response.prepare(request)
 
-    async for chunk in stream_data(
+    return await stream_data(
         session=request.app["csession"],
+        request=request,
         url=f"{config.PGREST_ENDPOINT}/{resource['parsing_table']}?{sql_query}",
-        batch_size=config.BATCH_SIZE,
         accept_format=mime,
-    ):
-        await response.write(chunk)
-
-    await response.write_eof()
-    return response
+        response_headers=response_headers,
+    )

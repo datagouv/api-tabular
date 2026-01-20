@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 
-import aiohttp
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
@@ -12,7 +11,6 @@ from aioresponses import aioresponses
 from api_tabular import config
 from api_tabular.tabular.app import app_factory
 
-PGREST_ENDPOINT = "https://example.com"
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
 INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
@@ -23,11 +21,6 @@ NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
 
 
 @pytest.fixture
-def setup() -> None:
-    config.override(PGREST_ENDPOINT=PGREST_ENDPOINT)
-
-
-@pytest.fixture
 def rmock():
     # passthrough for local requests (aiohttp TestServer)
     with aioresponses(passthrough=["http://127.0.0.1"]) as m:
@@ -35,13 +28,7 @@ def rmock():
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[aiohttp.ClientSession, Any]:
-    async with aiohttp.ClientSession() as session:
-        yield session
-
-
-@pytest_asyncio.fixture
-async def fake_client() -> AsyncGenerator[TestClient, Any]:
+async def client() -> AsyncGenerator[TestClient, Any]:
     app = await app_factory()
     async with TestClient(TestServer(app)) as client:
         yield client

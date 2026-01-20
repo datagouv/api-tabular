@@ -38,9 +38,9 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Start containers
+          name: Start test containers
           command: |
-            docker compose up -d
+            docker compose --profile test up -d
       - run:
           name: Wait for PostgreSQL to be ready
           command: |
@@ -58,12 +58,6 @@ jobs:
             export PATH="$HOME/.local/bin:$PATH"
             uv python install << pipeline.parameters.python-version >>
             uv sync --frozen
-      - run:
-          name: Start service
-          command: |
-            export PATH="$HOME/.local/bin:$PATH"
-            nohup uv run adev runserver -p<< pipeline.parameters.api-port >> api_tabular/tabular/app.py > server.log 2>&1 &
-            sleep 5
       - run:
           name: Run tests
           command: |

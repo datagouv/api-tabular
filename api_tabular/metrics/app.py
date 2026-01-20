@@ -74,22 +74,19 @@ async def metrics_data_csv(request):
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
 
+    mime = "text/csv"
     response_headers = {
         "Content-Disposition": f'attachment; filename="{model}.csv"',
-        "Content-Type": "text/csv",
+        "Content-Type": mime,
     }
-    response = web.StreamResponse(headers=response_headers)
-    await response.prepare(request)
 
-    async for chunk in stream_data(
+    return await stream_data(
         session=request.app["csession"],
+        request=request,
         url=f"{config.PGREST_ENDPOINT}/{model}?{sql_query}",
-        batch_size=config.BATCH_SIZE,
-        accept_format="text/csv",
-    ):
-        await response.write(chunk)
-
-    return response
+        accept_format=mime,
+        response_headers=response_headers,
+    )
 
 
 @routes.get(r"/health/")
