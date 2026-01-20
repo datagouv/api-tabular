@@ -33,8 +33,25 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    Install dependencies and start the proxy services:
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/tabular/app.py        # Api related to apified CSV files by udata-hydra
-   uv run adev runserver -p8006 api_tabular/metrics/app.py    # Api related to udata's metrics
+   uv run adev runserver -p8005 api_tabular/tabular/app.py    # Api related to apified CSV files by udata-hydra (dev server)
+   uv run adev runserver -p8006 api_tabular/metrics/app.py    # Api related to udata's metrics (dev server)
+   ```
+
+   **Note:** For production, use gunicorn with aiohttp worker:
+   ```shell
+   # Tabular API (port 8005)
+   uv run gunicorn api_tabular.tabular.app:app_factory \
+     --bind 0.0.0.0:8005 \
+     --worker-class aiohttp.GunicornWebWorker \
+     --workers 4 \
+     --access-logfile -
+
+   # Metrics API (port 8006)
+   uv run gunicorn api_tabular.metrics.app:app_factory \
+     --bind 0.0.0.0:8006 \
+     --worker-class aiohttp.GunicornWebWorker \
+     --workers 4 \
+     --access-logfile -
    ```
 
    The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
@@ -81,8 +98,25 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
 4. **Start the API services:**
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/tabular/app.py
-   uv run adev runserver -p8006 api_tabular/metrics/app.py
+   uv run adev runserver -p8005 api_tabular/tabular/app.py     # Dev server
+   uv run adev runserver -p8006 api_tabular/metrics/app.py     # Dev server
+   ```
+
+   **Note:** For production, use gunicorn with aiohttp worker:
+   ```shell
+   # Tabular API (port 8005)
+   uv run gunicorn api_tabular.tabular.app:app_factory \
+     --bind 0.0.0.0:8005 \
+     --worker-class aiohttp.GunicornWebWorker \
+     --workers 4 \
+     --access-logfile -
+
+   # Metrics API (port 8006)
+   uv run gunicorn api_tabular.metrics.app:app_factory \
+     --bind 0.0.0.0:8006 \
+     --worker-class aiohttp.GunicornWebWorker \
+     --workers 4 \
+     --access-logfile -
    ```
 
 5. **Use real resource IDs** from your Hydra database instead of the test IDs.
