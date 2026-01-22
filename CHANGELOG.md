@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.12 (2026-01-22)
+
+- chore: add profiles to docker compose to use the local hydra database ([#74](https://github.com/datagouv/api-tabular/pull/74))
+- chore: update dependencies ([#80](https://github.com/datagouv/api-tabular/pull/80))
+- feat: use gunicorn in production server instead of adev ([#85](https://github.com/datagouv/api-tabular/pull/85))
+- fix: fix version of local postgrest in docker compose
+- Forbid to download a too large file ([#89](https://github.com/datagouv/api-tabular/pull/89))
+- Restructure the repo for easier maintenance ([#87](https://github.com/datagouv/api-tabular/pull/87))
+- Use test client in tests ([#88](https://github.com/datagouv/api-tabular/pull/88))
+
+
 ## 0.2.11 (2026-01-06)
 
 - chore: move pyproject optional-dependencies to dependency-groups ([#78](https://github.com/datagouv/api-tabular/pull/78))
