@@ -5,7 +5,7 @@ from api_tabular import config
 sentry_kwargs = {
     "dsn": config.SENTRY_DSN,
     "integrations": [AioHttpIntegration()],
-    "environment": config.ENVIRONMENT or "unknown",
+    "environment": config.SERVER_NAME or "unknown",
     # Set traces_sample_rate to 1.0 to capture 100%
     # of transactions for performance monitoring.
     # Sentry recommends adjusting this value in production.
