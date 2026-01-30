@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-01-30)
+
+- docs: clean changelog
+- fix: fix Sentry env ([#90](https://github.com/datagouv/api-tabular/pull/90))
+
+
 ## 0.3.0 (2026-01-23)
 
 - chore: add profiles to docker compose to use the local hydra database ([#74](https://github.com/datagouv/api-tabular/pull/74))
