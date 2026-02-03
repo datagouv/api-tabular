@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: data.gouv.fr Metrics API
   description: |
-    Access data.gouv.fr metrics (number of downloads per resource, organization, site, etc) as JSON or CSV.
+    Access data.gouv.fr metrics (number of downloads and/or visits per resource, organization, site, etc) as JSON or CSV.
     Supports pagination and filtering. Use query params like `column__exact=value`,
     `column__sort=asc`, `page` and `page_size`.
   version: 1.0.0
