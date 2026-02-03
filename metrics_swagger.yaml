@@ -1,24 +1,39 @@
 openapi: 3.0.3
 info:
-  title: Metrics data API
-  description: Retrieve metric data with optional filtering and sorting.
+  title: data.gouv.fr Metrics API
+  description: |
+    Access data.gouv.fr metrics (number of downloads per resource, organization, site, etc) as JSON or CSV.
+    Supports pagination and filtering. Use query params like `column__exact=value`,
+    `column__sort=asc`, `page` and `page_size`.
   version: 1.0.0
 tags:
   - name: Metrics data retrieval
-    description: Retrieve metric data
+    description: Retrieve metrics data
+  - name: Health
+    description: Service health
 paths:
   /api/{model}/data/:
     get:
-      description: Retrieve metric data for a specified model.
-      summary: Find metrics by model
+      tags:
+        - Metrics data retrieval
+      description: Returns paginated metrics for the given model. Filter with `column__exact=value`, sort with `column__sort=asc` or `column__sort=desc`.
+      summary: Get metrics by model (JSON)
       operationId: getMetricsByModel
       responses:
         '200':
-          description: successful operation
+          description: successful operation (body has data, links.next/prev, meta.page/page_size/total)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Metrics'
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: {}
+                  links:
+                    type: object
+                  meta:
+                    type: object
         '400':
           description: Invalid query string
         '404':
@@ -26,62 +41,61 @@ paths:
     parameters:
     - name: model
       in: path
-      description: Type of object to get metrics of
+      description: Metrics table name (e.g. site, organization, dataset)
       required: true
       schema:
         type: string
+        example: site
     - name: page
       in: query
       required: false
-      description: Specific page.
+      description: Page number (1-based)
       schema:
-        type: string
+        type: integer
+        default: 1
     - name: page_size
       in: query
       required: false
-      description: Number of results per page.
+      description: Number of results per page
       schema:
-        type: string
-    - name: sort ascending
+        type: integer
+    - name: column__sort
       in: query
       required: false
-      description: column__sort=asc
+      description: Sort by column (column__sort=asc or column__sort=desc)
       schema:
         type: string
-    - name: sort descending
+        enum: [asc, desc]
+    - name: column__exact
       in: query
       required: false
-      description: column__sort=desc
+      description: Exact match on column (column__exact=value)
       schema:
         type: string
-    - name: exact
+    - name: column__contains
       in: query
       required: false
-      description: column__exact=value
+      description: Substring match (column__contains=value)
       schema:
         type: string
-    - name: contains
+    - name: column__less
       in: query
       required: false
-      description: column__contains=value
+      description: Less than (column__less=value)
       schema:
         type: string
-    - name: less
+    - name: column__greater
       in: query
       required: false
-      description: column__less=value
-      schema:
-        type: string
-    - name: greater
-      in: query
-      required: false
-      description: column__greater=value
+      description: Greater than (column__greater=value)
       schema:
         type: string
   /api/{model}/data/csv/:
     get:
-      description: Retrieve metric data for a specified model as a CSV file.
-      summary: Find metrics by model as CSV
+      tags:
+        - Metrics data retrieval
+      description: Returns CSV for the model. Filter/sort params (column__exact, column__sort, etc.) apply; pagination is not applied (full result set is streamed).
+      summary: Get metrics by model (CSV)
       operationId: getMetricsByModelCSV
       responses:
         '200':
@@ -95,72 +109,70 @@ paths:
     parameters:
     - name: model
       in: path
-      description: Type of object to get metrics of
+      description: Metrics table name (e.g. site, organization, dataset)
       required: true
       schema:
         type: string
-    - name: page
+        example: site
+    - name: column__sort
       in: query
       required: false
-      description: Specific page.
+      description: Sort by column (column__sort=asc or column__sort=desc)
       schema:
         type: string
-    - name: page_size
+        enum: [asc, desc]
+    - name: column__exact
       in: query
       required: false
-      description: Number of results per page.
+      description: Exact match (column__exact=value)
       schema:
         type: string
-    - name: sort ascending
+    - name: column__contains
       in: query
       required: false
-      description: column__sort=asc
+      description: Substring match (column__contains=value)
       schema:
         type: string
-    - name: sort descending
+    - name: column__less
       in: query
       required: false
-      description: column__sort=desc
+      description: Less than (column__less=value)
       schema:
         type: string
-    - name: exact
+    - name: column__greater
       in: query
       required: false
-      description: column__exact=value
-      schema:
-        type: string
-    - name: contains
-      in: query
-      required: false
-      description: column__contains=value
-      schema:
-        type: string
-    - name: less
-      in: query
-      required: false
-      description: column__less=value
-      schema:
-        type: string
-    - name: greater
-      in: query
-      required: false
-      description: column__greater=value
+      description: Greater than (column__greater=value)
       schema:
         type: string
   /health/:
     get:
-      description: Ping endpoint to ensure health of metrics service.
-      summary: Service's health endpoint
-      operationId: getMetricsHealth
+      tags:
+        - Health
+      description: Service health check (status, version, uptime).
+      summary: Health check
+      operationId: getHealth
       responses:
         '200':
-          description: successful operation
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Database unavailable
 components:
   schemas:
-    Metrics:
+    Health:
+      description: Health check response
       type: object
       properties:
-        id:
-          type: integer
-        name:
+        status:
           type: string
+          example: ok
+        version:
+          type: string
+          description: Deployed app version
+        uptime_seconds:
+          type: number
+          description: Seconds since app startup
