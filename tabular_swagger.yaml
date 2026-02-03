@@ -1,0 +1,289 @@
+openapi: 3.0.3
+info:
+  title: data.gouv.fr Tabular API
+  description: |
+    Access tabular data (CSV) for data.gouv.fr resources as JSON.
+    Supports pagination, filtering and sorting on columns. Use the resource's
+    `/swagger/` endpoint to get the OpenAPI spec for its data and available filters.
+  version: 1.0.0
+tags:
+  - name: Data retrieval
+    description: Retrieve data for resources
+  - name: Health
+    description: Service health
+paths:
+  /api/resources/{rid}/:
+    get:
+      tags:
+        - Data retrieval
+      description: Returns basic metadata and links to profile, data and OpenAPI spec for this resource.
+      summary: Get resource metadata
+      operationId: getMetaResourceInfo
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaResourceInfo'
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/profile/:
+    get:
+      tags:
+        - Data retrieval
+      description: Returns column types, formats and basic stats for the tabular resource (encoding, separator, row count, etc.).
+      summary: Get resource profile
+      operationId: getResourceProfile
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceProfileResponse'
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/swagger/:
+    get:
+      tags:
+        - Data retrieval
+      description: Returns the OpenAPI spec for this resource's data endpoint, including available columns and filter/sort operators.
+      summary: Get resource OpenAPI spec
+      operationId: getSwaggerResource
+      responses:
+        200:
+          description: YAML-formatted OpenAPI spec for this resource's data and CSV endpoints
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/:
+    get:
+      tags:
+        - Data retrieval
+      description: |
+        Returns paginated tabular data as JSON. Columns and query params (filtering, sorting, page, page_size) depend on the resource.
+        Use this resource's `/swagger/` endpoint for the full OpenAPI spec and available columns.
+      summary: Get resource data (JSON)
+      operationId: getResourceData
+      responses:
+        200:
+          description: Paginated data (body has data, links, meta)
+        400:
+          description: Invalid query string
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/csv/:
+    get:
+      tags:
+        - Data retrieval
+      description: Same as `/data/` but returns CSV. See this resource's `/swagger/` for query params.
+      summary: Get resource data (CSV)
+      operationId: getResourceDataCsv
+      responses:
+        200:
+          description: CSV stream
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/json/:
+    get:
+      tags:
+        - Data retrieval
+      description: Same as `/data/` but streams JSON. See this resource's `/swagger/` for query params.
+      summary: Get resource data (JSON stream)
+      operationId: getResourceDataJson
+      responses:
+        200:
+          description: JSON stream
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/aggregation-exceptions/:
+    get:
+      tags:
+        - Data retrieval
+      description: Returns the list of resource IDs for which aggregation queries (groupby, count, sum, etc.) are allowed.
+      summary: List aggregation-allowed resources
+      operationId: getAggregationExceptions
+      responses:
+        '200':
+          description: List of resource UUIDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+  /health/:
+    get:
+      tags:
+        - Health
+      description: Service health check (status, version, uptime).
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: Database unavailable
+components:
+  schemas:
+    ResourceProfileResponse:
+      description: Profile endpoint response; contains the csv_detective profile and optional column indexes.
+      type: object
+      properties:
+        profile:
+          $ref: '#/components/schemas/ResourceProfile'
+        indexes:
+          description: List of column names that have an index (for filtering/sorting). Null if none.
+          type: array
+          items:
+            type: string
+          nullable: true
+    ResourceProfile:
+      description: Column types, formats and statistics from csv_detective (encoding, separator, row count, etc.)
+      type: object
+      properties:
+        header:
+          description: Column names (first row)
+          type: object
+        columns:
+          description: Column type information
+          type: object
+        formats:
+          description: Detected formats per column
+          type: object
+        profile:
+          description: Profiling statistics
+          type: object
+        encoding:
+          description: File encoding (e.g. UTF-8)
+          type: string
+        separator:
+          description: CSV delimiter (e.g. comma, semicolon)
+          type: string
+        engine:
+          description: Which python engine to use to open the file ("openpyxl", "xlrd"...) (if relevant)
+          type: string
+        sheet_name:
+          description: Which sheet of the document was analyzed and converted (if relevant)
+          type: string
+        categorical:
+          description: Columns detected as categorical
+          type: object
+        total_lines:
+          description: Number of data rows
+          type: integer
+        nb_duplicates:
+          description: Number of duplicate rows
+          type: integer
+        columns_fields:
+          description: Field metadata per column (type, format)
+          type: object
+        columns_labels:
+          description: Label metadata per column
+          type: object
+        header_row_idx:
+          description: Index of the header row
+          type: integer
+        heading_columns:
+          description: Number of leading columns
+          type: integer
+        trailing_columns:
+          description: Number of trailing columns
+          type: integer
+    MetaResourceInfo:
+      description: Metadata and links for a resource
+      type: object
+      properties:
+        created_at:
+          description: Creation date of the resource
+          type: string
+        url:
+          description: URL of the source file
+          type: string
+        links:
+          description: Links to profile, data and OpenAPI spec (rel profile, data, swagger)
+          type: array
+          items:
+            type: object
+            properties:
+              href:
+                description: URL of the endpoint
+                type: string
+              type:
+                description: HTTP method (e.g. GET)
+                type: string
+              rel:
+                description: Link relation (profile, data, or swagger)
+                type: string
+    Health:
+      description: Health check response
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          description: Deployed app version
+        uptime_seconds:
+          type: number
+          description: Seconds since app startup
