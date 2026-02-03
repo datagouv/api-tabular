@@ -219,6 +219,12 @@ components:
         separator:
           description: CSV delimiter (e.g. comma, semicolon)
           type: string
+        engine:
+          description: Which python engine to use to open the file ("openpyxl", "xlrd"...) (if relevant)
+          type: string
+        sheet_name:
+          description: Which sheet of the document was analyzed and converted (if relevant)
+          type: string
         categorical:
           description: Columns detected as categorical
           type: object
