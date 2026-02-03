@@ -12,31 +12,6 @@ tags:
   - name: Health
     description: Service health
 paths:
-  /api/resources/{rid}/profile/:
-    get:
-      tags:
-        - Data retrieval
-      description: Returns column types, formats and basic stats for the tabular resource (encoding, separator, row count, etc.).
-      summary: Get resource profile
-      operationId: getResourceProfile
-      responses:
-        200:
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResourceProfileResponse'
-        404:
-          description: Resource not found
-      parameters:
-      - description: UUID of the data.gouv.fr resource
-        in: path
-        name: rid
-        required: true
-        schema:
-          type: string
-          format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
   /api/resources/{rid}/:
     get:
       tags:
@@ -62,6 +37,31 @@ paths:
           type: string
           format: uuid
           example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/profile/:
+    get:
+      tags:
+        - Data retrieval
+      description: Returns column types, formats and basic stats for the tabular resource (encoding, separator, row count, etc.).
+      summary: Get resource profile
+      operationId: getResourceProfile
+      responses:
+        200:
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceProfileResponse'
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
   /api/resources/{rid}/swagger/:
     get:
       tags:
@@ -72,6 +72,73 @@ paths:
       responses:
         200:
           description: YAML-formatted OpenAPI spec for this resource's data and CSV endpoints
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/:
+    get:
+      tags:
+        - Data retrieval
+      description: |
+        Returns paginated tabular data as JSON. Columns and query params (filtering, sorting, page, page_size) depend on the resource.
+        Use this resource's `/swagger/` endpoint for the full OpenAPI spec and available columns.
+      summary: Get resource data (JSON)
+      operationId: getResourceData
+      responses:
+        200:
+          description: Paginated data (body has data, links, meta)
+        400:
+          description: Invalid query string
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/csv/:
+    get:
+      tags:
+        - Data retrieval
+      description: Same as `/data/` but returns CSV. See this resource's `/swagger/` for query params.
+      summary: Get resource data (CSV)
+      operationId: getResourceDataCsv
+      responses:
+        200:
+          description: CSV stream
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+  /api/resources/{rid}/data/json/:
+    get:
+      tags:
+        - Data retrieval
+      description: Same as `/data/` but streams JSON. See this resource's `/swagger/` for query params.
+      summary: Get resource data (JSON stream)
+      operationId: getResourceDataJson
+      responses:
+        200:
+          description: JSON stream
         404:
           description: Resource not found
       parameters:
