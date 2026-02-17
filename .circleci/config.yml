@@ -17,9 +17,12 @@ parameters:
   docker-registry-url:
     type: string
     default: "registry.gitlab.com/etalab/data.gouv.fr/infra"
-  docker-image-name:
+  docker-image-name-tabular:
     type: string
     default: "tabular-api"
+  docker-image-name-metrics:
+    type: string
+    default: "metrics-api"
 
 jobs:
   lint:
@@ -111,15 +114,19 @@ jobs:
           command: |
             echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "${DOCKER_REGISTRY_USER}" --password-stdin registry.gitlab.com
       - run:
-          name: Build and push Docker image
+          name: Build and push Docker images (Tabular API and Metrics API)
           command: |
             source "$BASH_ENV"
             export PATH="$HOME/.local/bin:$PATH"
+            REGISTRY="<< pipeline.parameters.docker-registry-url >>"
             # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
             DOCKER_TAG=$(echo "$RELEASE_VERSION" | tr '+' '-')
-            IMAGE="<< pipeline.parameters.docker-registry-url >>/<< pipeline.parameters.docker-image-name >>:${DOCKER_TAG}"
-            docker build -t "$IMAGE" .
-            docker push "$IMAGE"
+            # Tabular API: tabular endpoints only
+            docker build --build-arg APP_MODULE=api_tabular.tabular.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}" .
+            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}"
+            # Metrics API: metrics endpoints only
+            docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}" .
+            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}"
 
   publish-pypi:
     docker:
