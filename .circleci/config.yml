@@ -88,7 +88,7 @@ jobs:
             uv python install << pipeline.parameters.python-version >>
             uv sync --frozen
       - run:
-          name: Compute RELEASE_VERSION via setuptools_scm and build wheel
+          name: Compute RELEASE_VERSION via setuptools_scm, and build wheel
           command: |
             export PATH="$HOME/.local/bin:$PATH"
             uv pip install --system setuptools-scm
@@ -98,6 +98,7 @@ jobs:
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
             echo "Git tag: $CIRCLE_TAG"
+            echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$BASH_ENV"
             uv build --wheel
       - store_artifacts:
           path: dist
@@ -105,17 +106,6 @@ jobs:
           root: .
           paths:
             - .
-      - run:
-          name: Set Docker image tag
-          command: |
-            if [ -n "$CIRCLE_TAG" ]; then
-              export DOCKER_IMAGE_TAG="$CIRCLE_TAG"
-            elif [ -n "$CIRCLE_BRANCH" ]; then
-              export DOCKER_IMAGE_TAG="$CIRCLE_BRANCH"
-            else
-              export DOCKER_IMAGE_TAG="${CIRCLE_SHA1:0:7}"
-            fi
-            echo "DOCKER_IMAGE_TAG=$DOCKER_IMAGE_TAG" >> "$BASH_ENV"
       - run:
           name: Log in to Docker registry
           command: |
@@ -125,7 +115,9 @@ jobs:
           command: |
             source "$BASH_ENV"
             export PATH="$HOME/.local/bin:$PATH"
-            IMAGE="<< pipeline.parameters.docker-registry-url >>/<< pipeline.parameters.docker-image-name >>:${DOCKER_IMAGE_TAG}"
+            # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
+            DOCKER_TAG=$(echo "$RELEASE_VERSION" | tr '+' '-')
+            IMAGE="<< pipeline.parameters.docker-registry-url >>/<< pipeline.parameters.docker-image-name >>:${DOCKER_TAG}"
             docker build -t "$IMAGE" .
             docker push "$IMAGE"
 
