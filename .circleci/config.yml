@@ -14,6 +14,12 @@ parameters:
   api-port:
     type: string
     default: "8005"
+  docker-registry-url:
+    type: string
+    default: "registry.gitlab.com/etalab/data.gouv.fr/infra"
+  docker-image-name:
+    type: string
+    default: "tabular-api"
 
 jobs:
   lint:
@@ -70,13 +76,21 @@ jobs:
           path: reports/python
 
   build:
-    docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
+    machine:
+      image: ubuntu-2404:current
     steps:
       - checkout
       - run:
-          name: Compute RELEASE_VERSION via setuptools_scm
+          name: Install uv and Python << pipeline.parameters.python-version >>
           command: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            uv python install << pipeline.parameters.python-version >>
+            uv sync --frozen
+      - run:
+          name: Compute RELEASE_VERSION via setuptools_scm and build wheel
+          command: |
+            export PATH="$HOME/.local/bin:$PATH"
             uv pip install --system setuptools-scm
             # derive from setuptools_scm or base version + build number
             RELEASE_VERSION=$(python -m setuptools_scm)
@@ -84,19 +98,38 @@ jobs:
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
             echo "Git tag: $CIRCLE_TAG"
-      - run:
-          name: Build a distributable package as a wheel release
-          command: |
             uv build --wheel
-      # Build already executed above; artifacts are in dist/
       - store_artifacts:
           path: dist
       - persist_to_workspace:
           root: .
           paths:
             - .
+      - run:
+          name: Set Docker image tag
+          command: |
+            if [ -n "$CIRCLE_TAG" ]; then
+              export DOCKER_IMAGE_TAG="$CIRCLE_TAG"
+            elif [ -n "$CIRCLE_BRANCH" ]; then
+              export DOCKER_IMAGE_TAG="$CIRCLE_BRANCH"
+            else
+              export DOCKER_IMAGE_TAG="${CIRCLE_SHA1:0:7}"
+            fi
+            echo "DOCKER_IMAGE_TAG=$DOCKER_IMAGE_TAG" >> "$BASH_ENV"
+      - run:
+          name: Log in to Docker registry
+          command: |
+            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "${DOCKER_REGISTRY_USER}" --password-stdin registry.gitlab.com
+      - run:
+          name: Build and push Docker image
+          command: |
+            source "$BASH_ENV"
+            export PATH="$HOME/.local/bin:$PATH"
+            IMAGE="<< pipeline.parameters.docker-registry-url >>/<< pipeline.parameters.docker-image-name >>:${DOCKER_IMAGE_TAG}"
+            docker build -t "$IMAGE" .
+            docker push "$IMAGE"
 
-  publish:
+  publish-pypi:
     docker:
       - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie-slim
     steps:
@@ -116,7 +149,7 @@ workflows:
           requires:
             - lint
             - tests
-      - publish:
+      - publish-pypi:
           requires:
             - build
           filters:
