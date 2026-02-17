@@ -28,6 +28,7 @@ dev = [
     "pytest-asyncio<1.0.0,>=0.20.3",
     "pytest-mock<4.0.0,>=3.10.0",
     "ruff<1.0.0,>=0.6.5",
+    "ty>=0.0.17",
 ]
 
 [tool.ruff]

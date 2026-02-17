@@ -522,14 +522,19 @@ Tests are automatically run in CI/CD. See [`.circleci/config.yml`](.circleci/con
 
 ## 🤝 Contributing
 
-### 🧹 Code Linting and Formatting
+### 🧹 Code Linting, Formatting and Type Checking
 
-This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/) for linting and formatting. **Either running these commands manually or installing the pre-commit hook is required before submitting contributions.**
+This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/) for linting and formatting, and [ty](https://docs.astral.sh/ty/) for type checking. **Either running these commands manually or installing the pre-commit hook is required before submitting contributions.**
 
 ```shell
 # Lint (including import sorting) and format code
 uv run ruff check --fix && uv run ruff format
+
+# Type check (ty)
+uv run ty check
 ```
+
+By default `ty check` checks the project root; pass paths to check specific files or directories. See the [ty CLI reference](https://docs.astral.sh/ty/reference/cli/) for options.
 
 ### 🔗 Pre-commit Hooks
 
