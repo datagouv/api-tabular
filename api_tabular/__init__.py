@@ -1,12 +1,13 @@
 import os
 import tomllib
 from pathlib import Path
+from typing import Any
 
 
 class Configurator:
     """Loads a dict of config from TOML file(s) and behaves like an object, ie config.VALUE"""
 
-    configuration = None
+    configuration: dict[str, Any] | None = None
 
     def __init__(self):
         if not self.configuration:
@@ -27,6 +28,8 @@ class Configurator:
         for config_key in configuration:
             if config_key in os.environ:
                 value = os.getenv(config_key)
+                if value is None:
+                    continue
                 # Casting env value
                 if isinstance(configuration[config_key], list):
                     value = value.split(",")
@@ -46,6 +49,7 @@ class Configurator:
         self.check()
 
     def override(self, **kwargs):
+        assert self.configuration is not None
         self.configuration.update(kwargs)
         self.check()
 
@@ -54,10 +58,12 @@ class Configurator:
         pass
 
     def __getattr__(self, __name):
+        assert self.configuration is not None
         return self.configuration.get(__name)
 
     @property
     def __dict__(self):
+        assert self.configuration is not None
         return self.configuration
 
 

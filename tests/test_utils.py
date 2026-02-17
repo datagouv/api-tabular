@@ -10,14 +10,12 @@ def test_build_link_with_page():
 
 
 def test_url_for(client):
-    request = make_mocked_request("GET", "/api/test?foo=bar")
-    request.app.router = client.app.router
+    request = make_mocked_request("GET", "/api/test?foo=bar", app=client.app)
     url = url_for(request, "profile", rid="rid")
     assert str(url) == "/api/resources/rid/profile/"
 
 
 def test_url_for_external(client):
-    request = make_mocked_request("GET", "/api/test?foo=bar")
-    request.app.router = client.app.router
+    request = make_mocked_request("GET", "/api/test?foo=bar", app=client.app)
     url = url_for(request, "profile", rid="rid", _external=True)
     assert str(url) == external_url("/api/resources/rid/profile/")

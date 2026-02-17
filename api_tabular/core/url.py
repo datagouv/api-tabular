@@ -20,4 +20,4 @@ def url_for(request: Request, route: str, *args, **kwargs) -> str:
     router = request.app.router
     if kwargs.pop("_external", None):
         return external_url(router[route].url_for(**kwargs))
-    return router[route].url_for(**kwargs)
+    return str(router[route].url_for(**kwargs))
