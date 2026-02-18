@@ -27,9 +27,7 @@ class Configurator:
         # override with os env settings
         for config_key in configuration:
             if config_key in os.environ:
-                value = os.getenv(config_key)
-                if value is None:
-                    continue
+                value = os.environ[config_key]
                 # Casting env value
                 if isinstance(configuration[config_key], list):
                     value = value.split(",")
