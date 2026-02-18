@@ -148,6 +148,9 @@ workflows:
           requires:
             - lint
             - tests
+          filters:
+            branches:
+              only: << pipeline.parameters.publish-branch >>
       - publish-pypi:
           requires:
             - build
