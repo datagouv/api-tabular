@@ -23,6 +23,7 @@ def test_default_config():
     assert config.PAGE_SIZE_MAX == 50
 
     # Make sure all config keys are defined
+    assert config.configuration is not None
     with open(Path(__file__).parent.parent / "api_tabular/config_default.toml", "rb") as f:
         assert config.configuration.keys() == tomllib.load(f).keys()
 
