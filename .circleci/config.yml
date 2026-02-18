@@ -5,6 +5,9 @@ parameters:
   python-version:
     type: string
     default: "3.11"
+  publish-branch:
+    type: string
+    default: "main"
 
 jobs:
   lint:
@@ -101,25 +104,16 @@ jobs:
 workflows:
   build-test-deploy:
     jobs:
-      - lint:
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
-      - tests:
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
+      - lint
+      - tests
       - build:
           requires:
             - lint
             - tests
-          filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
       - publish:
           requires:
             - build
           filters:
-            tags:
-              only: /v[0-9]+(\.[0-9]+)*/
+            branches:
+              only: << pipeline.parameters.publish-branch >>
           context: org-global
