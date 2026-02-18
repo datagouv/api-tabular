@@ -8,6 +8,12 @@ parameters:
   publish-branch:
     type: string
     default: "main"
+  python-module:
+    type: string
+    default: "api_tabular"
+  api-port:
+    type: string
+    default: "8005"
 
 jobs:
   lint:
