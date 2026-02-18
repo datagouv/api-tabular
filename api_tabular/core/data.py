@@ -1,6 +1,5 @@
-from typing import AsyncGenerator
-
 from aiohttp import ClientSession, web
+from aiohttp.web import StreamResponse
 from aiohttp.web_request import Request
 
 from api_tabular import config
@@ -14,7 +13,7 @@ async def stream_data(
     url: str,
     accept_format: str,
     response_headers: dict,
-) -> AsyncGenerator[bytes, None]:
+) -> StreamResponse:
     res = await session.head(f"{url}&limit=1&", headers={"Prefer": "count=exact"})
     if not res.ok:
         handle_exception(res.status, "Database error", await res.json(), None)

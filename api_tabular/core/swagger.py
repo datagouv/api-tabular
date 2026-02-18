@@ -1,3 +1,5 @@
+from typing import cast
+
 import yaml
 
 from api_tabular.core.utils import is_aggregation_allowed
@@ -196,14 +198,16 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             ):
                 continue
             if op in TYPE_POSSIBILITIES[value["python_type"]]:
+                op_name = cast(str, OPERATORS_DESCRIPTIONS[op]["name"])
+                op_description = cast(str, OPERATORS_DESCRIPTIONS[op]["description"])
                 parameters_list.extend(
                     [
                         {
-                            "name": OPERATORS_DESCRIPTIONS[op]["name"].format(key),
+                            "name": op_name.format(key),
                             "in": "query",
                             "description": (
-                                (s := OPERATORS_DESCRIPTIONS[op]["description"]).format(
-                                    *[key for _ in range(s.count("{}"))]
+                                op_description.format(
+                                    *[key for _ in range(op_description.count("{}"))]
                                 )
                             ),
                             "required": False,
