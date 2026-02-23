@@ -4,7 +4,7 @@ from aiohttp import web
 @web.middleware
 async def cors_middleware(request, handler):
     """
-    Middleware to handle CORS and the mandatory OPTIONS preflight.
+    Middleware to handle CORS and the OPTIONS preflight.
     """
     if request.method == "OPTIONS":
         # Handle cases of preflight OPTIONS requests (was managed by aiohttp_cors before)
