@@ -342,7 +342,7 @@ async def test_health(client, rmock, params):
 
 
 async def test_aggregation_exceptions(client):
-    res = await client.get(f"/api/aggregation-exceptions/")
+    res = await client.get("/api/aggregation-exceptions/")
     exceptions = await res.json()
     assert exceptions == config.ALLOW_AGGREGATION
 

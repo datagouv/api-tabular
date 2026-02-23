@@ -179,11 +179,7 @@ async def app_factory():
 
     cors = aiohttp_cors.setup(
         app,
-        defaults={
-            "*": aiohttp_cors.ResourceOptions(
-                allow_credentials=True, expose_headers="*", allow_headers="*"
-            )
-        },
+        defaults={"*": aiohttp_cors.ResourceOptions(expose_headers="*", allow_headers="*")},
     )
     for route in list(app.router.routes()):
         cors.add(route)
