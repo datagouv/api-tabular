@@ -1,13 +1,13 @@
 import os
 from datetime import datetime, timezone
 
-import aiohttp_cors
 import sentry_sdk
 import yaml
 from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
+from api_tabular.core.cors import cors_middleware
 from api_tabular.core.health import check_health
 from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.swagger import build_swagger_file
@@ -172,21 +172,10 @@ async def app_factory():
     async def on_cleanup(app):
         await app["csession"].close()
 
-    app = web.Application()
+    app = web.Application(middlewares=[cors_middleware])
     app.add_routes(routes)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
-
-    cors = aiohttp_cors.setup(
-        app,
-        defaults={
-            "*": aiohttp_cors.ResourceOptions(
-                allow_credentials=True, expose_headers="*", allow_headers="*"
-            )
-        },
-    )
-    for route in list(app.router.routes()):
-        cors.add(route)
 
     return app
 
