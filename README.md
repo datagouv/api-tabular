@@ -388,6 +388,27 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
 }
 ```
 
+It is possible to add single level `OR` groups with the syntax: `or__<group>=<column_name>__<operator>=<value>` where:
+- the `<column_name>__<operator>=<value>` part follows the rules described above
+- the `or__<group>` flags that the specified filter belongs to the same `OR` group as all the filters that share the same group number
+
+For instance:
+```
+score__greater=0.9&or__1=decompte__isnull&or__1=birth__less=1950&or__2=decompte__exact=14&or__2=birth__greater=1980
+```
+translates into:
+```
+score > 0.9
+AND (decompte IS NULL OR birth < 1950)
+AND (decompte == 14 OR birth > 1980)
+```
+This can be useful to get values that match a comparison condition and `null` values from a column:
+```
+or__1=decompte__less=50&or__1=decompte__isnull
+```
+To get rows where a column matches specific values, the `in` operator should be preferred.
+> **Note**: This only allows a single level of conditions, so `(A OR (B AND C))` is currently not supported.
+
 #### Aggregation with Filtering
 With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
 ```shell
