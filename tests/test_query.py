@@ -106,6 +106,100 @@ def test_query_build_multiple():
     )
 
 
+@pytest.mark.parametrize(
+    "query_str, expected, should_fail",
+    [
+        (
+            # only one OR group
+            [
+                "or__1=column_name__exact=BIDULE",
+                "or__1=second_col__less=12",
+            ],
+            'or=("column_name".eq.BIDULE,"second_col".lte.12)&limit=50&order=__id.asc',
+            False,
+        ),
+        # one OR group + AND conditions
+        (
+            [
+                "first_col__in=BIDULE,TRUC",
+                "third_col__differs=1",
+                "or__1=column_name__exact=BIDULE",
+                "or__1=second_col__less=12",
+            ],
+            '"first_col"=in.(BIDULE,TRUC)&"third_col"=isdistinct.1&or=("column_name".eq.BIDULE,"second_col".lte.12)&limit=50&order=__id.asc',
+            False,
+        ),
+        # two OR groups
+        (
+            [
+                "first_col__exact=BIDULE",
+                "or__1=column_name__exact=BIDULE",
+                "or__1=second_col__less=12",
+                "or__2=column_name__exact=TRUC",
+                "or__2=second_col__greater=45",
+            ],
+            '"first_col"=eq.BIDULE&or=("column_name".eq.BIDULE,"second_col".lte.12)&or=("column_name".eq.TRUC,"second_col".gte.45)&limit=50&order=__id.asc',
+            False,
+        ),
+        # one OR group + aggregation
+        (
+            [
+                "first_col__exact=BIDULE",
+                "or__1=column_name__exact=BIDULE",
+                "or__1=second_col__less=12",
+                "first_col__groupby",
+                "column_name__count",
+            ],
+            '"first_col"=eq.BIDULE&or=("column_name".eq.BIDULE,"second_col".lte.12)&select="first_col","column_name__count":"column_name".count()&limit=50',
+            False,
+        ),
+        # malformed OR group
+        (
+            [
+                "or_1=column_name__exact=BIDULE",
+                "or__1=second_col__sort=asc",
+            ],
+            None,
+            True,
+        ),
+        (
+            [
+                "and__1=column_name__exact=BIDULE",
+                "or__1=second_col__sort=asc",
+            ],
+            None,
+            True,
+        ),
+        # forbidden params in OR group
+        (
+            [
+                "or__1=column_name__exact=BIDULE",
+                "or__1=second_col__sort=asc",
+            ],
+            None,
+            True,
+        ),
+        *(
+            (
+                [
+                    "or__1=column_name__exact=BIDULE",
+                    f"or__1={forbidden}=12",
+                ],
+                None,
+                True,
+            ) for forbidden in ["page", "page_size", "columns"]
+        ),
+    ],
+)
+def test_query_with_or_group(query_str, expected, should_fail):
+    if should_fail:
+        with pytest.raises(ValueError):
+            build_sql_query_string(query_str, page_size=50)
+    else:
+        result = build_sql_query_string(query_str, page_size=50)
+        assert result == expected
+
+
 def test_query_build_multiple_with_unknown():
     query_str = ["select=numnum"]
     with pytest.raises(ValueError):
