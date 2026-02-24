@@ -1,6 +1,6 @@
-from collections import defaultdict
 import csv
 import json
+from collections import defaultdict
 from io import StringIO
 
 import pytest
@@ -190,8 +190,7 @@ async def test_api_resource_data_with_data_args(client, filters):
     params = "&".join(
         f"{f[0]}__{f[1]}={str(f[2]).lower()}"
         if len(f) == 3
-        else
-        f"{f[0]}={f[1]}__{f[2]}={str(f[3]).lower()}"
+        else f"{f[0]}={f[1]}__{f[2]}={str(f[3]).lower()}"
         for f in filters
     )
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
@@ -209,11 +208,7 @@ async def test_api_resource_data_with_data_args(client, filters):
     # only checking first page
     for row in body["data"]:
         assert all(
-            any(
-                conforms(row, col, op, val)
-                for col, op, val in group
-            )
-            for group in groups.values()
+            any(conforms(row, col, op, val) for col, op, val in group) for group in groups.values()
         )
 
 
