@@ -112,7 +112,7 @@ jobs:
       - run:
           name: Log in to Docker registry
           command: |
-            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "${DOCKER_REGISTRY_USER}" --password-stdin registry.gitlab.com
+            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "oauth2" --password-stdin registry.gitlab.com
       - run:
           name: Build and push Docker images (Tabular API and Metrics API)
           command: |
@@ -151,6 +151,7 @@ workflows:
           filters:
             branches:
               only: << pipeline.parameters.publish-branch >>
+          context: org-global
       - publish-pypi:
           requires:
             - build
