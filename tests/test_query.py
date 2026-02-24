@@ -187,7 +187,8 @@ def test_query_build_multiple():
                 ],
                 None,
                 True,
-            ) for forbidden in ["page", "page_size", "columns"]
+            )
+            for forbidden in ["page", "page_size", "columns"]
         ),
     ],
 )
