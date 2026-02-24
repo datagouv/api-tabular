@@ -137,8 +137,9 @@ def test_query_build_multiple():
                 "or__1=second_col__less=12",
                 "or__2=column_name__exact=TRUC",
                 "or__2=second_col__greater=45",
+                "or__2=second_col__less=10",
             ],
-            '"first_col"=eq.BIDULE&or=("column_name".eq.BIDULE,"second_col".lte.12)&or=("column_name".eq.TRUC,"second_col".gte.45)&limit=50&order=__id.asc',
+            '"first_col"=eq.BIDULE&or=("column_name".eq.BIDULE,"second_col".lte.12)&or=("column_name".eq.TRUC,"second_col".gte.45,"second_col".lte.10)&limit=50&order=__id.asc',
             False,
         ),
         # one OR group + aggregation
