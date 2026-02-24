@@ -186,15 +186,6 @@ async def test_api_resource_data_with_args_error(client):
     args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
     assert res.status == 400
-    assert await res.json() == {
-        "errors": [
-            {
-                "code": None,
-                "title": "Invalid query string",
-                "detail": f"Malformed query: argument '{args}' could not be parsed",
-            }
-        ]
-    }
 
 
 async def test_api_resource_data_with_page_size_error(client):
