@@ -398,9 +398,9 @@ score__greater=0.9&or__1=decompte__isnull&or__1=birth__less=1950&or__2=decompte_
 ```
 translates into:
 ```
-score > 0.9
-AND (decompte IS NULL OR birth < 1950)
-AND (decompte == 14 OR birth > 1980)
+score >= 0.9
+AND (decompte IS NULL OR birth <= 1950)
+AND (decompte == 14 OR birth >= 1980)
 ```
 This can be useful to get values that match a comparison condition and `null` values from a column:
 ```
