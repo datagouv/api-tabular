@@ -308,7 +308,7 @@ column_name__sort=desc
 
 #### Aggregation Operators
 > ⚠️ **WARNING**: Aggregation requests are disabled by default.
-> You can allow it for all with `ALLOW_AGGREGATION` config or per resources, by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
+> You can allow or disallow it for all resources with the `ALLOW_AGGREGATION` config. If `ALLOW_AGGREGATION` is set to `false`, you can specify allow exceptions by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
 > You can get the current status and exceptions at `/api/aggregation-exceptions/` endpoint.
 
 ```
