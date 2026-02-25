@@ -121,7 +121,7 @@ def test_query_build_multiple_with_unknown():
 )
 def test_query_aggregators(allow_aggregation, mocker):
     if allow_aggregation:
-        mocker.patch("api_tabular.config.ALLOW_AGGREGATION", [RESOURCE_ID])
+        mocker.patch("api_tabular.config.ALLOW_AGGREGATION_EXCEPTIONS", [RESOURCE_ID])
     query_str = [
         "column_name__groupby",
         "column_name__min",

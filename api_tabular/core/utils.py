@@ -6,7 +6,7 @@ from api_tabular.core.error import QueryException
 
 
 def is_aggregation_allowed(resource_id: str) -> bool:
-    return resource_id in config.ALLOW_AGGREGATION
+    return config.ALLOW_AGGREGATION or resource_id in config.ALLOW_AGGREGATION_EXCEPTIONS
 
 
 def process_total(res: Response | ClientResponse) -> int:

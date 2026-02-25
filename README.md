@@ -307,7 +307,9 @@ column_name__sort=desc
 ```
 
 #### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint, and on columns that have an index.
+> ⚠️ **WARNING**: Aggregation requests are disabled by default.
+> You can allow it for all with `ALLOW_AGGREGATION` config or per resources, by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
+> You can get the current status and exceptions at `/api/aggregation-exceptions/` endpoint.
 
 ```
 # group by values
@@ -463,7 +465,8 @@ Configuration is handled through TOML files and environment variables. The defau
 | `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
 | `BATCH_SIZE` | `50000` | Batch size for streaming |
 | `DOC_PATH` | `/api/doc` | Swagger documentation path |
-| `ALLOW_AGGREGATION` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
+| `ALLOW_AGGREGATION` | `False` | Whether aggregation queries are allowed (`column__groupby`). If False, it can still be explicitly allowed with `ALLOW_AGGREGATION_EXCEPTIONS` |
+| `ALLOW_AGGREGATION_EXCEPTIONS` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
 
 ### Environment Variables
 
