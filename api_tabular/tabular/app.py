@@ -149,7 +149,11 @@ async def get_health(request):
 @routes.get(r"/api/aggregation-exceptions/")
 async def get_aggregation_exceptions(request):
     """Return the list of resources for which aggregation queries are allowed"""
-    return web.json_response(config.ALLOW_AGGREGATION)
+    body = {
+        "allowed": config.ALLOW_AGGREGATION,
+        "exceptions": config.ALLOW_AGGREGATION_EXCEPTIONS,
+    }
+    return web.json_response(body)
 
 
 async def app_factory():
