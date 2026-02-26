@@ -136,6 +136,15 @@ def test_query_build_multiple():
             '"first_col"=eq.BIDULE&or=("first_col".eq.BIDULE,"second_col".gte.12)&or=("first_col".eq.TRUC,"second_col".gte.45,"second_col".lte.10)&limit=50&order=__id.asc',
             False,
         ),
+        # nested conditions
+        (
+            [
+                "first_col__exact=BIDULE",
+                'or=(first_col__exact.TRUC,and("second.col"__greater."12.4","third col"__less.10),"fourth..col"__isnull)',
+            ],
+            '"first_col"=eq.BIDULE&or=("first_col".eq.TRUC,and("second.col".gte."12.4","third col".lte.10),"fourth..col".is.null)&limit=50&order=__id.asc',
+            False,
+        ),
         # one OR group + aggregation
         (
             [
