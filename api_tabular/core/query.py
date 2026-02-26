@@ -198,8 +198,8 @@ def parse_operator(query: str, operator: str, top_level: bool = False):
     postgrest_params = []
     # we can safely assume that there will be one result for the regex
     params = split_top_level(
-        re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query
-    )[0])
+        re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query)[0]
+    )
     for param in params:
         if param.startswith(("and(", "or(")):
             # recursively adding the nested confitions
@@ -207,10 +207,12 @@ def parse_operator(query: str, operator: str, top_level: bool = False):
         else:
             if param.endswith(("__isnull", "__isnotnull")):
                 postgrest_params.append(
-                    add_filter(param.replace('"', ""),
-                    None,
-                    in_operator=True,
-                )[0])
+                    add_filter(
+                        param.replace('"', ""),
+                        None,
+                        in_operator=True,
+                    )[0]
+                )
             else:
                 # if a special character is in the column name and/or value, the problematic item should be encapsulated in double quotes
                 # so we have 4 possibles cases: col__op.val, "col.umn"__op.val, col__op."val.ue" and "col.umn"__op."val.ue"

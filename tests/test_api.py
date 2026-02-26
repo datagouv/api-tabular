@@ -166,10 +166,12 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
         [
             ("is_true", "exact", True),
             {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]},
-            {"or": [
-                {"and": [("decompte", "greater", 80), ("birth", "greater", "1970")]},
-                {"and": [("decompte", "less", 20), ("birth", "less", "1920")]},
-            ]},
+            {
+                "or": [
+                    {"and": [("decompte", "greater", 80), ("birth", "greater", "1970")]},
+                    {"and": [("decompte", "less", 20), ("birth", "less", "1920")]},
+                ]
+            },
         ],
     ],
 )
@@ -202,7 +204,7 @@ async def test_api_resource_data_with_data_args(client, filters):
             value = value.lower()
         if not top_level:
             value = f'"{value}"'
-        return f'{col}__{op}{sep}{value}'
+        return f"{col}__{op}{sep}{value}"
 
     def build_params(filters, group: str, top_level: bool = False) -> str:
         if top_level:
