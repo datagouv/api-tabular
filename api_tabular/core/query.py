@@ -17,7 +17,7 @@ def build_sql_query_string(
     for arg in request_arg:
         if arg.startswith("or=("):
             # top level "and=(...)" should not happen
-            sql_query.append(parse_operator(arg))
+            sql_query.append(parse_operator(query=arg, operator="or", top_level=True))
             continue
         _split = arg.split("=")
         # filters are expected to have the syntax `<column_name>__<operator>=<value>`
@@ -159,29 +159,64 @@ def split_top_level(s: str) -> list[str]:
     return parts
 
 
-def parse_operator(query: str, operator: str = "or"):
+def find_arg_val(param: str) -> tuple[str, str]:
+    if param.count('"') not in {0, 2, 4}:
+        raise ValueError(f"argument '{param}' could not be parsed")
+    column_operator_pattern = r'^"[^"]*"__[a-z]+'
+    value_pattern = r'\."[^"]*"$'
+    if param.count('"') == 0:
+        # no quote, we expect col__op.val
+        _split = param.split(".")
+        if len(_split) != 2:
+            raise ValueError(f"argument '{param}' could not be parsed")
+        return tuple(_split)
+    elif param.count('"') == 4:
+        # 4 quotes, we expect "col.umn"__op."val.ue"
+        col_op = re.findall(column_operator_pattern, param)
+        val = re.findall(value_pattern, param)
+        if len(col_op) != 1 or len(val) != 1:
+            raise ValueError(f"argument '{param}' could not be parsed")
+        # we drop the double quotes around the column as they will be added back in get_column_and_operator
+        # the dot is included in the value result, we pop it in the result
+        return col_op[0].replace('"', ""), val[0][1:]
+    else:
+        # we have any of "col.umn"__op.val, col__op."val.ue"
+        col_op = re.findall(column_operator_pattern, param)
+        val = re.findall(value_pattern, param)
+        if not col_op:
+            # case col__op."val.ue"
+            return param.split(".")[0], val[0][1:]
+        else:
+            # case "col.umn"__op.val
+            return col_op[0].replace('"', ""), param.split(".")[-1]
+
+
+def parse_operator(query: str, operator: str, top_level: bool = False):
+    # only the top level operator has an "=", nested operators are "or(...)" and "and(...)"
     if not query.endswith(")"):
         raise ValueError(f"argument '{query}' could not be parsed")
     postgrest_params = []
     # we can safely assume that there will be one result for the regex
-    params = split_top_level(re.findall(rf"^{operator}=\((.*)\)$", query)[0])
+    params = split_top_level(
+        re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query
+    )[0])
     for param in params:
-        if param.startswith(("and=(", "or=(")):
+        if param.startswith(("and(", "or(")):
             # recursively adding the nested confitions
-            postgrest_params.append(parse_operator(param, param.split("=")[0]))
+            postgrest_params.append(parse_operator(query=param, operator=param.split("(")[0]))
         else:
-            _split = param.split(".")
-            if len(_split) == 1:
-                # handling is(not)null
-                if _split[0].split("__")[1] in ["isnull", "isnotnull"]:
-                    postgrest_params.append(add_filter(_split[0], None, in_operator=True)[0])
-                else:
-                    raise ValueError(f"argument '{param}' could not be parsed")
-            elif len(_split) == 2:
-                postgrest_params.append(add_filter(*_split, in_operator=True)[0])
+            if param.endswith(("__isnull", "__isnotnull")):
+                postgrest_params.append(
+                    add_filter(param.replace('"', ""),
+                    None,
+                    in_operator=True,
+                )[0])
             else:
-                raise ValueError(f"argument '{param}' could not be parsed")
-    return f"{operator}=({','.join(postgrest_params)})"
+                # if a special character is in the column name and/or value, the problematic item should be encapsulated in double quotes
+                # so we have 4 possibles cases: col__op.val, "col.umn"__op.val, col__op."val.ue" and "col.umn"__op."val.ue"
+                argument, value = find_arg_val(param)
+                postgrest_params.append(add_filter(argument, value, in_operator=True)[0])
+    return f"{operator}{'=' if top_level else ''}({','.join(postgrest_params)})"
 
 
 def raise_if_not_index(column_name: str, indexes: set | None) -> None:
