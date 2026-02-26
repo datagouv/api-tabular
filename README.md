@@ -395,9 +395,13 @@ or=(<column1>__<operator1>.<value1>,<column2>__<operator2>.<value2>,...)
 
 > **Note**: the syntax for `isnull` and `isnotnull` is `<column1>__is(not)null` (no value is needed, like outisde of `OR` groups)
 
-This scales as much as needed, with the `or=(...)` and `and=(...)` operators, like:
+This scales as much as needed, but the inner operators should be `or(...)` and `and(...)` (without the `=`), like:
 ```
-decompte__less=10&or=(is_true__exact.true,birth__greater.1980,and=(score__strictly_less.0.1,liste__isnotnull))
+decompte__less=10&or=(is_true__exact.true,birth__greater.1980,and(score__strictly_less.5,liste__isnotnull,or(...)))
+```
+> **Note**: if the column name and/or the value of the filter contains special characters (including dots), the item should be wrapped within double quotes:
+```
+or=("is true"__exact.true,and(score__strictly_less."0.1","avg.views"__greater."15.5"))
 ```
 
 #### Aggregation with Filtering
