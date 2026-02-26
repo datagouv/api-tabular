@@ -162,6 +162,7 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
         [("score", "less", 0.3)],
         [("is_true", "differs", True)],
         [("is_true", "differs", False), ("score", "greater", 0.7)],
+        [{"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
         [("is_true", "differs", True), {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
         [
             ("is_true", "exact", True),
@@ -227,6 +228,7 @@ async def test_api_resource_data_with_data_args(client, filters):
     assert res.status == 200
     body = await res.json()
     # only checking first page
+    assert body["data"]
     for row in body["data"]:
         assert conforms(row, filters, group="and")
 
