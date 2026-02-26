@@ -85,11 +85,11 @@ def add_filter(
 ) -> tuple[str | None, bool]:
     if argument in ["page", "page_size"]:  # processed differently
         if in_operator:
-            raise ValueError(f"Argument `{argument}` can't be set in an OR group")
+            raise ValueError(f"Argument `{argument}` can't be set within an operator")
         return None, False
     if argument == "columns":
         if in_operator:
-            raise ValueError(f"Argument `{argument}` can't be set in an OR group")
+            raise ValueError(f"Argument `{argument}` can't be set within an operator")
         return f"select={value}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
@@ -97,7 +97,7 @@ def add_filter(
         op = "." if in_operator else "="
         if normalized_comparator == "sort":
             if in_operator:
-                raise ValueError(f"Argument `{argument}` can't be set in an OR group")
+                raise ValueError(f"Argument `{argument}` can't be set within an operator")
             return f"order={column}.{value}", True
         elif normalized_comparator == "exact":
             return f"{column}{op}eq.{value}", False
