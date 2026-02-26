@@ -389,6 +389,22 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
   }
 }
 ```
+Top level parameters are considered joined with the `AND` operator. It is possible to add nested conditions with the following syntax:
+```
+or=(<column1>__<operator1>.<value1>,<column2>__<operator2>.<value2>,...)
+```
+> **Note**: the conditions within an `OR` have a `.` instead of a `=` between the operator and the value.
+
+> **Note**: the syntax for `isnull` and `isnotnull` is `<column1>__is(not)null` (no value is needed, like outisde of `OR` groups)
+
+This scales as much as needed, but the inner operators should be `or(...)` and `and(...)` (without the `=`), like:
+```
+decompte__less=10&or=(is_true__exact.true,birth__greater.1980,and(score__strictly_less.5,liste__isnotnull,or(...)))
+```
+> **Note**: if the column name and/or the value of the filter contains special characters (including dots), the item should be wrapped within double quotes:
+```
+or=("is true"__exact.true,and(score__strictly_less."0.1","avg.views"__greater."15.5"))
+```
 
 #### Aggregation with Filtering
 With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
