@@ -169,7 +169,7 @@ def find_arg_val(param: str) -> tuple[str, str]:
         _split = param.split(".")
         if len(_split) != 2:
             raise ValueError(f"argument '{param}' could not be parsed")
-        return tuple(_split)
+        return tuple[str, str](_split)  # ty: ignore[invalid-argument-type]
     elif param.count('"') == 4:
         # 4 quotes, we expect "col.umn"__op."val.ue"
         col_op = re.findall(column_operator_pattern, param)
