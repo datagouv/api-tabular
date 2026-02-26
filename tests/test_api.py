@@ -162,24 +162,71 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
         [("score", "less", 0.3)],
         [("is_true", "differs", True)],
         [("is_true", "differs", False), ("score", "greater", 0.7)],
+        [("is_true", "differs", True), {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
+        [
+            ("is_true", "exact", True),
+            {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]},
+            {"or": [
+                {"and": [("decompte", "greater", 80), ("birth", "greater", "1970")]},
+                {"and": [("decompte", "less", 20), ("birth", "less", "1920")]},
+            ]},
+        ],
     ],
 )
 async def test_api_resource_data_with_data_args(client, filters):
-    args = "&".join(f"{col}__{comp}={str(val).lower()}" for col, comp, val in filters)
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
+    def conforms_filter(row: dict, col: str, comp: str, val) -> bool:
+        if comp == "exact":
+            return (row[col] is val) if isinstance(val, bool) else (row[col] == val)
+        elif comp == "differs":
+            return row[col] != val
+        elif comp == "less":
+            return row[col] <= val
+        elif comp == "greater":
+            return row[col] >= val
+        raise NotImplementedError
+
+    def conforms(row, filters: list, group: str) -> bool:
+        op = all if group == "and" else any
+        return op(
+            conforms_filter(row, *_filter)
+            if isinstance(_filter, tuple)
+            else conforms(row, list(_filter.values())[0], list(_filter)[0])
+            for _filter in filters
+        )
+
+    def build_single_param(_filter: tuple, top_level: bool = False):
+        col, op, val = _filter
+        sep = "=" if top_level else "."
+        value = str(val)
+        if isinstance(val, bool):
+            value = value.lower()
+        if not top_level:
+            value = f'"{value}"'
+        return f'{col}__{op}{sep}{value}'
+
+    def build_params(filters, group: str, top_level: bool = False) -> str:
+        if top_level:
+            return "&".join(
+                build_single_param(_filter, top_level=True)
+                if isinstance(_filter, tuple)
+                else f"{group}=({build_params(list(_filter.values())[0], group)})"
+                for _filter in filters
+            )
+        else:
+            return ",".join(
+                build_single_param(_filter)
+                if isinstance(_filter, tuple)
+                else f"{list(_filter)[0]}({build_params(list(_filter.values())[0], list(_filter)[0])})"
+                for _filter in filters
+            )
+
+    params = build_params(filters, group="or", top_level=True)
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
     assert res.status == 200
     body = await res.json()
     # only checking first page
     for row in body["data"]:
-        for col, comp, val in filters:
-            if comp == "exact":
-                assert row[col] == val
-            elif comp == "differs":
-                assert row[col] != val
-            elif comp == "less":
-                assert row[col] <= val
-            elif comp == "greater":
-                assert row[col] >= val
+        assert conforms(row, filters, group="and")
 
 
 async def test_api_resource_data_with_args_error(client):
