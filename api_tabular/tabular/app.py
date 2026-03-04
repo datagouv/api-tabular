@@ -159,7 +159,7 @@ async def get_aggregation_exceptions(request):
 async def app_factory():
     async def on_startup(app):
         app["csession"] = ClientSession()
-        app["start_time"] = datetime.now(timezone.utc)
+        app["started_at"] = datetime.now(timezone.utc)
         app["app_version"] = await get_app_version()
 
         with open("tabular_swagger.yaml", "r") as f:
