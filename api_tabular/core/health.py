@@ -15,9 +15,6 @@ async def check_health(request: Request, url: str):
                 "DB unavailable",
                 "postgREST has not started yet",
             )
-    start_time = request.app["start_time"]
-    current_time = datetime.now(timezone.utc)
-    uptime_seconds = (current_time - start_time).total_seconds()
     return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_seconds": uptime_seconds}
+        {"status": "ok", "version": request.app["app_version"], "uptime_since": request.app["started_at"].isoformat()}
     )
