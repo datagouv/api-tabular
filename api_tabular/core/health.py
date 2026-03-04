@@ -16,5 +16,9 @@ async def check_health(request: Request, url: str):
                 "postgREST has not started yet",
             )
     return web.json_response(
-        {"status": "ok", "version": request.app["app_version"], "uptime_since": request.app["started_at"].isoformat()}
+        {
+            "status": "ok",
+            "version": request.app["app_version"],
+            "uptime_since": request.app["started_at"].isoformat(),
+        }
     )
