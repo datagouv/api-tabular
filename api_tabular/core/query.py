@@ -202,7 +202,7 @@ def parse_operator(query: str, operator: str, top_level: bool = False):
     )
     for param in params:
         if param.startswith(("and(", "or(")):
-            # recursively adding the nested confitions
+            # recursively adding the nested conditions
             postgrest_params.append(parse_operator(query=param, operator=param.split("(")[0]))
         else:
             if param.endswith(("__isnull", "__isnotnull")):
