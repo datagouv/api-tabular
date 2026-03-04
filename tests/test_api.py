@@ -326,7 +326,7 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
     "params",
     [
         (503, 503, ["errors"]),
-        (200, 200, ["status", "version", "uptime_seconds"]),
+        (200, 200, ["status", "version", "uptime_since"]),
     ],
 )
 async def test_health(client, rmock, params):

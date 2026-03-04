@@ -173,6 +173,7 @@ components:
         version:
           type: string
           description: Deployed app version
-        uptime_seconds:
-          type: number
-          description: Seconds since app startup
+        uptime_since:
+          type: string
+          format: date-time
+          description: ISO 8601 datetime of app startup
