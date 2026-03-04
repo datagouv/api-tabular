@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 from aiohttp import web
 from aiohttp.web_request import Request
 
