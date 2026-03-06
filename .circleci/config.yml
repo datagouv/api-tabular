@@ -8,6 +8,21 @@ parameters:
   publish-branch:
     type: string
     default: "main"
+  python-module:
+    type: string
+    default: "api_tabular"
+  api-port:
+    type: string
+    default: "8005"
+  docker-registry-url:
+    type: string
+    default: "registry.gitlab.com/etalab/data.gouv.fr/infra"
+  docker-image-name-tabular:
+    type: string
+    default: "tabular-api"
+  docker-image-name-metrics:
+    type: string
+    default: "metrics-api"
 
 jobs:
   lint:
@@ -64,13 +79,21 @@ jobs:
           path: reports/python
 
   build:
-    docker:
-      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
+    machine:
+      image: ubuntu-2404:current
     steps:
       - checkout
       - run:
-          name: Compute RELEASE_VERSION via setuptools_scm
+          name: Install uv and Python << pipeline.parameters.python-version >>
           command: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            uv python install << pipeline.parameters.python-version >>
+            uv sync --frozen
+      - run:
+          name: Compute RELEASE_VERSION via setuptools_scm, and build wheel
+          command: |
+            export PATH="$HOME/.local/bin:$PATH"
             uv pip install --system setuptools-scm
             # derive from setuptools_scm or base version + build number
             RELEASE_VERSION=$(python -m setuptools_scm)
@@ -78,19 +101,34 @@ jobs:
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
             echo "Git tag: $CIRCLE_TAG"
-      - run:
-          name: Build a distributable package as a wheel release
-          command: |
+            echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$BASH_ENV"
             uv build --wheel
-      # Build already executed above; artifacts are in dist/
       - store_artifacts:
           path: dist
       - persist_to_workspace:
           root: .
           paths:
             - .
+      - run:
+          name: Log in to Docker registry
+          command: |
+            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "oauth2" --password-stdin registry.gitlab.com
+      - run:
+          name: Build and push Docker images (Tabular API and Metrics API)
+          command: |
+            source "$BASH_ENV"
+            export PATH="$HOME/.local/bin:$PATH"
+            REGISTRY="<< pipeline.parameters.docker-registry-url >>"
+            # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
+            DOCKER_TAG=$(echo "$RELEASE_VERSION" | tr '+' '-')
+            # Tabular API: tabular endpoints only
+            docker build --build-arg APP_MODULE=api_tabular.tabular.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}" .
+            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}"
+            # Metrics API: metrics endpoints only
+            docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}" .
+            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}"
 
-  publish:
+  publish-pypi:
     docker:
       - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie-slim
     steps:
@@ -110,7 +148,11 @@ workflows:
           requires:
             - lint
             - tests
-      - publish:
+          filters:
+            branches:
+              only: << pipeline.parameters.publish-branch >>
+          context: org-global
+      - publish-pypi:
           requires:
             - build
           filters:
