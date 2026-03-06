@@ -188,6 +188,13 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "style": "form",
             "explode": False,
         },
+        {
+            "name": "or",
+            "in": "query",
+            "description": "Encapsulates filters to be joined with the `OR` operator. Allows to build complex queries with nested `or(...)` and `and(...)` operators. Inner filters syntax must be `<column>.<operation>.<value>` (or `<column>.<operation>` for `is(not)null`), separated with commas.",
+            "required": False,
+            "schema": {"type": "string"},
+        },
     ]
     # expected python types are: string, float, int, bool, date, datetime, json
     # see cast for db here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/output/dataframe.py
