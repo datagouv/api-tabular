@@ -244,7 +244,7 @@ def test_query_aggregators(allow_aggregation, mocker):
 def test_query_specify_columns():
     query_str = ["columns=col1,col2"]
     result = build_sql_query_string(query_str)
-    assert result == "select=col1,col2&order=__id.asc"
+    assert result == 'select="col1","col2"&order=__id.asc'
 
 
 def test_query_specify_columns_and_aggregate():
