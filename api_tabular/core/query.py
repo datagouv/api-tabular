@@ -90,7 +90,8 @@ def add_filter(
     if argument == "columns":
         if in_operator:
             raise ValueError(f"Argument `{argument}` can't be set within an operator")
-        return f"select={value}", False
+        columns = ",".join(f'"{col}"' for col in value.split(","))
+        return f"select={columns}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         # when encapsulated in an OR statement, the syntax is `col.eq.val` instead of `col=eq.val`
