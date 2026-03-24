@@ -1129,7 +1129,8 @@ CREATE TABLE "csvapi".a6311c164ebfb165ddc828ded (
     "nom ""propre""" integer,
     "date/de\naissance" integer,
     "[nom peu] commun]" integer,
-    "avec__des!" integer
+    "avec__des!" integer,
+    "Taux de logements vacants* (en %)" integer
 );
 
 
@@ -1168,11 +1169,11 @@ ALTER TABLE ONLY "csvapi".a6311c164ebfb165ddc828ded ALTER COLUMN __id SET DEFAUL
 -- Data for Name: a6311c164ebfb165ddc828ded; Type: TABLE DATA; Schema: csvapi; Owner: csvapi
 --
 
-COPY "csvapi".a6311c164ebfb165ddc828ded (__id, "Titre de l'œuvre", "nom.de.colonne", "%dès_àccênts?", "nom ""propre""", "date/de\naissance", "[nom peu] commun]", "avec__des!") FROM stdin;
-1	10	20	30	40	50	60	70
-2	11	21	31	41	51	61	71
-3	12	22	32	42	52	62	72
-4	13	23	33	43	53	63	73
+COPY "csvapi".a6311c164ebfb165ddc828ded (__id, "Titre de l'œuvre", "nom.de.colonne", "%dès_àccênts?", "nom ""propre""", "date/de\naissance", "[nom peu] commun]", "avec__des!", "Taux de logements vacants* (en %)") FROM stdin;
+1	10	20	30	40	50	60	70	80
+2	11	21	31	41	51	61	71	81
+3	12	22	32	42	52	62	72	82
+4	13	23	33	43	53	63	73	83
 \.
 
 

@@ -30,7 +30,7 @@ def build_sql_query_string(
         # is(not)null also has this syntax but is a filter
         elif len(_split) == 1:
             if _split[0].split("__")[1] in ["isnull", "isnotnull"]:
-                _filter, _ = add_filter(_split[0], None)
+                _filter, _ = add_filter(_split[0], "")
                 sql_query.append(_filter)
             else:
                 column, operator = add_aggregator(_split[0], indexes)
@@ -79,7 +79,7 @@ def get_column_and_operator(argument: str) -> tuple[str, str]:
 
 def add_filter(
     argument: str,
-    value: str | None,
+    value: str,
     *,
     in_operator: bool = False,
 ) -> tuple[str | None, bool]:
@@ -90,7 +90,10 @@ def add_filter(
     if argument == "columns":
         if in_operator:
             raise ValueError(f"Argument `{argument}` can't be set within an operator")
-        return f"select={value}", False
+        if '"' in value:
+            raise ValueError('Forbidden character `"` in a column name')
+        columns = ",".join(f'"{col}"' for col in value.split(","))
+        return f"select={columns}", False
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         # when encapsulated in an OR statement, the syntax is `col.eq.val` instead of `col=eq.val`
@@ -209,7 +212,7 @@ def parse_operator(query: str, operator: str, top_level: bool = False):
                 postgrest_params.append(
                     add_filter(
                         param.replace('"', ""),
-                        None,
+                        "",
                         in_operator=True,
                     )[0]
                 )
