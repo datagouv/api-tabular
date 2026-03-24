@@ -90,6 +90,8 @@ def add_filter(
     if argument == "columns":
         if in_operator:
             raise ValueError(f"Argument `{argument}` can't be set within an operator")
+        if '"' in value:
+            raise ValueError('Forbidden character `"` in a column name')
         columns = ",".join(f'"{col}"' for col in value.split(","))
         return f"select={columns}", False
     if "__" in argument:
