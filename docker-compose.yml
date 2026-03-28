@@ -47,3 +47,35 @@ services:
       - POSTGRES_PASSWORD=csvapi
     profiles:
       - test
+
+  # Tabular API (run locally via Docker, uses same Dockerfile as CI)
+  tabular-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: api_tabular.tabular.app:app_factory
+    ports:
+      - "8005:8005"
+    environment:
+      - PGREST_ENDPOINT=http://postgrest-test:8080
+    depends_on:
+      - postgrest-test
+    profiles:
+      - test
+
+  # Metrics API (run locally via Docker, uses same Dockerfile as CI)
+  metrics-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: api_tabular.metrics.app:app_factory
+    ports:
+      - "8006:8005"
+    environment:
+      - PGREST_ENDPOINT=http://postgrest-test:8080
+    depends_on:
+      - postgrest-test
+    profiles:
+      - test
