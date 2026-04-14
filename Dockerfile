@@ -15,6 +15,8 @@ RUN groupadd --system datagouv && \
 # install
 WORKDIR /home/datagouv
 ADD . /home/datagouv/
+# setuptools_scm runs git during install; Git refuses a repo whose owner differs from the build user (root).
+RUN git config --global --add safe.directory /home/datagouv
 RUN uv sync --frozen
 RUN chown -R datagouv:datagouv /home/datagouv
 
