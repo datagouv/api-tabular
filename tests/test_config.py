@@ -40,9 +40,11 @@ def test_custom_config_file_override():
 def test_env_override():
     os.environ["PGREST_ENDPOINT"] = "https://example.com"
     os.environ["PAGE_SIZE_MAX"] = "200"
-    os.environ["ALLOW_AGGREGATION"] = "a,b,c"
+    os.environ["ALLOW_AGGREGATION"] = "true"
+    os.environ["ALLOW_AGGREGATION_EXCEPTIONS"] = "a,b,c"
     config = Configurator()
 
     assert config.PGREST_ENDPOINT == "https://example.com"
     assert config.PAGE_SIZE_MAX == 200
-    assert config.ALLOW_AGGREGATION == ["a", "b", "c"]
+    assert config.ALLOW_AGGREGATION == True
+    assert config.ALLOW_AGGREGATION_EXCEPTIONS == ["a", "b", "c"]

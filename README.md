@@ -320,7 +320,9 @@ column_name__sort=desc
 ```
 
 #### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are only available for resources that are listed in the `ALLOW_AGGREGATION` list of the config file, which can be seen at the `/api/aggregation-exceptions/` endpoint, and on columns that have an index.
+> ⚠️ **WARNING**: Aggregation requests are disabled by default.
+> You can allow or disallow it for all resources with the `ALLOW_AGGREGATION` config. If `ALLOW_AGGREGATION` is set to `false`, you can specify allow exceptions by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
+> You can get the current status and exceptions at `/api/aggregation-exceptions/` endpoint.
 
 ```
 # group by values
@@ -400,6 +402,22 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/da
   }
 }
 ```
+Top level parameters are considered joined with the `AND` operator. It is possible to add nested conditions with the following syntax:
+```
+or=(<column1>__<operator1>.<value1>,<column2>__<operator2>.<value2>,...)
+```
+> **Note**: the conditions within an `OR` have a `.` instead of a `=` between the operator and the value.
+
+> **Note**: the syntax for `isnull` and `isnotnull` is `<column1>__is(not)null` (no value is needed, like outisde of `OR` groups)
+
+This scales as much as needed, but the inner operators should be `or(...)` and `and(...)` (without the `=`), like:
+```
+decompte__less=10&or=(is_true__exact.true,birth__greater.1980,and(score__strictly_less.5,liste__isnotnull,or(...)))
+```
+> **Note**: if the column name and/or the value of the filter contains special characters (including dots), the item should be wrapped within double quotes:
+```
+or=("is true"__exact.true,and(score__strictly_less."0.1","avg.views"__greater."15.5"))
+```
 
 #### Aggregation with Filtering
 With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
@@ -476,7 +494,8 @@ Configuration is handled through TOML files and environment variables. The defau
 | `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
 | `BATCH_SIZE` | `50000` | Batch size for streaming |
 | `DOC_PATH` | `/api/doc` | Swagger documentation path |
-| `ALLOW_AGGREGATION` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
+| `ALLOW_AGGREGATION` | `False` | Whether aggregation queries are allowed (`column__groupby`). If False, it can still be explicitly allowed with `ALLOW_AGGREGATION_EXCEPTIONS` |
+| `ALLOW_AGGREGATION_EXCEPTIONS` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
 
 ### Environment Variables
 
