@@ -8,21 +8,15 @@ parameters:
   publish-branch:
     type: string
     default: "main"
-  python-module:
+  docker-registry-host:
     type: string
-    default: "api_tabular"
-  api-port:
+    default: "registry.gitlab.com"
+  docker-repo-tabular:
     type: string
-    default: "8005"
-  docker-registry-url:
+    default: "registry.gitlab.com/etalab/data.gouv.fr/infra/tabular-api"
+  docker-repo-metrics:
     type: string
-    default: "registry.gitlab.com/etalab/data.gouv.fr/infra"
-  docker-image-name-tabular:
-    type: string
-    default: "tabular-api"
-  docker-image-name-metrics:
-    type: string
-    default: "metrics-api"
+    default: "registry.gitlab.com/etalab/data.gouv.fr/infra/metrics-api"
 
 jobs:
   lint:
@@ -108,25 +102,50 @@ jobs:
       - persist_to_workspace:
           root: .
           paths:
-            - .
+            - dist
+            - pyproject.toml
       - run:
           name: Log in to Docker registry
           command: |
-            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "oauth2" --password-stdin registry.gitlab.com
+            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "oauth2" --password-stdin << pipeline.parameters.docker-registry-host >>
       - run:
           name: Build and push Docker images (Tabular API and Metrics API)
           command: |
             source "$BASH_ENV"
             export PATH="$HOME/.local/bin:$PATH"
-            REGISTRY="<< pipeline.parameters.docker-registry-url >>"
+            # Five distinct tags per image (SCM version, SHA short/long, branch, optional git tag).
             # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
-            DOCKER_TAG=$(echo "$RELEASE_VERSION" | tr '+' '-')
+            DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
+            DOCKER_TAG_SHA_SHORT="${CIRCLE_SHA1:0:7}"
+            DOCKER_TAG_SHA_LONG="$CIRCLE_SHA1"
+            DOCKER_TAG_BRANCH=$(printf '%s' "$CIRCLE_BRANCH" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+            DOCKER_TAG_GIT="${CIRCLE_TAG:-}"
             # Tabular API: tabular endpoints only
-            docker build --build-arg APP_MODULE=api_tabular.tabular.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}" .
-            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-tabular >>:${DOCKER_TAG}"
+            docker build --build-arg APP_MODULE=api_tabular.tabular.app:app_factory \
+              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SCM}" \
+              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_SHORT}" \
+              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_LONG}" \
+              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_BRANCH}" \
+              ${DOCKER_TAG_GIT:+-t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"} \
+              .
+            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SCM}"
+            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_SHORT}"
+            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_LONG}"
+            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_BRANCH}"
+            [ -n "$DOCKER_TAG_GIT" ] && docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"
             # Metrics API: metrics endpoints only
-            docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory -t "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}" .
-            docker push "${REGISTRY}/<< pipeline.parameters.docker-image-name-metrics >>:${DOCKER_TAG}"
+            docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory \
+              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SCM}" \
+              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_SHORT}" \
+              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_LONG}" \
+              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_BRANCH}" \
+              ${DOCKER_TAG_GIT:+-t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"} \
+              .
+            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SCM}"
+            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_SHORT}"
+            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_LONG}"
+            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_BRANCH}"
+            [ -n "$DOCKER_TAG_GIT" ] && docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"
 
   publish-pypi:
     docker:
