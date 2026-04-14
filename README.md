@@ -18,26 +18,39 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker & Docker Compose**
 
+### Docker Compose profiles
+
+| Profile  | Use when | Services started |
+|----------|----------|------------------|
+| **test** | Run locally with the test database (PostgreSQL + PostgREST + optional Tabular API + Metrics API in Docker) | `postgres-test`, `postgrest-test`, `tabular-api`, `metrics-api` |
+| **hydra** | Use a real Hydra CSV database; PostgREST only in Docker, run the API with uv on the host | `postgrest` |
+
+**Run everything locally in Docker:** `docker compose --profile test up -d` → Tabular API at http://localhost:8005, Metrics API at http://localhost:8006, PostgREST at http://localhost:8080.
+
 ### 🧪 Run with a test database
 
-1. **Start the Infrastructure**
+1. **Start the stack**
 
-   Start the test CSV database and test PostgREST container:
+   With the **test** profile, you can either run the full stack in Docker (recommended for a quick local run) or only the infrastructure and run the API with uv (for development with hot reload).
+
+   **Option A – All in Docker (easiest for running locally):**
    ```shell
    docker compose --profile test up -d
    ```
-   The `--profile test` flag tells Docker Compose to start the PostgREST and PostgreSQL services for the test CSV database. This starts PostgREST on port 8080, connecting to the test CSV database. You can access the raw PostgREST API on http://localhost:8080.
+   This starts the test PostgreSQL, PostgREST, Tabular API (port 8005), and Metrics API (port 8006). You can use the APIs at http://localhost:8005 and http://localhost:8006.
 
-2. **Launch the main API proxy**
-
-   Install dependencies and start the proxy services:
+   **Option B – Only infrastructure in Docker, API with uv (for development):**
+   ```shell
+   docker compose --profile test up -d postgres-test postgrest-test
+   ```
+   PostgREST is available at http://localhost:8080. Then start the API proxy on the host:
    ```shell
    uv sync
-   uv run adev runserver -p8005 api_tabular/tabular/app.py    # Api related to apified CSV files by udata-hydra (dev server)
-   uv run adev runserver -p8006 api_tabular/metrics/app.py    # Api related to udata's metrics (dev server)
+   uv run adev runserver -p8005 api_tabular/tabular/app.py    # Tabular API (dev server)
+   uv run adev runserver -p8006 api_tabular/metrics/app.py   # Metrics API (dev server)
    ```
 
-   **Note:** For production, use gunicorn with aiohttp worker:
+   **Note:** For production (on the host), use gunicorn with aiohttp worker:
    ```shell
    # Tabular API (port 8005)
    uv run gunicorn api_tabular.tabular.app:app_factory \
@@ -54,9 +67,9 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
      --access-logfile -
    ```
 
-   The main API provides a controlled layer over PostgREST - exposing PostgREST directly would be too permissive, so this adds a security and access control layer.
+   The API provides a controlled layer over PostgREST (security and access control); exposing PostgREST directly would be too permissive.
 
-3. **Test the API**
+2. **Test the API**
 
    Query the API using a `resource_id`. Several test resources are available in the fake database:
 
