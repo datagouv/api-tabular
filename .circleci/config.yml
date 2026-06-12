@@ -132,7 +132,9 @@ jobs:
             docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_SHORT}"
             docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_LONG}"
             docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_BRANCH}"
-            [ -n "$DOCKER_TAG_GIT" ] && docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"
+            if [ -n "$DOCKER_TAG_GIT" ]; then
+              docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"
+            fi
             # Metrics API: metrics endpoints only
             docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory \
               -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SCM}" \
@@ -145,7 +147,9 @@ jobs:
             docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_SHORT}"
             docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_LONG}"
             docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_BRANCH}"
-            [ -n "$DOCKER_TAG_GIT" ] && docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"
+            if [ -n "$DOCKER_TAG_GIT" ]; then
+              docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"
+            fi
 
   publish-pypi:
     docker:
