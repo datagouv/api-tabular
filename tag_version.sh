@@ -66,22 +66,24 @@ if [ "$CURRENT_BRANCH" != "$MAIN_BRANCH" ]; then
     exit 1
 fi
 
-# Check if working copy is clean
-if ! git diff-index --quiet HEAD --; then
+# Check if working copy is clean (skip in dry-run mode)
+if [ "$DRY_RUN" = false ] && ! git diff-index --quiet HEAD --; then
     echo "Error: Working copy is not clean. Please commit or stash your changes."
     git status --short
     exit 1
 fi
 
-# Check if we're up to date with remote
-git fetch origin "$MAIN_BRANCH" --quiet
-LOCAL=$(git rev-parse @)
-REMOTE=$(git rev-parse @{u})
+# Check if we're up to date with remote (skip in dry-run mode)
+if [ "$DRY_RUN" = false ]; then
+    git fetch origin "$MAIN_BRANCH" --quiet
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
 
-if [ "$LOCAL" != "$REMOTE" ]; then
-    echo "Error: Your local $MAIN_BRANCH branch is not up to date with origin/$MAIN_BRANCH"
-    echo "Please run: git pull origin $MAIN_BRANCH"
-    exit 1
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        echo "Error: Your local $MAIN_BRANCH branch is not up to date with origin/$MAIN_BRANCH"
+        echo "Please run: git pull origin $MAIN_BRANCH"
+        exit 1
+    fi
 fi
 
 # Check if tag already exists
@@ -162,30 +164,35 @@ done <<< "$COMMIT_HASHES"
 # Sort breaking changes (sort by first line only, keep blocks together)
 BREAKING_CHANGES=""
 if [ -n "$BREAKING_CHANGES_RAW" ]; then
-    # Check for gawk on macOS (BSD awk doesn't support asort)
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if ! command -v gawk &> /dev/null; then
-            echo "Error: gawk is required on macOS (BSD awk doesn't support asort)"
-            echo "Install with: brew install gawk"
-            exit 1
-        fi
-        AWK_CMD="gawk"
-    else
-        AWK_CMD="awk"
-    fi
-    BREAKING_CHANGES=$(echo "$BREAKING_CHANGES_RAW" | $AWK_CMD -v delim="$COMMIT_DELIMITER" '
+    # Split by delimiter, sort by first line, then rejoin
+    BREAKING_CHANGES=$(echo "$BREAKING_CHANGES_RAW" | \
+        awk -v delim="$COMMIT_DELIMITER" '
         BEGIN { RS=delim"\n"; ORS="" }
-        NF { commits[NR] = $0; keys[NR] = $0; sub(/\n.*/, "", keys[NR]) }
+        NF {
+            # Store the first line as sort key and full content
+            key = $0
+            sub(/\n.*/, "", key)
+            # Store in array
+            keys[NR] = key
+            commits[NR] = $0
+        }
         END {
-            n = asort(keys, sorted_keys)
+            # Simple bubble sort
+            n = NR
             for (i = 1; i <= n; i++) {
-                for (j in keys) {
-                    if (keys[j] == sorted_keys[i]) {
-                        print commits[j] "\n"
-                        delete keys[j]
-                        break
+                for (j = i + 1; j <= n; j++) {
+                    if (keys[i] > keys[j]) {
+                        tmp = keys[i]
+                        keys[i] = keys[j]
+                        keys[j] = tmp
+                        tmp = commits[i]
+                        commits[i] = commits[j]
+                        commits[j] = tmp
                     }
                 }
+            }
+            for (i = 1; i <= n; i++) {
+                print commits[i] "\n"
             }
         }
     ')
