@@ -14,7 +14,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 ### 📋 Requirements
 
-- **Python** >= 3.11, < 3.14
+- **Python** >= 3.11, < 3.15
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker & Docker Compose**
 
