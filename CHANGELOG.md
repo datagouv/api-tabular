@@ -5,7 +5,6 @@
 - **feat!: add general allow aggregation config ([#102](https://github.com/datagouv/api-tabular/pull/102))**
   This would allow to allow aggregation entirely, or disallow it but keep
   a list of exceptions.
-  
   :warning: Renamed existing `ALLOW_AGGREGATION` to
   `ALLOW_AGGREGATION_EXCEPTIONS`.
 - Allow complex conditions in queries ([#103](https://github.com/datagouv/api-tabular/pull/103))
