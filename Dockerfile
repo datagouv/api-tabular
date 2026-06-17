@@ -1,4 +1,4 @@
-FROM astral/uv:python3.11-trixie-slim
+FROM astral/uv:python3.14-trixie-slim
 
 # Which Gunicorn app to run
 # Overridden at build time by the CI so we can use one Dockerfile for both Tabular API and Metrics API
