@@ -1,6 +1,7 @@
 FROM astral/uv:python3.11-trixie-slim
 
-# Which app to run (e.g. api_tabular.tabular.app:app_factory or api_tabular.metrics.app:app_factory)
+# Which Gunicorn app to run
+# Overridden at build time by the CI so we can use one Dockerfile for both Tabular API and Metrics API
 ARG APP_MODULE=api_tabular.tabular.app:app_factory
 
 # install needed apt packages
@@ -15,13 +16,11 @@ RUN groupadd --system datagouv && \
 # install
 WORKDIR /home/datagouv
 ADD . /home/datagouv/
-# setuptools_scm runs git during install; Git refuses a repo whose owner differs from the build user (root).
-RUN git config --global --add safe.directory /home/datagouv
-RUN uv sync --frozen
 RUN chown -R datagouv:datagouv /home/datagouv
+USER datagouv
+RUN uv sync --frozen
 
 # run (ENV from ARG so shell can expand APP_MODULE at runtime)
-USER datagouv
 ENV APP_MODULE=${APP_MODULE}
 # Use `python -m gunicorn` instead of `gunicorn` due to uv issue #15246: https://github.com/astral-sh/uv/issues/15246
 # Shell so APP_MODULE is expanded; bind to 8005 (map to different host ports when running both containers)
