@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 (2026-06-18)
+
+- fix: fix aiohttp version to be compatible with python 3.14
+
+
 ## 0.4.0 (2026-06-18)
 
 - build: simplify Dockerfile ([#115](https://github.com/datagouv/api-tabular/pull/115))
