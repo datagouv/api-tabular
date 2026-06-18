@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 (2026-06-18)
+
+- build: simplify Dockerfile ([#115](https://github.com/datagouv/api-tabular/pull/115))
+- build: use Python 3.14 ([#113](https://github.com/datagouv/api-tabular/pull/113))
+- fix: remove trailing whitespace in changelog ([#116](https://github.com/datagouv/api-tabular/pull/116))
+- fix(ci): fix lint check in ci ([#114](https://github.com/datagouv/api-tabular/pull/114))
+- fix(ci): fix push on docker registry when no git tag ([#112](https://github.com/datagouv/api-tabular/pull/112))
+
+
 ## 0.3.2 (2026-06-12)
 
 - **feat!: add general allow aggregation config ([#102](https://github.com/datagouv/api-tabular/pull/102))**
