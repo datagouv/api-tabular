@@ -1,12 +1,28 @@
 import csv
+import inspect
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
+from unittest.mock import Mock
 
 import pytest
 import pytest_asyncio
+from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
+
+# aiohttp 3.14+ requires stream_writer in ClientResponse.__init__,
+# but aioresponses 0.7.x doesn't pass it.
+# See https://github.com/pnuckowski/aioresponses/issues/289
+_signature = inspect.signature(ClientResponse.__init__)
+if "stream_writer" in _signature.parameters:
+    _orig_init = ClientResponse.__init__
+
+    def _patched_init(self, *args, **kwargs):
+        kwargs.setdefault("stream_writer", Mock(output_size=0))
+        return _orig_init(self, *args, **kwargs)
+
+    ClientResponse.__init__ = _patched_init
 
 from api_tabular import config
 from api_tabular.tabular.app import app_factory
