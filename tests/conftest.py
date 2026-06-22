@@ -25,7 +25,7 @@ if "stream_writer" in _signature.parameters:
         kwargs.setdefault("stream_writer", Mock(output_size=0))
         return _orig_init(self, *args, **kwargs)
 
-    ClientResponse.__init__ = _patched_init
+    ClientResponse.__init__ = _patched_init  # type: ignore[assignment]
 
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
