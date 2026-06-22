@@ -11,6 +11,9 @@ from aiohttp import ClientResponse
 from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
 
+from api_tabular import config
+from api_tabular.tabular.app import app_factory
+
 # aiohttp 3.14+ requires stream_writer in ClientResponse.__init__,
 # but aioresponses 0.7.x doesn't pass it.
 # See https://github.com/pnuckowski/aioresponses/issues/289
@@ -23,9 +26,6 @@ if "stream_writer" in _signature.parameters:
         return _orig_init(self, *args, **kwargs)
 
     ClientResponse.__init__ = _patched_init
-
-from api_tabular import config
-from api_tabular.tabular.app import app_factory
 
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
