@@ -160,7 +160,7 @@ jobs:
       - run:
           name: Publish on PyPI
           command: |
-            uv publish dist/*.whl  # use UV_PUBLISH_TOKEN
+            uv publish  # use UV_PUBLISH_TOKEN
 
 workflows:
   build-test-deploy:
