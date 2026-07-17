@@ -55,6 +55,21 @@ class Configurator:
         """Sanity check on config"""
         pass
 
+    def parquet_url(self, resource_id: str) -> str:
+        """Public Parquet URL (or local path override) for a resource."""
+        assert self.configuration is not None
+        base = (self.configuration.get("PARQUET_BASE_URL") or "").rstrip("/")
+        if not base:
+            endpoint = (self.configuration.get("S3_ENDPOINT") or "").strip()
+            bucket = (self.configuration.get("S3_BUCKET") or "").strip()
+            if not endpoint or not bucket:
+                raise ValueError(
+                    "Parquet location is not configured: set PARQUET_BASE_URL, "
+                    "or both S3_ENDPOINT and S3_BUCKET"
+                )
+            base = f"https://{endpoint}/{bucket}/parquet"
+        return f"{base}/{resource_id}.parquet"
+
     def __getattr__(self, __name):
         assert self.configuration is not None
         return self.configuration.get(__name)

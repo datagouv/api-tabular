@@ -150,23 +150,6 @@ paths:
           type: string
           format: uuid
           example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
-  /api/aggregation-exceptions/:
-    get:
-      tags:
-        - Data retrieval
-      description: Returns the list of resource IDs for which aggregation queries (groupby, count, sum, etc.) are allowed.
-      summary: List aggregation-allowed resources
-      operationId: getAggregationExceptions
-      responses:
-        '200':
-          description: List of resource UUIDs
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-                  format: uuid
   /health/:
     get:
       tags:
@@ -186,17 +169,11 @@ paths:
 components:
   schemas:
     ResourceProfileResponse:
-      description: Profile endpoint response; contains the csv_detective profile and optional column indexes.
+      description: Profile endpoint response; contains the csv_detective profile.
       type: object
       properties:
         profile:
           $ref: '#/components/schemas/ResourceProfile'
-        indexes:
-          description: List of column names that have an index (for filtering/sorting). Null if none.
-          type: array
-          items:
-            type: string
-          nullable: true
     ResourceProfile:
       description: Column types, formats and statistics from csv_detective (encoding, separator, row count, etc.)
       type: object

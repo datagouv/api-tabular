@@ -5,7 +5,7 @@
 [![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV or tabular resources.
+An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). The **Tabular API** queries public Parquet files with [DuckDB](https://duckdb.org/) (filters, pagination, aggregations, CSV/JSON export), while resource metadata still comes from PostgreSQL via PostgREST (`tables_index`). The **Metrics API** continues to use PostgREST against PostgreSQL.
 
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
 The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
@@ -74,9 +74,11 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    Query the API using a `resource_id`. Several test resources are available in the fake database:
 
    - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
-   - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
-   - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
-   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
+   - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Smaller sample resource
+   - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Smaller sample resource
+   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Smaller sample resource
+
+   Local Parquet fixtures live under `db/parquet/{resource_id}.parquet`. Set `PARQUET_BASE_URL` to that directory when running the Tabular API against the test stack (the pytest suite does this automatically).
 
 ### 🏭 Run with a real Hydra database
 
@@ -320,9 +322,8 @@ column_name__sort=desc
 ```
 
 #### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are disabled by default.
-> You can allow or disallow it for all resources with the `ALLOW_AGGREGATION` config. If `ALLOW_AGGREGATION` is set to `false`, you can specify allow exceptions by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
-> You can get the current status and exceptions at `/api/aggregation-exceptions/` endpoint.
+
+Aggregation is available on all resources and columns (except JSON limitations below).
 
 ```
 # group by values
@@ -486,16 +487,19 @@ Configuration is handled through TOML files and environment variables. The defau
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `PGREST_ENDPOINT` | `http://localhost:8080` | PostgREST server URL |
+| `PGREST_ENDPOINT` | `http://localhost:8080` | PostgREST server URL (metadata for Tabular API; data for Metrics API) |
+| `S3_ENDPOINT` | `""` | S3 endpoint hosting public Parquet files (set via env in deploy) |
+| `S3_BUCKET` | `""` | S3 bucket name (set via env in deploy) |
+| `PARQUET_BASE_URL` | `""` | Optional override for Parquet base URL/path (tests use a local directory). When empty, URLs are `https://{S3_ENDPOINT}/{S3_BUCKET}/parquet/{resource_id}.parquet` |
 | `SERVER_NAME` | `localhost:8005` | Server name for URL generation |
 | `SCHEME` | `http` | URL scheme (http/https) |
 | `SENTRY_DSN` | `None` | Sentry DSN for error reporting (optional) |
 | `PAGE_SIZE_DEFAULT` | `20` | Default page size |
 | `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
-| `BATCH_SIZE` | `50000` | Batch size for streaming |
+| `BATCH_SIZE` | `50000` | Max rows for CSV/JSON export |
 | `DOC_PATH` | `/api/doc` | Swagger documentation path |
-| `ALLOW_AGGREGATION` | `False` | Whether aggregation queries are allowed (`column__groupby`). If False, it can still be explicitly allowed with `ALLOW_AGGREGATION_EXCEPTIONS` |
-| `ALLOW_AGGREGATION_EXCEPTIONS` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
+
+> Disk caching of Parquet files is not implemented yet; DuckDB reads remote (or local) Parquet via `httpfs` / filesystem. A local cache may be added later if latency requires it.
 
 ### Environment Variables
 
@@ -503,13 +507,14 @@ You can override any configuration value using environment variables:
 
 ```shell
 export PGREST_ENDPOINT="http://my-postgrest:8080"
+export S3_ENDPOINT="s3.example.com"
+export S3_BUCKET="my-bucket"
 export PAGE_SIZE_DEFAULT=50
 export SENTRY_DSN="https://your-sentry-dsn"
 ```
-Once the containers are up and running, you can directly query PostgREST on:
+
+PostgREST remains available for metadata inspection and for the Metrics API:
 `<PGREST_ENDPOINT>/<table_name>?<filters>`
-like for example:
-`http://localhost:8080/eb7a008177131590c2f1a2ca0?decompte=eq.10`
 
 ### Custom Configuration File
 

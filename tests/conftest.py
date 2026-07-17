@@ -1,10 +1,12 @@
 import csv
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from aioresponses import aioresponses
 
@@ -19,24 +21,15 @@ AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
 DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
 NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
 
-
-@pytest.fixture
-def rmock():
-    # passthrough for local requests (aiohttp TestServer)
-    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
-        yield m
+PARQUET_DIR = Path(__file__).parent.parent / "db" / "parquet"
 
 
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[TestClient, Any]:
-    app = await app_factory()
-    async with TestClient(TestServer(app)) as client:
-        yield client
-
-
-@pytest.fixture
-def base_url() -> Generator[str, Any, Any]:
-    yield f"{config.SCHEME}://{config.SERVER_NAME}"
+@pytest.fixture(autouse=True)
+def parquet_base_url():
+    """Point DuckDB at local fixture Parquet files instead of S3."""
+    config.override(PARQUET_BASE_URL=str(PARQUET_DIR.resolve()))
+    yield
+    config.override(PARQUET_BASE_URL="")
 
 
 def timestamptz_to_utc_iso(date_str: str) -> str:
@@ -75,3 +68,65 @@ def tables_index_rows() -> Generator[dict, Any, Any]:
 @pytest.fixture
 def exceptions_rows() -> Generator[dict, Any, Any]:
     yield csv_to_dict("exceptions")
+
+
+@pytest.fixture(autouse=True)
+def mock_tables_index(mocker, tables_index_rows):
+    """Serve `tables_index` metadata from CSV fixtures (no PostgREST required)."""
+
+    async def _get_resource(session, resource_id: str, columns: list) -> dict:
+        if resource_id not in tables_index_rows:
+            raise web.HTTPNotFound()
+        row = tables_index_rows[resource_id]
+        if row.get("deleted_at") is not None:
+            deleted_at = row["deleted_at"]
+            dataset_id = row.get("dataset_id")
+            message = (
+                f"Resource {resource_id} has been permanently deleted on {deleted_at} "
+                "by its producer."
+            )
+            if dataset_id:
+                message += (
+                    f" You can find more information about this resource at "
+                    f"https://www.data.gouv.fr/datasets/{dataset_id}"
+                )
+            else:
+                message += " Contact the resource producer to get more information."
+            raise web.HTTPGone(text=message)
+
+        requested = set(columns)
+        record: dict[str, Any] = {
+            "deleted_at": row["deleted_at"],
+            "dataset_id": row["dataset_id"],
+        }
+        if "created_at" in requested:
+            record["created_at"] = row["created_at"]
+        if "url" in requested:
+            record["url"] = row["url"]
+        if "parsing_table" in requested:
+            record["parsing_table"] = row["parsing_table"]
+        if any(c.startswith("profile") or "csv_detective" in c for c in requested):
+            record["profile"] = json.loads(row["csv_detective"])
+        return record
+
+    mocker.patch("api_tabular.tabular.utils.get_resource", side_effect=_get_resource)
+    mocker.patch("api_tabular.tabular.app.get_resource", side_effect=_get_resource)
+
+
+@pytest.fixture
+def rmock():
+    # passthrough for local requests (aiohttp TestServer)
+    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
+        yield m
+
+
+@pytest_asyncio.fixture
+async def client() -> AsyncGenerator[TestClient, Any]:
+    app = await app_factory()
+    async with TestClient(TestServer(app)) as client:
+        yield client
+
+
+@pytest.fixture
+def base_url() -> Generator[str, Any, Any]:
+    yield f"{config.SCHEME}://{config.SERVER_NAME}"

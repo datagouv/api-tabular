@@ -214,17 +214,11 @@ def test_query_build_multiple_with_unknown():
     ],
 )
 def test_query_aggregators(allow_aggregation, mocker):
-    if allow_aggregation:
-        mocker.patch("api_tabular.config.ALLOW_AGGREGATION_EXCEPTIONS", [RESOURCE_ID])
     query_str = [
         "column_name__groupby",
         "column_name__min",
         "column_name__avg",
     ]
-    if not allow_aggregation:
-        with pytest.raises(PermissionError):
-            build_sql_query_string(query_str, resource_id=RESOURCE_ID, page_size=50)
-        return
     results = build_sql_query_string(query_str, resource_id=RESOURCE_ID, page_size=50).split("&")
     assert "limit=50" in results
     assert "order=__id.asc" not in results  # no sort if aggregators

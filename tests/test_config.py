@@ -40,11 +40,12 @@ def test_custom_config_file_override():
 def test_env_override():
     os.environ["PGREST_ENDPOINT"] = "https://example.com"
     os.environ["PAGE_SIZE_MAX"] = "200"
-    os.environ["ALLOW_AGGREGATION"] = "true"
-    os.environ["ALLOW_AGGREGATION_EXCEPTIONS"] = "a,b,c"
+    os.environ["S3_ENDPOINT"] = "s3.example.com"
+    os.environ["S3_BUCKET"] = "my-bucket"
     config = Configurator()
 
     assert config.PGREST_ENDPOINT == "https://example.com"
     assert config.PAGE_SIZE_MAX == 200
-    assert config.ALLOW_AGGREGATION
-    assert config.ALLOW_AGGREGATION_EXCEPTIONS == ["a", "b", "c"]
+    assert config.S3_ENDPOINT == "s3.example.com"
+    assert config.S3_BUCKET == "my-bucket"
+    assert config.parquet_url("abc") == "https://s3.example.com/my-bucket/parquet/abc.parquet"

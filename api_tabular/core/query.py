@@ -1,8 +1,6 @@
 import re
 from collections import defaultdict
 
-from api_tabular.core.utils import is_aggregation_allowed
-
 
 def build_sql_query_string(
     request_arg: list,
@@ -11,6 +9,7 @@ def build_sql_query_string(
     page_size: int | None = None,
     offset: int = 0,
 ) -> str:
+    """Build a PostgREST query string (used by the Metrics API)."""
     sql_query = []
     aggregators = defaultdict(list)
     sorted = False
@@ -39,11 +38,6 @@ def build_sql_query_string(
         else:
             raise ValueError(f"argument '{arg}' could not be parsed")
     if aggregators:
-        if resource_id and not is_aggregation_allowed(resource_id):
-            raise PermissionError(
-                f"Aggregation parameters `{'`, `'.join(aggregators.keys())}` "
-                f"are not allowed for resource '{resource_id}'"
-            )
         agg_query = "select="
         for operator in aggregators:
             if operator == "groupby":
