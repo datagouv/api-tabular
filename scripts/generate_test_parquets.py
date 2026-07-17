@@ -110,7 +110,8 @@ def main() -> None:
             f"CREATE OR REPLACE TABLE tmp_export AS SELECT {', '.join(select_parts)} FROM tmp_export"
         )
         con.execute(f"COPY tmp_export TO '{path}' (FORMAT PARQUET, COMPRESSION ZSTD)")
-        n = con.execute("SELECT COUNT(*) FROM tmp_export").fetchone()[0]
+        count_row = con.execute("SELECT COUNT(*) FROM tmp_export").fetchone()
+        n = 0 if count_row is None else count_row[0]
         print(f"wrote {path.name} ({n} rows)")
 
 

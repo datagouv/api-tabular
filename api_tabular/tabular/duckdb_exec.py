@@ -112,7 +112,9 @@ def _execute_sync(
         if not query.is_aggregation:
             count_sql = _assemble_sql(source_sql, query, for_count=True)
             count_params = source_params + query.where_params
-            total = int(con.execute(count_sql, count_params).fetchone()[0])
+            total = int(
+                con.execute(count_sql, count_params).fetchone()[0]
+            )  # ty: ignore[not-subscriptable]
 
         return rows, total
     finally:
@@ -132,7 +134,11 @@ def _count_sync(parquet_path: str, query: DuckDBQuery) -> int:
 
         source_sql, source_params = _parquet_source_sql(parquet_path, columns)
         count_sql = _assemble_sql(source_sql, query, for_count=True)
-        return int(con.execute(count_sql, source_params + query.where_params).fetchone()[0])
+        return int(
+            con.execute(count_sql, source_params + query.where_params).fetchone()[
+                0
+            ]  # ty: ignore[not-subscriptable]
+        )
     except duckdb.Error as e:
         raise QueryException(400, None, "Database error", str(e)) from e
     finally:

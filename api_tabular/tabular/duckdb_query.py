@@ -1,6 +1,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -15,6 +16,14 @@ class DuckDBQuery:
     is_aggregation: bool = False
     limit: int | None = None
     offset: int = 0
+
+
+@dataclass
+class FilterAction:
+    kind: str  # where | order | select
+    sql: str = ""
+    params: list[Any] = field(default_factory=list)
+    columns: list[str] = field(default_factory=list)
 
 
 def quote_ident(name: str) -> str:
@@ -33,7 +42,7 @@ def build_duckdb_query(
     offset: int = 0,
 ) -> DuckDBQuery:
     where_parts: list[str] = []
-    where_params: list = []
+    where_params: list[Any] = []
     order_sql = ""
     select_columns: list[str] | None = None
     aggregators: dict[str, list[str]] = defaultdict(list)
@@ -47,26 +56,25 @@ def build_duckdb_query(
             continue
         _split = arg.split("=")
         if len(_split) == 2:
-            result = add_filter(*_split)
-            if result is None:
+            action = add_filter(*_split)
+            if action is None:
                 continue
-            kind, payload = result
-            if kind == "where":
-                where_parts.append(payload[0])
-                where_params.extend(payload[1])
-            elif kind == "order":
-                order_sql = payload
+            if action.kind == "where":
+                where_parts.append(action.sql)
+                where_params.extend(action.params)
+            elif action.kind == "order":
+                order_sql = action.sql
                 has_sort = True
-            elif kind == "select":
-                select_columns = payload
+            elif action.kind == "select":
+                select_columns = action.columns
         elif len(_split) == 1:
             if "__" not in _split[0]:
                 raise ValueError(f"argument '{arg}' could not be parsed")
             if _split[0].split("__")[-1] in ["isnull", "isnotnull"]:
-                result = add_filter(_split[0], "")
-                assert result is not None and result[0] == "where"
-                where_parts.append(result[1][0])
-                where_params.extend(result[1][1])
+                action = add_filter(_split[0], "")
+                assert action is not None and action.kind == "where"
+                where_parts.append(action.sql)
+                where_params.extend(action.params)
             else:
                 column, operator = add_aggregator(_split[0])
                 aggregators[operator].append(column)
@@ -123,7 +131,7 @@ def add_filter(
     value: str,
     *,
     in_operator: bool = False,
-) -> tuple[str, tuple] | None:
+) -> FilterAction | None:
     if argument in ["page", "page_size"]:
         if in_operator:
             raise ValueError(f"Argument `{argument}` can't be set within an operator")
@@ -133,7 +141,7 @@ def add_filter(
             raise ValueError(f"Argument `{argument}` can't be set within an operator")
         if '"' in value:
             raise ValueError('Forbidden character `"` in a column name')
-        return ("select", value.split(","))
+        return FilterAction(kind="select", columns=value.split(","))
     if "__" not in argument:
         raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
@@ -146,38 +154,47 @@ def add_filter(
         direction = value.upper()
         if direction not in ("ASC", "DESC"):
             raise ValueError(f"argument '{argument}={value}' could not be parsed")
-        return ("order", f"ORDER BY {ident} {direction}")
+        return FilterAction(kind="order", sql=f"ORDER BY {ident} {direction}")
     if normalized_comparator == "exact":
-        return ("where", (f"{ident} = ?", [coerce_value(value)]))
+        return FilterAction(kind="where", sql=f"{ident} = ?", params=[coerce_value(value)])
     if normalized_comparator == "differs":
-        return ("where", (f"{ident} IS DISTINCT FROM ?", [coerce_value(value)]))
+        return FilterAction(
+            kind="where", sql=f"{ident} IS DISTINCT FROM ?", params=[coerce_value(value)]
+        )
     if normalized_comparator == "isnull":
-        return ("where", (f"{ident} IS NULL", []))
+        return FilterAction(kind="where", sql=f"{ident} IS NULL")
     if normalized_comparator == "isnotnull":
-        return ("where", (f"{ident} IS NOT NULL", []))
+        return FilterAction(kind="where", sql=f"{ident} IS NOT NULL")
     if normalized_comparator == "contains":
-        return ("where", (f"{ident} ILIKE '%' || ? || '%'", [value]))
+        return FilterAction(kind="where", sql=f"{ident} ILIKE '%' || ? || '%'", params=[value])
     if normalized_comparator == "notcontains":
-        return ("where", (f"NOT ({ident} ILIKE '%' || ? || '%')", [value]))
+        return FilterAction(
+            kind="where", sql=f"NOT ({ident} ILIKE '%' || ? || '%')", params=[value]
+        )
     if normalized_comparator == "in":
         values = value.split(",")
         placeholders = ", ".join("?" for _ in values)
-        return ("where", (f"{ident} IN ({placeholders})", [coerce_value(v) for v in values]))
+        return FilterAction(
+            kind="where",
+            sql=f"{ident} IN ({placeholders})",
+            params=[coerce_value(v) for v in values],
+        )
     if normalized_comparator == "notin":
         values = value.split(",")
         placeholders = ", ".join("?" for _ in values)
-        return (
-            "where",
-            (f"{ident} NOT IN ({placeholders})", [coerce_value(v) for v in values]),
+        return FilterAction(
+            kind="where",
+            sql=f"{ident} NOT IN ({placeholders})",
+            params=[coerce_value(v) for v in values],
         )
     if normalized_comparator == "less":
-        return ("where", (f"{ident} <= ?", [coerce_value(value)]))
+        return FilterAction(kind="where", sql=f"{ident} <= ?", params=[coerce_value(value)])
     if normalized_comparator == "greater":
-        return ("where", (f"{ident} >= ?", [coerce_value(value)]))
+        return FilterAction(kind="where", sql=f"{ident} >= ?", params=[coerce_value(value)])
     if normalized_comparator == "strictly_less":
-        return ("where", (f"{ident} < ?", [coerce_value(value)]))
+        return FilterAction(kind="where", sql=f"{ident} < ?", params=[coerce_value(value)])
     if normalized_comparator == "strictly_greater":
-        return ("where", (f"{ident} > ?", [coerce_value(value)]))
+        return FilterAction(kind="where", sql=f"{ident} > ?", params=[coerce_value(value)])
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
@@ -259,18 +276,17 @@ def parse_operator(query: str, operator: str, top_level: bool = False) -> tuple[
             params_sql.append(clause)
             params_values.extend(values)
         elif param.endswith(("__isnull", "__isnotnull")):
-            result = add_filter(param.replace('"', ""), "", in_operator=True)
-            assert result is not None and result[0] == "where"
-            params_sql.append(result[1][0])
-            params_values.extend(result[1][1])
+            action = add_filter(param.replace('"', ""), "", in_operator=True)
+            assert action is not None and action.kind == "where"
+            params_sql.append(action.sql)
+            params_values.extend(action.params)
         else:
             argument, value = find_arg_val(param)
-            # Strip surrounding quotes from values like "12.4"
             if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
                 value = value[1:-1]
-            result = add_filter(argument, value, in_operator=True)
-            assert result is not None and result[0] == "where"
-            params_sql.append(result[1][0])
-            params_values.extend(result[1][1])
+            action = add_filter(argument, value, in_operator=True)
+            assert action is not None and action.kind == "where"
+            params_sql.append(action.sql)
+            params_values.extend(action.params)
     joiner = f" {operator.upper()} "
     return f"({joiner.join(params_sql)})", params_values
