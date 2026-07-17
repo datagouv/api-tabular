@@ -2,8 +2,6 @@ from typing import cast
 
 import yaml
 
-from api_tabular.core.utils import is_aggregation_allowed
-
 TYPE_POSSIBILITIES = {
     "string": [
         "isnull",
@@ -200,10 +198,6 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
     # see cast for db here: https://github.com/datagouv/csv-detective/blob/master/csv_detective/output/dataframe.py
     for key, value in resource_columns.items():
         for op in OPERATORS_DESCRIPTIONS:
-            if not is_aggregation_allowed(resource_id) and OPERATORS_DESCRIPTIONS[op].get(
-                "is_aggregator"
-            ):
-                continue
             if op in TYPE_POSSIBILITIES[value["python_type"]]:
                 op_name = cast(str, OPERATORS_DESCRIPTIONS[op]["name"])
                 op_description = cast(str, OPERATORS_DESCRIPTIONS[op]["description"])

@@ -59,6 +59,11 @@ services:
       - "8005:8005"
     environment:
       - PGREST_ENDPOINT=http://postgrest-test:8080
+      - PARQUET_BASE_URL=/home/datagouv/db/parquet
+      - S3_ENDPOINT=${S3_ENDPOINT:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+    volumes:
+      - ./db/parquet:/home/datagouv/db/parquet:ro
     depends_on:
       - postgrest-test
     profiles:

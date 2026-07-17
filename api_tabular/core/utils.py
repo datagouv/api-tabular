@@ -5,10 +5,6 @@ from api_tabular import config
 from api_tabular.core.error import QueryException
 
 
-def is_aggregation_allowed(resource_id: str) -> bool:
-    return config.ALLOW_AGGREGATION or resource_id in config.ALLOW_AGGREGATION_EXCEPTIONS
-
-
 def process_total(res: Response | ClientResponse) -> int:
     # the Content-Range looks like this: '0-49/21777'
     # see https://docs.postgrest.org/en/stable/references/api/pagination_count.html

@@ -77,20 +77,12 @@ async def test_api_resource_meta_not_found(client):
         RESOURCE_ID,
     ],
 )
-async def test_api_resource_profile(client, tables_index_rows, exceptions_rows, _resource_id):
-    indexes = (
-        list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-        if _resource_id in exceptions_rows
-        else None
-    )
+async def test_api_resource_profile(client, tables_index_rows, _resource_id):
     res = await client.get(f"/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     body = await res.json()
     assert body["profile"] == json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    if indexes is None:
-        assert body["indexes"] is None
-    else:
-        assert sorted(body["indexes"]) == sorted(indexes)
+    assert "indexes" not in body
 
 
 async def test_api_resource_profile_not_found(client):
@@ -285,75 +277,19 @@ async def test_api_with_unsupported_args(client):
 
 
 @pytest.mark.parametrize(
-    "params",
+    "_resource_id",
     [
-        (INDEXED_RESOURCE_ID, True),
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
+        INDEXED_RESOURCE_ID,
+        AGG_ALLOWED_INDEXED_RESOURCE_ID,
+        RESOURCE_ID,
+        AGG_ALLOWED_RESOURCE_ID,
     ],
 )
-async def test_api_exception_resource_indexes(client, tables_index_rows, exceptions_rows, params):
-    _resource_id, forbidden = params
+async def test_api_resource_aggregations_allowed(client, tables_index_rows, _resource_id):
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    # sorted because it's made from a set so the order might not be preserved
-    assert sorted(indexes) == list(sorted(content["indexes"]))
-
-    # checking that the resource is readable with no filter
     res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
     assert res.status == 200
 
-    # checking that the resource can be filtered on any columns
-    for col in detection["columns"].keys():
-        if detection["columns"][col]["python_type"] == "json":
-            # can't handle json type for now
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
-        )
-        assert res.status == 200
-
-    # checking that the resource cannot be aggregated on a non-indexed column
-    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
-    for col in non_indexed_cols:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403
-
-    # checking whether aggregation is allowed on indexed columns
-    for idx in indexes:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403 if forbidden else 200
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        (RESOURCE_ID, True),
-        (AGG_ALLOWED_RESOURCE_ID, False),
-    ],
-)
-async def test_api_exception_resource_no_indexes(client, tables_index_rows, params):
-    _resource_id, forbidden = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    # checking that we have an `indexes` key in the profile endpoint
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    assert content["indexes"] is None
-
-    # checking that the resource is readable with no filter
-    res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
-    assert res.status == 200
-
-    # checking that the resource can be filtered on all columns
     for col, results in detection["columns"].items():
         if results["python_type"] == "json":
             continue
@@ -361,16 +297,10 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
             f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
         )
         assert res.status == 200
-
-    # if aggregation is allowed:
-    # checking whether aggregation is allowed on all columns or none
-    for col, results in detection["columns"].items():
-        if results["python_type"] == "json":
-            continue
         res = await client.get(
             f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
-        assert res.status == 403 if forbidden else 200
+        assert res.status == 200
 
 
 @pytest.mark.parametrize(
@@ -380,23 +310,28 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
         (200, 200, ["status", "version", "uptime_since"]),
     ],
 )
-async def test_health(client, rmock, params):
+async def test_health(client, mocker, params):
     postgrest_resp_code, api_expected_resp_code, expected_keys = params
-    rmock.head(
-        f"{config.PGREST_ENDPOINT}/migrations_csv",
-        status=postgrest_resp_code,
+
+    class FakeResponse:
+        def __init__(self, ok: bool):
+            self.ok = ok
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    mocker.patch.object(
+        client.app["csession"],
+        "head",
+        return_value=FakeResponse(ok=postgrest_resp_code == 200),
     )
     res = await client.get("/health/")
     assert res.status == api_expected_resp_code
     res_json = await res.json()
     assert all(key in res_json for key in expected_keys)
-
-
-async def test_aggregation_exceptions(client):
-    res = await client.get("/api/aggregation-exceptions/")
-    aggregations = await res.json()
-    assert not aggregations["allowed"]
-    assert aggregations["exceptions"] == config.ALLOW_AGGREGATION_EXCEPTIONS
 
 
 @pytest.mark.parametrize(

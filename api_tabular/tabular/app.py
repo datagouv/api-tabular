@@ -15,7 +15,6 @@ from api_tabular.core.url import build_link_with_page, url_for
 from api_tabular.core.utils import build_offset
 from api_tabular.core.version import get_app_version
 from api_tabular.tabular.utils import (
-    get_potential_indexes,
     get_resource,
     get_resource_data,
     stream_resource_data,
@@ -62,8 +61,6 @@ async def resource_profile(request):
     resource: dict = await get_resource(
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
-    resource["indexes"] = list(indexes) if isinstance(indexes, set) else None
     return web.json_response(resource)
 
 
@@ -73,10 +70,7 @@ async def resource_swagger(request):
     resource: dict = await get_resource(
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
     columns: dict[str, str] = resource["profile"]["columns"]
-    if indexes:
-        columns = {col: params for col, params in columns.items() if col in indexes}
     swagger_string = build_swagger_file(columns, resource_id)
     return web.Response(body=swagger_string)
 
@@ -102,9 +96,9 @@ async def resource_data(request):
 
     offset = build_offset(page, page_size)
 
-    sql_query = await try_build_query(request, query_string, resource_id, page_size, offset)
-    resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
-    response, total = await get_resource_data(request.app["csession"], resource, sql_query)
+    query = await try_build_query(request, query_string, resource_id, page_size, offset)
+    await get_resource(request.app["csession"], resource_id, [])
+    response, total = await get_resource_data(resource_id, query)
 
     next = build_link_with_page(request, query_string, page + 1, page_size)
     prev = build_link_with_page(request, query_string, page - 1, page_size)
@@ -144,16 +138,6 @@ async def get_health(request):
     """Return health check status"""
     # pinging a specific table that we know always exists
     return await check_health(request, f"{config.PGREST_ENDPOINT}/migrations_csv")
-
-
-@routes.get(r"/api/aggregation-exceptions/")
-async def get_aggregation_exceptions(request):
-    """Return the list of resources for which aggregation queries are allowed"""
-    body = {
-        "allowed": config.ALLOW_AGGREGATION,
-        "exceptions": config.ALLOW_AGGREGATION_EXCEPTIONS,
-    }
-    return web.json_response(body)
 
 
 async def app_factory():

@@ -1,4 +1,9 @@
 PGREST_ENDPOINT = "http://localhost:8080"
+# Set via environment (no defaults in repo). Used when PARQUET_BASE_URL is empty.
+S3_ENDPOINT = ""
+S3_BUCKET = ""
+# Optional override for tests / local paths. When empty, URLs are built from S3_*.
+PARQUET_BASE_URL = ""
 SERVER_NAME = "localhost:8005"
 SCHEME = "http"
 SENTRY_DSN = ""
@@ -7,8 +12,3 @@ PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 50
 BATCH_SIZE = 50000
 DOC_PATH = "/api/doc"
-ALLOW_AGGREGATION = false
-ALLOW_AGGREGATION_EXCEPTIONS = [
-    "dddddddd-7777-eeee-8888-ffffffffffff",  # without indexes
-    "aaaaaaaa-9999-bbbb-1010-cccccccccccc",  # with indexes
-]  # list of resource_ids
