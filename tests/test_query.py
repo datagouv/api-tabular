@@ -20,13 +20,13 @@ def test_query_build_offset():
 def test_query_build_sort_asc():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str, page_size=50)
-    assert result == 'order="column_name".asc&limit=50'
+    assert result == 'limit=50&order="column_name".asc,__id.asc'
 
 
 def test_query_build_sort_asc_without_limit():
     query_str = ["column_name__sort=asc"]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc'
+    assert result == 'order="column_name".asc,__id.asc'
 
 
 def test_query_build_sort_asc_with_page_in_query():
@@ -36,13 +36,34 @@ def test_query_build_sort_asc_with_page_in_query():
         "page_size=20",
     ]
     result = build_sql_query_string(query_str)
-    assert result == 'order="column_name".asc'
+    assert result == 'order="column_name".asc,__id.asc'
 
 
 def test_query_build_sort_desc():
     query_str = ["column_name__sort=desc"]
     result = build_sql_query_string(query_str, page_size=50)
-    assert result == 'order="column_name".desc&limit=50'
+    assert result == 'limit=50&order="column_name".desc,__id.asc'
+
+
+def test_query_build_sort_is_deterministic_when_paginating():
+    # a sort on a column with duplicate values must keep a unique tie-breaker,
+    # otherwise paginating with an offset duplicates and skips rows
+    query_str = ["column_name__sort=desc"]
+    result = build_sql_query_string(query_str, page_size=50, offset=100)
+    assert result == 'limit=50&offset=100&order="column_name".desc,__id.asc'
+
+
+def test_query_build_sort_with_aggregator_keeps_the_requested_order():
+    # __id cannot break ties here (it is not in the GROUP BY), but the requested sort must stay
+    query_str = ["column_name__groupby", "column_name__sort=asc"]
+    results = build_sql_query_string(query_str, page_size=50).split("&")
+    assert 'order="column_name".asc' in results
+
+
+def test_query_build_multiple_sorts():
+    query_str = ["column_name__sort=desc", "other_column__sort=asc"]
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == 'limit=50&order="column_name".desc,"other_column".asc,__id.asc'
 
 
 def test_query_build_exact():

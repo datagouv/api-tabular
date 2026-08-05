@@ -11,15 +11,16 @@ def build_sql_query_string(
     offset: int = 0,
 ) -> str:
     sql_query = []
+    order_by = []
     aggregators = defaultdict(list)
-    sorted = False
     for arg in request_arg:
         _split = arg.split("=")
         # filters are expected to have the syntax `<column_name>__<operator>=<value>`
         if len(_split) == 2:
-            _filter, _sorted = add_filter(*_split)
-            if _filter:
-                sorted = sorted or _sorted
+            _filter, _is_sort = add_filter(*_split)
+            if _is_sort:
+                order_by.append(_filter)
+            elif _filter:
                 sql_query.append(_filter)
         # aggregators are expected to have the syntax `<column_name>__<operator>`
         # is(not)null also has this syntax but is a filter
@@ -55,8 +56,14 @@ def build_sql_query_string(
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")
-    if not sorted and not aggregators:
-        sql_query.append("order=__id.asc")
+    if not aggregators:
+        # __id is unique, it breaks the ties of the requested sort: without it, rows sharing
+        # the same value are returned in an arbitrary order that varies from one query to the
+        # next, so offset-based pagination duplicates some rows and skips others.
+        # It can't be added alongside aggregators though, as it's not in the GROUP BY.
+        order_by.append("__id.asc")
+    if order_by:
+        sql_query.append(f"order={','.join(order_by)}")
     q = "&".join(sql_query)
     if q.count("select=") > 1:
         raise ValueError("the argument `columns` cannot be set alongside aggregators")
@@ -80,7 +87,7 @@ def add_filter(argument: str, value: str | None) -> tuple[str | None, bool]:
     if "__" in argument:
         column, normalized_comparator = get_column_and_operator(argument)
         if normalized_comparator == "sort":
-            return f"order={column}.{value}", True
+            return f"{column}.{value}", True
         elif normalized_comparator == "exact":
             return f"{column}=eq.{value}", False
         elif normalized_comparator == "differs":
