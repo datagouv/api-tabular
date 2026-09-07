@@ -8,15 +8,6 @@ parameters:
   publish-branch:
     type: string
     default: "main"
-  docker-registry-host:
-    type: string
-    default: "registry.gitlab.com"
-  docker-repo-tabular:
-    type: string
-    default: "registry.gitlab.com/etalab/data.gouv.fr/infra/tabular-api"
-  docker-repo-metrics:
-    type: string
-    default: "registry.gitlab.com/etalab/data.gouv.fr/infra/metrics-api"
 
 jobs:
   lint:
@@ -88,6 +79,7 @@ jobs:
           name: Compute RELEASE_VERSION via setuptools_scm, and build wheel
           command: |
             export PATH="$HOME/.local/bin:$PATH"
+            git fetch --tags --force origin
             uv pip install --system setuptools-scm
             # derive from setuptools_scm or base version + build number
             RELEASE_VERSION=$(python -m setuptools_scm)
@@ -107,49 +99,48 @@ jobs:
       - run:
           name: Log in to Docker registry
           command: |
-            echo "${DOCKER_REGISTRY_PASSWORD}" | docker login -u "oauth2" --password-stdin << pipeline.parameters.docker-registry-host >>
+            : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
+            : "${CONTAINER_REGISTRY_USERNAME:?missing CONTAINER_REGISTRY_USERNAME}"
+            : "${CONTAINER_REGISTRY_PASSWORD:?missing CONTAINER_REGISTRY_PASSWORD}"
+            echo "${CONTAINER_REGISTRY_PASSWORD}" | docker login \
+              -u "${CONTAINER_REGISTRY_USERNAME}" \
+              --password-stdin "${CONTAINER_REGISTRY_SERVER}"
       - run:
           name: Build and push Docker images (Tabular API and Metrics API)
           command: |
             source "$BASH_ENV"
-            export PATH="$HOME/.local/bin:$PATH"
-            # Five distinct tags per image (SCM version, SHA short/long, branch, optional git tag).
-            # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
+            : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
+            : "${CONTAINER_REGISTRY_NAMESPACE:?missing CONTAINER_REGISTRY_NAMESPACE}"
+            IMAGE_PREFIX="${CONTAINER_REGISTRY_SERVER}/${CONTAINER_REGISTRY_NAMESPACE}"
+            REPO_TABULAR="${IMAGE_PREFIX}/tabular-api"
+            REPO_METRICS="${IMAGE_PREFIX}/metric-api"
+            # Five tags: SCM version, SHA short/long, branch, git tag (always v-prefixed, e.g. v0.4.1).
+            # Nomad pulls the git tag. Docker tags allow only [a-zA-Z0-9_.-].
             DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
             DOCKER_TAG_SHA_SHORT="${CIRCLE_SHA1:0:7}"
             DOCKER_TAG_SHA_LONG="$CIRCLE_SHA1"
             DOCKER_TAG_BRANCH=$(printf '%s' "$CIRCLE_BRANCH" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/-/g')
-            DOCKER_TAG_GIT="${CIRCLE_TAG:-}"
-            # Tabular API: tabular endpoints only
-            docker build --build-arg APP_MODULE=api_tabular.tabular.app:app_factory \
-              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SCM}" \
-              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_SHORT}" \
-              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_LONG}" \
-              -t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_BRANCH}" \
-              ${DOCKER_TAG_GIT:+-t "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"} \
-              .
-            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SCM}"
-            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_SHORT}"
-            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_SHA_LONG}"
-            docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_BRANCH}"
-            if [ -n "$DOCKER_TAG_GIT" ]; then
-              docker push "<< pipeline.parameters.docker-repo-tabular >>:${DOCKER_TAG_GIT}"
-            fi
-            # Metrics API: metrics endpoints only
-            docker build --build-arg APP_MODULE=api_tabular.metrics.app:app_factory \
-              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SCM}" \
-              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_SHORT}" \
-              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_LONG}" \
-              -t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_BRANCH}" \
-              ${DOCKER_TAG_GIT:+-t "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"} \
-              .
-            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SCM}"
-            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_SHORT}"
-            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_SHA_LONG}"
-            docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_BRANCH}"
-            if [ -n "$DOCKER_TAG_GIT" ]; then
-              docker push "<< pipeline.parameters.docker-repo-metrics >>:${DOCKER_TAG_GIT}"
-            fi
+            DOCKER_TAG_GIT="${CIRCLE_TAG:-$(git describe --tags --exact-match 2>/dev/null || true)}"
+            build_and_push() {
+              local app_module="$1"
+              local repo="$2"
+              docker build --build-arg APP_MODULE="$app_module" \
+                -t "${repo}:${DOCKER_TAG_SCM}" \
+                -t "${repo}:${DOCKER_TAG_SHA_SHORT}" \
+                -t "${repo}:${DOCKER_TAG_SHA_LONG}" \
+                -t "${repo}:${DOCKER_TAG_BRANCH}" \
+                ${DOCKER_TAG_GIT:+-t "${repo}:${DOCKER_TAG_GIT}"} \
+                .
+              docker push "${repo}:${DOCKER_TAG_SCM}"
+              docker push "${repo}:${DOCKER_TAG_SHA_SHORT}"
+              docker push "${repo}:${DOCKER_TAG_SHA_LONG}"
+              docker push "${repo}:${DOCKER_TAG_BRANCH}"
+              if [ -n "$DOCKER_TAG_GIT" ]; then
+                docker push "${repo}:${DOCKER_TAG_GIT}"
+              fi
+            }
+            build_and_push api_tabular.tabular.app:app_factory "$REPO_TABULAR"
+            build_and_push api_tabular.metrics.app:app_factory "$REPO_METRICS"
 
   publish-pypi:
     docker:
