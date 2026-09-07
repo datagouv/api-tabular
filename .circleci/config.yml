@@ -126,7 +126,8 @@ jobs:
             DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
             DOCKER_TAG_SHA_SHORT="${CIRCLE_SHA1:0:7}"
             DOCKER_TAG_SHA_LONG="$CIRCLE_SHA1"
-            DOCKER_TAG_BRANCH=$(printf '%s' "$CIRCLE_BRANCH" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/-/g')
+            # CIRCLE_BRANCH is often empty on tag pipelines; skip an invalid empty Docker tag.
+            DOCKER_TAG_BRANCH=$(printf '%s' "${CIRCLE_BRANCH:-}" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/-/g')
             DOCKER_TAG_GIT="${CIRCLE_TAG:-$(git describe --tags --exact-match 2>/dev/null || true)}"
             build_and_push() {
               local app_module="$1"
@@ -135,13 +136,15 @@ jobs:
                 -t "${repo}:${DOCKER_TAG_SCM}" \
                 -t "${repo}:${DOCKER_TAG_SHA_SHORT}" \
                 -t "${repo}:${DOCKER_TAG_SHA_LONG}" \
-                -t "${repo}:${DOCKER_TAG_BRANCH}" \
+                ${DOCKER_TAG_BRANCH:+-t "${repo}:${DOCKER_TAG_BRANCH}"} \
                 ${DOCKER_TAG_GIT:+-t "${repo}:${DOCKER_TAG_GIT}"} \
                 .
               docker push "${repo}:${DOCKER_TAG_SCM}"
               docker push "${repo}:${DOCKER_TAG_SHA_SHORT}"
               docker push "${repo}:${DOCKER_TAG_SHA_LONG}"
-              docker push "${repo}:${DOCKER_TAG_BRANCH}"
+              if [ -n "$DOCKER_TAG_BRANCH" ]; then
+                docker push "${repo}:${DOCKER_TAG_BRANCH}"
+              fi
               if [ -n "$DOCKER_TAG_GIT" ]; then
                 docker push "${repo}:${DOCKER_TAG_GIT}"
               fi
@@ -163,15 +166,22 @@ jobs:
 workflows:
   build-test-deploy:
     jobs:
-      - lint
-      - tests
+      # Tag filters must be on every job in the chain, or tag pipelines skip dependents.
+      - lint:
+          filters:
+            tags:
+              only: /^v.+/
+      - tests:
+          filters:
+            tags:
+              only: /^v.+/
       - build:
           requires:
             - lint
             - tests
           filters:
-            branches:
-              only: << pipeline.parameters.publish-branch >>
+            tags:
+              only: /^v.+/
           context: org-global
       - publish-pypi:
           requires:
