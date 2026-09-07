@@ -8,6 +8,15 @@ parameters:
   publish-branch:
     type: string
     default: "main"
+  container-registry-namespace:
+    type: string
+    default: "datagouv_api-tabular"
+  docker-image-tabular:
+    type: string
+    default: "tabular-api"
+  docker-image-metrics:
+    type: string
+    default: "metric-api"
 
 jobs:
   lint:
@@ -110,12 +119,11 @@ jobs:
           command: |
             source "$BASH_ENV"
             : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
-            : "${CONTAINER_REGISTRY_NAMESPACE:?missing CONTAINER_REGISTRY_NAMESPACE}"
-            IMAGE_PREFIX="${CONTAINER_REGISTRY_SERVER}/${CONTAINER_REGISTRY_NAMESPACE}"
-            REPO_TABULAR="${IMAGE_PREFIX}/tabular-api"
-            REPO_METRICS="${IMAGE_PREFIX}/metric-api"
-            # Five tags: SCM version, SHA short/long, branch, git tag (always v-prefixed, e.g. v0.4.1).
-            # Nomad pulls the git tag. Docker tags allow only [a-zA-Z0-9_.-].
+            IMAGE_PREFIX="${CONTAINER_REGISTRY_SERVER}/<< pipeline.parameters.container-registry-namespace >>"
+            REPO_TABULAR="${IMAGE_PREFIX}/<< pipeline.parameters.docker-image-tabular >>"
+            REPO_METRICS="${IMAGE_PREFIX}/<< pipeline.parameters.docker-image-metrics >>"
+            # Five distinct tags per image (SCM version, SHA short/long, branch, optional git tag (always v-prefixed, e.g. v0.4.1)).
+            # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
             DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
             DOCKER_TAG_SHA_SHORT="${CIRCLE_SHA1:0:7}"
             DOCKER_TAG_SHA_LONG="$CIRCLE_SHA1"
