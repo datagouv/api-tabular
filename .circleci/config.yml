@@ -89,9 +89,8 @@ jobs:
           command: |
             export PATH="$HOME/.local/bin:$PATH"
             git fetch --tags --force origin
-            uv pip install --system setuptools-scm
             # derive from setuptools_scm or base version + build number
-            RELEASE_VERSION=$(python -m setuptools_scm)
+            RELEASE_VERSION=$(uvx --from setuptools-scm python -m setuptools_scm)
             echo "Building a wheel release with version $RELEASE_VERSION"
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
