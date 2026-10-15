@@ -1,6 +1,5 @@
 import csv
 import json
-from contextlib import asynccontextmanager
 from io import StringIO
 
 import pytest
@@ -15,6 +14,7 @@ from .conftest import (
     NULL_VALUES_RESOURCE_ID,
     RESOURCE_ID,
     UNKNOWN_RESOURCE_ID,
+    patch_csession,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -383,12 +383,7 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
 )
 async def test_health(client, mocker, params):
     postgrest_resp_code, api_expected_resp_code, expected_keys = params
-
-    @asynccontextmanager
-    async def head(_url):
-        yield mocker.Mock(ok=postgrest_resp_code < 400)
-
-    mocked_head = mocker.patch.object(client.app["csession"], "head", side_effect=head)
+    mocked_head = patch_csession(mocker, client, postgrest_resp_code)
     res = await client.get("/health/")
     assert res.status == api_expected_resp_code
     res_json = await res.json()
