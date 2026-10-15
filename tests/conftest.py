@@ -6,7 +6,6 @@ from typing import Any, AsyncGenerator, Generator
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
-from aioresponses import aioresponses
 
 from api_tabular import config
 from api_tabular.tabular.app import app_factory
@@ -18,13 +17,6 @@ AGG_ALLOWED_RESOURCE_ID = "dddddddd-7777-eeee-8888-ffffffffffff"
 AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
 DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
 NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
-
-
-@pytest.fixture
-def rmock():
-    # passthrough for local requests (aiohttp TestServer)
-    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
-        yield m
 
 
 @pytest_asyncio.fixture
