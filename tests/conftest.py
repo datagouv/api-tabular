@@ -1,4 +1,5 @@
 import csv
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Generator
@@ -6,7 +7,6 @@ from typing import Any, AsyncGenerator, Generator
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer
-from aioresponses import aioresponses
 
 from api_tabular import config
 from api_tabular.tabular.app import app_factory
@@ -20,18 +20,25 @@ DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
 NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
 
 
-@pytest.fixture
-def rmock():
-    # passthrough for local requests (aiohttp TestServer)
-    with aioresponses(passthrough=["http://127.0.0.1"]) as m:
-        yield m
-
-
 @pytest_asyncio.fixture
 async def client() -> AsyncGenerator[TestClient, Any]:
     app = await app_factory()
     async with TestClient(TestServer(app)) as client:
         yield client
+
+
+def patch_csession(mocker, client: TestClient, status: int, method: str = "head"):
+    """Mock ClientSession HTTP calls without hitting PostgREST."""
+
+    @asynccontextmanager
+    async def fake_request(_url, **_kwargs):
+        yield mocker.Mock(ok=status < 400)
+
+    return mocker.patch.object(
+        client.app["csession"],
+        method.lower(),
+        side_effect=fake_request,
+    )
 
 
 @pytest.fixture

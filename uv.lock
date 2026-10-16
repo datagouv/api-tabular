@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11, <3.15"
 
 [[package]]
@@ -157,19 +157,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f6/ca/ce6f8fa22a916163e4ab3361936f0f5ff7d0f5daa7521531a089741fa7a5/aiohttp-swagger-1.0.16.tar.gz", hash = "sha256:48e5d9e9a9ece13afd67ab37209c01fbd2b691694559b08141e4a89f8a28b126", size = 3267138, upload-time = "2021-10-22T10:42:02.581Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/a8/62fb465db2e5065d232b446eec7fe6fd4d7a6535c03596c2af4f39ea2d44/aiohttp_swagger-1.0.16-py3-none-any.whl", hash = "sha256:96ada287da3fb4ed47c0a9853d565ba500a17e4230bcaafda0e8bb66974787e9", size = 3306145, upload-time = "2021-10-22T10:42:00.585Z" },
-]
-
-[[package]]
-name = "aioresponses"
-version = "0.7.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/de/03/532bbc645bdebcf3b6af3b25d46655259d66ce69abba7720b71ebfabbade/aioresponses-0.7.8.tar.gz", hash = "sha256:b861cdfe5dc58f3b8afac7b0a6973d5d7b2cb608dd0f6253d16b8ee8eaf6df11", size = 40253, upload-time = "2025-01-19T18:14:03.222Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/b7/584157e43c98aa89810bc2f7099e7e01c728ecf905a66cf705106009228f/aioresponses-0.7.8-py2.py3-none-any.whl", hash = "sha256:b73bd4400d978855e55004b23a3a84cb0f018183bcf066a85ad392800b5b9a94", size = 12518, upload-time = "2025-01-19T18:13:59.633Z" },
 ]
 
 [[package]]
@@ -924,7 +911,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "aiohttp-devtools" },
-    { name = "aioresponses" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -943,7 +929,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiohttp-devtools", specifier = ">=1.0.post0,<2.0.0" },
-    { name = "aioresponses", specifier = ">=0.7.4,<1.0.0" },
     { name = "pytest", specifier = ">=7.2.1,<8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.20.3,<1.0.0" },
     { name = "pytest-mock", specifier = ">=3.10.0,<4.0.0" },

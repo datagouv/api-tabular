@@ -22,7 +22,6 @@ readme = "README.md"
 [dependency-groups]
 dev = [
     "aiohttp-devtools<2.0.0,>=1.0.post0",
-    "aioresponses<1.0.0,>=0.7.4",
     "pytest<8.0.0,>=7.2.1",
     "pytest-asyncio<1.0.0,>=0.20.3",
     "pytest-mock<4.0.0,>=3.10.0",
