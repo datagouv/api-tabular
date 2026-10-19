@@ -611,6 +611,15 @@ The script automatically:
 - Creates a git tag and pushes it to the remote repository
 - Creates a GitHub release with the changelog content
 
+### Publishing to PyPI
+
+`uv publish` uploads the built package. It authenticates with the `UV_PUBLISH_TOKEN` environment variable and sends that value as a PyPI API token, with the username `__token__`. See the [uv environment reference](https://docs.astral.sh/uv/reference/environment/#uv_publish_token).
+
+Set that variable in the environment that runs the publish step:
+
+1. Create an API token on [PyPI](https://pypi.org/manage/account/token/). Limit its scope to this project when you can. The value starts with `pypi-`.
+2. Store it as a secret named `UV_PUBLISH_TOKEN` and expose it to the publish step.
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
