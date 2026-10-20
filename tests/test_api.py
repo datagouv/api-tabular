@@ -170,6 +170,11 @@ def test_resource_data_filter(client):
     assert body["meta"]["total"] == len(expected)
 
 
+def test_resource_data_value_not_castable(client):
+    response = client.get(DATA_URL, params={"decompte__greater": "12.5"})
+    assert response.status_code == 400
+
+
 def test_resource_data_or_group(client):
     response = client.get(DATA_URL, params={"or": '("Nom de l\'élu"__isnull,decompte__exact.6)'})
     assert response.status_code == 200

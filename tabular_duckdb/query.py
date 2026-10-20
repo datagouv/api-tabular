@@ -34,6 +34,19 @@ RESERVED_ARGUMENTS = ("page", "page_size", "columns")
 TRUE_VALUES = ("true", "t", "1", "yes", "y")
 FALSE_VALUES = ("false", "f", "0", "no", "n")
 
+INTEGER_TYPES = (
+    "TINYINT",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "HUGEINT",
+    "UTINYINT",
+    "USMALLINT",
+    "UINTEGER",
+    "UBIGINT",
+    "UHUGEINT",
+)
+
 
 def quote_ident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
@@ -79,73 +92,44 @@ def resolve_column(name: str, columns: Mapping[str, str]) -> tuple[str, str]:
 def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
     """Convert a query string value to a bindable Python value.
 
-    Returns (value, compare_as_varchar). When the value cannot be converted to the column
-    type, the comparison falls back to a string comparison on the column, which keeps
-    queries such as `date_column__greater=1996` working like they did on PostgreSQL.
+    Returns (value, compare_as_varchar): nested values (lists, structs, JSON) and types without
+    a Python counterpart are compared through their text rendering. A value that does not fit
+    the column type is rejected, like PostgreSQL did, rather than compared as a string, which
+    would silently return wrong rows ('9' >= '12.5').
     """
     normalized = duckdb_type.upper()
     if normalized.endswith("[]") or normalized.startswith(("STRUCT", "MAP", "UNION", "JSON")):
         return value, True
-    if normalized in ("VARCHAR", "CHAR", "TEXT", "STRING"):
-        return value, False
-    if normalized == "UUID":
-        try:
+    try:
+        if normalized in ("VARCHAR", "CHAR", "TEXT", "STRING"):
+            return value, False
+        if normalized == "UUID":
             UUID(value)
-        except ValueError:
-            return value, True
-        return value, False
-    if normalized == "BOOLEAN":
-        lowered = value.strip().lower()
-        if lowered in TRUE_VALUES:
-            return True, False
-        if lowered in FALSE_VALUES:
-            return False, False
-        return value, True
-    if normalized.startswith("DECIMAL"):
-        try:
+            return value, False
+        if normalized == "BOOLEAN":
+            lowered = value.strip().lower()
+            if lowered in TRUE_VALUES:
+                return True, False
+            if lowered in FALSE_VALUES:
+                return False, False
+            raise ValueError(value)
+        if normalized.startswith("DECIMAL"):
             return Decimal(value), False
-        except (InvalidOperation, ValueError):
-            return value, True
-    if normalized in ("FLOAT", "REAL", "DOUBLE"):
-        try:
+        if normalized in ("FLOAT", "REAL", "DOUBLE"):
             return float(value), False
-        except ValueError:
-            return value, True
-    if normalized in (
-        "TINYINT",
-        "SMALLINT",
-        "INTEGER",
-        "BIGINT",
-        "HUGEINT",
-        "UTINYINT",
-        "USMALLINT",
-        "UINTEGER",
-        "UBIGINT",
-        "UHUGEINT",
-    ):
-        try:
+        if normalized in INTEGER_TYPES:
             return int(value), False
-        except ValueError:
-            return value, True
-    if normalized == "DATE":
-        try:
+        if normalized == "DATE":
             return date.fromisoformat(value), False
-        except ValueError:
-            return value, True
-    if normalized.startswith("TIMESTAMP"):
-        try:
-            return datetime.fromisoformat(value), False
-        except ValueError:
-            pass
-        try:
-            return date.fromisoformat(value), False
-        except ValueError:
-            return value, True
-    if normalized == "TIME":
-        try:
+        if normalized.startswith("TIMESTAMP"):
+            try:
+                return datetime.fromisoformat(value), False
+            except ValueError:
+                return date.fromisoformat(value), False
+        if normalized == "TIME":
             return time.fromisoformat(value), False
-        except ValueError:
-            return value, True
+    except (ValueError, InvalidOperation) as exc:
+        raise ValueError(f"invalid value '{value}' for a column of type {duckdb_type}") from exc
     return value, True
 
 

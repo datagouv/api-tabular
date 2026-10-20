@@ -113,6 +113,23 @@ def test_query_filters(source, argument, predicate):
     assert ids(source, [argument]) == expected_ids(predicate)
 
 
+@pytest.mark.parametrize(
+    "argument",
+    [
+        # a string comparison would silently return wrong rows ('9' >= '12.5')
+        "decompte__greater=12.5",
+        "decompte__exact=abc",
+        "score__less=1,5",
+        "birth__greater=1996",
+        "is_true__exact=maybe",
+        "decompte__in=1,abc",
+    ],
+)
+def test_query_value_not_castable_to_the_column_type(source, argument):
+    with pytest.raises(ValueError, match="invalid value"):
+        run(source, [argument])
+
+
 def test_query_multiple_filters_are_joined_with_and(source):
     assert ids(source, ["decompte__greater=3", "is_true__exact=false"]) == expected_ids(
         lambda r: r["decompte"] >= 3 and not r["is_true"]
