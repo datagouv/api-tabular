@@ -97,4 +97,6 @@ jobs:
           path: dist
       - uses: astral-sh/setup-uv@v10
       - name: Publish on PyPI
-        run: uv publish --username "${{ secrets.PYPI_USERNAME }}" --password "${{ secrets.PYPI_PASSWORD }}"
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
