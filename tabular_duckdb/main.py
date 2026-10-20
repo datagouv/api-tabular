@@ -276,8 +276,14 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
     result = await run_user_sql(resource, q)
     return JSONResponse(
         {
-            "data": rows_to_json(result["columns"], result["rows"]),
-            "meta": {"table": RESOURCE_TABLE, **result["meta"]},
+            "data": rows_to_json(result.columns, result.rows),
+            "meta": {
+                "table": RESOURCE_TABLE,
+                "rows": len(result.rows),
+                "truncated": result.truncated,
+                "row_limit": result.row_limit,
+                "execution_ms": result.execution_ms,
+            },
         }
     )
 

@@ -166,8 +166,26 @@ def validate_sql(conn: duckdb.DuckDBPyConnection, user_sql: str) -> str:
     return str(rebuilt[0])
 
 
-async def run_user_sql(resource: Resource, user_sql: str) -> dict:
-    """Validate then run the query, returning the response body of the /sql/ endpoint."""
+@dataclass(frozen=True)
+class SqlResult:
+    columns: list[str]
+    rows: list[tuple]
+    truncated: bool
+    row_limit: int
+    execution_ms: int
+
+
+def query_timeout() -> QueryException:
+    return QueryException(
+        400,
+        None,
+        "Query timeout",
+        f"The query was interrupted after {settings.SQL_TIMEOUT} seconds",
+    )
+
+
+async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
+    """Validate then run the query, within SQL_TIMEOUT once a connection is borrowed."""
     row_limit = max(1, settings.SQL_MAX_ROWS)
     view_sql = (
         f"CREATE OR REPLACE TEMP VIEW {RESOURCE_TABLE} AS SELECT * FROM {resource.source_sql}"
@@ -176,39 +194,37 @@ async def run_user_sql(resource: Resource, user_sql: str) -> dict:
     async with engine.sql_connection() as conn:
         statement = await asyncio.to_thread(validate_sql, conn, user_sql)
         wrapped_sql = f"SELECT * FROM ({statement}) LIMIT {row_limit + 1}"
-        try:
-            await asyncio.to_thread(conn.execute, view_sql)
-        except duckdb.Error as exc:
-            raise QueryException(
-                400, None, "Invalid resource file", f"Could not read the parquet file: {exc}"
-            ) from exc
         started = asyncio.get_running_loop().time()
+        # the view reads the remote parquet footer: it shares the timeout of the query
         try:
-            columns, rows = await asyncio.to_thread(
-                engine.run_with_timeout, conn, wrapped_sql, settings.SQL_TIMEOUT
-            )
+            await asyncio.to_thread(engine.run_with_timeout, conn, view_sql, settings.SQL_TIMEOUT)
         except duckdb.InterruptException as exc:
+            raise query_timeout() from exc
+        except duckdb.Error as exc:
             raise QueryException(
                 400,
                 None,
-                "Query timeout",
-                f"The query was interrupted after {settings.SQL_TIMEOUT} seconds",
+                "Invalid resource file",
+                f"Could not read the parquet file: {_safe_message(str(exc))}",
             ) from exc
+        remaining = settings.SQL_TIMEOUT - (asyncio.get_running_loop().time() - started)
+        try:
+            columns, rows = await asyncio.to_thread(
+                engine.run_with_timeout, conn, wrapped_sql, max(remaining, 0.001)
+            )
+        except duckdb.InterruptException as exc:
+            raise query_timeout() from exc
         except duckdb.Error as exc:
             raise invalid_query(_safe_message(str(exc))) from exc
         execution_ms = round((asyncio.get_running_loop().time() - started) * 1000)
 
-    truncated = len(rows) > row_limit
-    return {
-        "columns": columns,
-        "rows": rows[:row_limit],
-        "meta": {
-            "rows": min(len(rows), row_limit),
-            "truncated": truncated,
-            "row_limit": row_limit,
-            "execution_ms": execution_ms,
-        },
-    }
+    return SqlResult(
+        columns=columns,
+        rows=rows[:row_limit],
+        truncated=len(rows) > row_limit,
+        row_limit=row_limit,
+        execution_ms=execution_ms,
+    )
 
 
 def _safe_message(message: str) -> str:

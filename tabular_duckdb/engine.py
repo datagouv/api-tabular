@@ -170,7 +170,17 @@ class DuckDBEngine:
         """Borrow a locked-down connection from the pool for the /sql/ endpoint."""
         if self._sql_pool is None:
             raise QueryException(503, None, "DB unavailable", "DuckDB is not initialized yet")
-        conn = await self._sql_pool.get()
+        try:
+            # a few slow queries can hold every connection, the others must not queue forever
+            conn = await asyncio.wait_for(self._sql_pool.get(), settings.SQL_TIMEOUT)
+        except TimeoutError:
+            raise QueryException(
+                503,
+                None,
+                "SQL endpoint busy",
+                f"No SQL connection got available within {settings.SQL_TIMEOUT} seconds, "
+                "retry later",
+            ) from None
         try:
             yield conn
         finally:

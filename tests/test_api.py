@@ -444,6 +444,22 @@ def test_sql_rejects_dangerous_queries(client, parquet_dir, query):
     assert response.json()["errors"][0]["title"] == "Invalid SQL query"
 
 
+def test_sql_busy_pool(client, monkeypatch):
+    """When every connection is held by slow queries, the next ones must not wait forever."""
+    monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
+    pool = engine._sql_pool
+    held = [pool.get_nowait() for _ in range(pool.qsize())]
+    try:
+        response = client.get(
+            f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT 1 AS n FROM resource"}
+        )
+    finally:
+        for conn in held:
+            pool.put_nowait(conn)
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "SQL endpoint busy"
+
+
 def test_sql_still_works_after_a_rejected_query(client):
     client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "DELETE FROM resource"})
     response = client.get(
