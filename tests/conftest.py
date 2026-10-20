@@ -1,84 +1,91 @@
-import csv
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, AsyncGenerator, Generator
+import os
 
+import duckdb
 import pytest
-import pytest_asyncio
-from aiohttp.test_utils import TestClient, TestServer
 
-from api_tabular import config
-from api_tabular.tabular.app import app_factory
+# any parquet file of the bucket works, these two are only the ones the suite exercises
+RESOURCE_ID = os.environ.get("TABULAR_TEST_RESOURCE_ID", "3b6b2281-b9d9-4959-ae9d-c2c166dff118")
+BIG_RESOURCE_ID = os.environ.get(
+    "TABULAR_TEST_BIG_RESOURCE_ID", "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
+)
+UNKNOWN_RESOURCE_ID = "00000000-0000-0000-0000-000000000000"
+BASE_URL = os.environ.get("TABULAR_API_URL", "http://localhost:8005")
 
-RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
-UNKNOWN_RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccA"
-INDEXED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
-AGG_ALLOWED_RESOURCE_ID = "dddddddd-7777-eeee-8888-ffffffffffff"
-AGG_ALLOWED_INDEXED_RESOURCE_ID = "aaaaaaaa-9999-bbbb-1010-cccccccccccc"
-DELETED_RESOURCE_ID = "deadbeef-dead-beef-dead-beefdeadbeef"
-NULL_VALUES_RESOURCE_ID = "dddddddd-1111-eeee-1212-ffffffffffff"
+# a parquet schema close to the test resource of the PostgREST-based API
+COLUMNS = {
+    "__id": "BIGINT",
+    "id": "VARCHAR",
+    "score": "DOUBLE",
+    "decompte": "BIGINT",
+    "is_true": "BOOLEAN",
+    "birth": "DATE",
+    "liste": "VARCHAR",
+    "column_name": "VARCHAR",
+    "first_col": "VARCHAR",
+    "second_col": "BIGINT",
+    "col1": "VARCHAR",
+    "col2": "VARCHAR",
+    "second.col": "DOUBLE",
+    "third col": "BIGINT",
+    "fourth..col": "VARCHAR",
+}
 
-
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[TestClient, Any]:
-    app = await app_factory()
-    async with TestClient(TestServer(app)) as client:
-        yield client
-
-
-def patch_csession(mocker, client: TestClient, status: int, method: str = "head"):
-    """Mock ClientSession HTTP calls without hitting PostgREST."""
-
-    @asynccontextmanager
-    async def fake_request(_url, **_kwargs):
-        yield mocker.Mock(ok=status < 400)
-
-    return mocker.patch.object(
-        client.app["csession"],
-        method.lower(),
-        side_effect=fake_request,
-    )
+SOURCE = "source"
 
 
 @pytest.fixture
-def base_url() -> Generator[str, Any, Any]:
-    yield f"{config.SCHEME}://{config.SERVER_NAME}"
+def columns() -> dict[str, str]:
+    return dict(COLUMNS)
 
 
-def timestamptz_to_utc_iso(date_str: str) -> str:
-    """To convert the dates in TIMESTAMPTZ format (inserted into postgres) to isoformat"""
-    return (
-        datetime.fromisoformat((date_str + ":00").replace(" ", "T"))
-        .astimezone(timezone.utc)
-        .isoformat()
-    )
+@pytest.fixture(scope="session")
+def duckdb_connection():
+    connection = duckdb.connect(":memory:")
+    yield connection
+    connection.close()
 
 
-def csv_to_dict(file_name: str) -> dict:
-    base_directory = Path(__file__).parent.parent
-    rows = {}
-    with open(base_directory / f"db/{file_name}.csv", mode="r") as file:
-        reader = csv.reader(file)
-        columns = next(reader)
-        for row in reader:
-            row_dict = {
-                col: value
-                if col not in ["created_at", "deleted_at"]
-                else timestamptz_to_utc_iso(value)
-                if value
-                else None
-                for col, value in zip(columns, row)
-            }
-            rows[row_dict["resource_id"]] = row_dict
-    return rows
+@pytest.fixture(scope="session")
+def api():
+    httpx = pytest.importorskip("httpx")
+    client = httpx.Client(base_url=BASE_URL, timeout=120)
+    try:
+        client.get("/health/")
+    except httpx.HTTPError:
+        pytest.skip(f"no API running on {BASE_URL}, start it with `docker compose up -d`")
+    yield client
+    client.close()
 
 
-@pytest.fixture
-def tables_index_rows() -> Generator[dict, Any, Any]:
-    yield csv_to_dict("tables_index")
+@pytest.fixture(scope="session")
+def profile(api) -> dict:
+    """The resource profile, used to drive the tests whatever the parquet file is."""
+    response = api.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.status_code == 200, response.text
+    return response.json()["profile"]
 
 
-@pytest.fixture
-def exceptions_rows() -> Generator[dict, Any, Any]:
-    yield csv_to_dict("exceptions")
+@pytest.fixture(scope="session")
+def string_column(profile) -> str:
+    """A string column with a limited number of values, good for filtering assertions."""
+    candidates = [
+        name
+        for name, description in profile["columns"].items()
+        if description["python_type"] == "string"
+        and 1 < (profile["profile"].get(name, {}).get("nb_distinct") or 0) < 100
+    ]
+    if not candidates:
+        pytest.skip("no suitable string column in this resource")
+    return candidates[0]
+
+
+@pytest.fixture(scope="session")
+def sortable_column(profile) -> str:
+    candidates = [
+        name
+        for name, description in profile["columns"].items()
+        if description["python_type"] in ("date", "datetime", "int", "float")
+    ]
+    if not candidates:
+        pytest.skip("no sortable column in this resource")
+    return candidates[0]

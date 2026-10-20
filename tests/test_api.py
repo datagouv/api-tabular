@@ -1,480 +1,281 @@
+"""Integration tests, run against a running API (see README).
+
+They are written against whatever parquet file `RESOURCE_ID` points to: expectations are derived
+from the resource profile rather than hardcoded, so the suite works for any resource of the bucket.
+"""
+
 import csv
-import json
-from io import StringIO
+import io
 
 import pytest
 
-from api_tabular import config
+from .conftest import BIG_RESOURCE_ID, RESOURCE_ID, UNKNOWN_RESOURCE_ID
 
-from .conftest import (
-    AGG_ALLOWED_INDEXED_RESOURCE_ID,
-    AGG_ALLOWED_RESOURCE_ID,
-    DELETED_RESOURCE_ID,
-    INDEXED_RESOURCE_ID,
-    NULL_VALUES_RESOURCE_ID,
-    RESOURCE_ID,
-    UNKNOWN_RESOURCE_ID,
-    patch_csession,
-)
-
-pytestmark = pytest.mark.asyncio
+# even its own object cannot be reached through a table function
+OWN_OBJECT_URL = f"https://hydra.s3.rbx.io.cloud.ovh.net/parquet/{RESOURCE_ID}.parquet"
 
 
-@pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
-    ],
-)
-async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_id):
-    res = await client.get(f"/api/resources/{_resource_id}/")
-    assert res.status == 200
-    assert await res.json() == {
-        "created_at": tables_index_rows[_resource_id]["created_at"],
-        "url": tables_index_rows[_resource_id]["url"],
-        "links": [
-            {
-                "href": f"{base_url}/api/resources/{_resource_id}/profile/",
-                "type": "GET",
-                "rel": "profile",
-            },
-            {
-                "href": f"{base_url}/api/resources/{_resource_id}/data/",
-                "type": "GET",
-                "rel": "data",
-            },
-            {
-                "href": f"{base_url}/api/resources/{_resource_id}/swagger/",
-                "type": "GET",
-                "rel": "swagger",
-            },
-        ],
-    }
-
-
-async def test_api_resource_meta_deleted(client):
-    """Test that deleted resources return 410 Gone for metadata endpoint"""
-    res = await client.get(f"api/resources/{DELETED_RESOURCE_ID}/")
-    assert res.status == 410
-    text = await res.text()
-    assert "permanently deleted" in text
-    assert DELETED_RESOURCE_ID in text
-
-
-async def test_api_resource_meta_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
-    assert res.status == 404
-
-
-@pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
-    ],
-)
-async def test_api_resource_profile(client, tables_index_rows, exceptions_rows, _resource_id):
-    indexes = (
-        list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-        if _resource_id in exceptions_rows
-        else None
+def most_frequent_value(api, column: str) -> tuple[str, int]:
+    """Use the SQL endpoint to get a value and its exact count, to check /data/ against it."""
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/sql/",
+        params={
+            "q": f'SELECT "{column}" AS value, count(*) AS n FROM resource '
+            "WHERE value IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 1"
+        },
     )
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    body = await res.json()
-    assert body["profile"] == json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    if indexes is None:
-        assert body["indexes"] is None
-    else:
-        assert sorted(body["indexes"]) == sorted(indexes)
+    assert response.status_code == 200, response.text
+    row = response.json()["data"][0]
+    return row["value"], row["n"]
 
 
-async def test_api_resource_profile_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
-    assert res.status == 404
+def test_health(api):
+    response = api.get("/health/")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
 
 
-async def test_api_resource_data(client, base_url, tables_index_rows):
-    detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
-    assert res.status == 200
-    body = await res.json()
-    assert all(key in body for key in ["data", "links", "meta"])
-    assert isinstance(body["data"], list) and len(body["data"]) == 20
-    assert isinstance(body["data"][0], dict) and all(
-        col in body["data"][0] for col in detection["header"]
+def test_resource_meta(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created_at"]
+    assert {link["rel"] for link in body["links"]} == {"profile", "data", "swagger", "sql"}
+
+
+def test_resource_profile(api, profile):
+    assert profile["total_lines"] > 0
+    assert profile["header"]
+    assert set(profile["columns"]) == set(profile["header"])
+    assert all("python_type" in column for column in profile["columns"].values())
+    # statistics are computed by SUMMARIZE
+    assert any(stats.get("nb_distinct") for stats in profile["profile"].values())
+
+
+def test_resource_profile_has_no_indexes(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.json()["indexes"] is None
+
+
+def test_resource_swagger(api, string_column):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/swagger/")
+    assert response.status_code == 200
+    assert f"/api/resources/{RESOURCE_ID}/data/" in response.text
+    assert f"{string_column}__exact" in response.text
+    # aggregation operators are gone from the resource swagger
+    assert "__groupby" not in response.text
+    assert "__avg" not in response.text
+
+
+def test_resource_data(api, profile):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["data"]) == min(20, profile["total_lines"])
+    assert body["data"][0]["__id"] == 1
+    assert body["meta"] == {"page": 1, "page_size": 20, "total": profile["total_lines"]}
+    assert body["links"]["prev"] is None
+    assert "page=2" in body["links"]["next"]
+
+
+def test_resource_data_pagination(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?page=3&page_size=5")
+    body = response.json()
+    assert [row["__id"] for row in body["data"]] == [11, 12, 13, 14, 15]
+    assert body["meta"]["page"] == 3
+    assert "page=2" in body["links"]["prev"]
+
+
+def test_resource_data_page_size_above_maximum(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?page_size=5000")
+    assert response.status_code == 400
+    assert "Page size exceeds" in response.json()["errors"][0]["detail"]
+
+
+def test_resource_data_filter_matches_sql_count(api, string_column):
+    value, count = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/", params={f"{string_column}__exact": value}
     )
-    assert body["links"] == {
-        "next": f"{base_url}/api/resources/{RESOURCE_ID}/data/?page=2&page_size=20",
-        "prev": None,
-        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
-        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
-    }
-    assert body["meta"] == {"page": 1, "page_size": 20, "total": detection["total_lines"]}
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total"] == count
+    assert all(row[string_column] == value for row in body["data"])
+
+
+def test_resource_data_sort(api, sortable_column):
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/",
+        params={f"{sortable_column}__sort": "asc", "page_size": 50},
+    )
+    assert response.status_code == 200
+    values = [row[sortable_column] for row in response.json()["data"] if row[sortable_column]]
+    assert values == sorted(values)
+
+
+def test_resource_data_contains_and_columns(api, string_column):
+    value, _ = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/",
+        params={f"{string_column}__contains": value[:3].lower(), "columns": string_column},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["total"] > 0
+    assert set(body["data"][0].keys()) == {string_column}
+
+
+def test_resource_data_isnotnull(api, string_column):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?{string_column}__isnotnull")
+    assert response.status_code == 200
+    assert all(row[string_column] is not None for row in response.json()["data"])
+
+
+def test_resource_data_or_group(api, string_column):
+    value, count = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/",
+        params={"or": f'("{string_column}"__exact.{value},"{string_column}"__isnull)'},
+    )
+    assert response.status_code == 200
+    assert response.json()["meta"]["total"] >= count
+
+
+def test_resource_data_unknown_column(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?nope__exact=1")
+    assert response.status_code == 400
+    assert "unknown column" in response.json()["errors"][0]["detail"]
+
+
+def test_resource_data_aggregation_is_rejected(api, string_column):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?{string_column}__groupby")
+    assert response.status_code == 400
+    assert "/sql/" in response.json()["errors"][0]["detail"]
+
+
+def test_unknown_resource(api):
+    response = api.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
+    assert response.status_code == 404
+
+
+def test_malformed_resource_id(api):
+    response = api.get("/api/resources/not-an-uuid/data/")
+    assert response.status_code == 404
+
+
+def test_another_resource_of_the_bucket(api):
+    """Any <resource_id>.parquet of the bucket is queryable, without any ingestion step."""
+    response = api.get(f"/api/resources/{BIG_RESOURCE_ID}/data/?page_size=3")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["data"]) == 3
+    assert body["meta"]["total"] > 0
+
+
+def test_resource_data_csv(api, string_column):
+    value, _ = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/csv/", params={f"{string_column}__exact": value}
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    rows = list(csv.reader(io.StringIO(response.text)))
+    assert rows[0][0] == "__id"
+    assert string_column in rows[0]
+    assert len(rows) > 1
+
+
+def test_resource_data_json_stream(api, string_column):
+    value, count = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/data/json/", params={f"{string_column}__exact": value}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert isinstance(body, list)
+    assert len(body) == count
+
+
+def test_resource_data_csv_too_long(api):
+    """The big resource is above BATCH_SIZE, so the download is refused."""
+    response = api.get(f"/api/resources/{BIG_RESOURCE_ID}/data/csv/")
+    assert response.status_code == 403
+    assert "too long" in response.json()["errors"][0]["title"].lower()
+
+
+def test_sql_group_by(api, string_column):
+    value, count = most_frequent_value(api, string_column)
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/sql/",
+        params={
+            "q": f'SELECT "{string_column}" AS value, count(*) AS n FROM resource '
+            "GROUP BY 1 ORDER BY n DESC LIMIT 3"
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"][0] == {"value": value, "n": count}
+    assert body["meta"]["truncated"] is False
+    assert body["meta"]["table"] == "resource"
+
+
+def test_sql_row_limit(api):
+    response = api.get(
+        f"/api/resources/{BIG_RESOURCE_ID}/sql/", params={"q": "SELECT __id FROM resource"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["truncated"] is True
+    assert body["meta"]["rows"] == body["meta"]["row_limit"]
+
+
+def test_sql_cte_and_join_on_itself(api, string_column):
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/sql/",
+        params={
+            "q": f'WITH counts AS (SELECT "{string_column}" AS value, count(*) AS n '
+            "FROM resource GROUP BY 1) SELECT count(*) AS groups, sum(n) AS total FROM counts"
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"][0]["groups"] > 0
+
+
+def test_sql_missing_query(api):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/sql/")
+    assert response.status_code == 400
 
 
 @pytest.mark.parametrize(
-    "args",
+    "query",
     [
-        {"page": 2},
-        {"page_size": 40},
-        {"page": 4, "page_size": 5},
+        "CREATE TABLE evil AS SELECT 1",
+        "DELETE FROM resource",
+        "COPY (SELECT 1) TO '/tmp/evil.csv'",
+        "SELECT * FROM read_csv('/etc/passwd')",
+        f"SELECT * FROM read_parquet('{OWN_OBJECT_URL}')",
+        "SELECT * FROM duckdb_secrets()",
+        "SELECT 1; DROP VIEW resource",
+        "PRAGMA database_list",
+        "SET disabled_filesystems=''",
+        "SELECT * FROM other_table",
     ],
 )
-async def test_api_resource_data_with_meta_args(client, base_url, tables_index_rows, args):
-    detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    params = "&".join(f"{k}={v}" for k, v in args.items())
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
-    assert res.status == 200
-    body = await res.json()
-    assert len(body["data"]) == args.get("page_size", config.PAGE_SIZE_DEFAULT)
-    assert body["links"] == {
-        "next": (
-            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
-            f"?page={args.get('page', 1) + 1}"
-            f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
-        ),
-        "prev": (
-            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
-            f"?page={args.get('page', 1) - 1}"
-            f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
-        )
-        if args.get("page", 1) > 1
-        else None,
-        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
-        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
-    }
-    assert body["meta"] == {
-        "page": args.get("page", 1),
-        "page_size": args.get("page_size", config.PAGE_SIZE_DEFAULT),
-        "total": detection["total_lines"],
-    }
+def test_sql_rejects_dangerous_queries(api, query):
+    response = api.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Invalid SQL query"
 
 
-@pytest.mark.parametrize(
-    "filters",
-    [
-        [("id", "exact", "e5b8864b-d1d0-4452-8d83-517d31da7ff2")],
-        [("score", "less", 0.3)],
-        [("is_true", "differs", True)],
-        [("is_true", "differs", False), ("score", "greater", 0.7)],
-        [{"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
-        [("is_true", "differs", True), {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
-        [
-            ("is_true", "exact", True),
-            {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]},
-            {
-                "or": [
-                    {"and": [("decompte", "greater", 80), ("birth", "greater", "1970")]},
-                    {"and": [("decompte", "less", 20), ("birth", "less", "1920")]},
-                ]
-            },
-        ],
-    ],
-)
-async def test_api_resource_data_with_data_args(client, filters):
-    def conforms_filter(row: dict, col: str, comp: str, val) -> bool:
-        if comp == "exact":
-            return (row[col] is val) if isinstance(val, bool) else (row[col] == val)
-        elif comp == "differs":
-            return row[col] != val
-        elif comp == "less":
-            return row[col] <= val
-        elif comp == "greater":
-            return row[col] >= val
-        raise NotImplementedError
-
-    def conforms(row, filters: list, group: str) -> bool:
-        op = all if group == "and" else any
-        return op(
-            conforms_filter(row, *_filter)
-            if isinstance(_filter, tuple)
-            else conforms(row, list(_filter.values())[0], list(_filter)[0])
-            for _filter in filters
-        )
-
-    def build_single_param(_filter: tuple, top_level: bool = False):
-        col, op, val = _filter
-        sep = "=" if top_level else "."
-        value = str(val)
-        if isinstance(val, bool):
-            value = value.lower()
-        if not top_level:
-            value = f'"{value}"'
-        return f"{col}__{op}{sep}{value}"
-
-    def build_params(filters, group: str, top_level: bool = False) -> str:
-        if top_level:
-            return "&".join(
-                build_single_param(_filter, top_level=True)
-                if isinstance(_filter, tuple)
-                else f"{group}=({build_params(list(_filter.values())[0], group)})"
-                for _filter in filters
-            )
-        else:
-            return ",".join(
-                build_single_param(_filter)
-                if isinstance(_filter, tuple)
-                else f"{list(_filter)[0]}({build_params(list(_filter.values())[0], list(_filter)[0])})"
-                for _filter in filters
-            )
-
-    params = build_params(filters, group="or", top_level=True)
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
-    assert res.status == 200
-    body = await res.json()
-    # only checking first page
-    assert body["data"]
-    for row in body["data"]:
-        assert conforms(row, filters, group="and")
+def test_sql_still_works_after_a_rejected_query(api, profile):
+    api.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "DELETE FROM resource"})
+    response = api.get(
+        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT count(*) AS n FROM resource"}
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == [{"n": profile["total_lines"]}]
 
 
-async def test_api_resource_data_with_args_error(client):
-    args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
-    assert res.status == 400
-    assert await res.json() == {
-        "errors": [
-            {
-                "code": None,
-                "title": "Invalid query string",
-                "detail": f"Malformed query: argument '{args}' could not be parsed",
-            }
-        ]
-    }
-
-
-async def test_api_resource_data_with_page_size_error(client):
-    args = f"page=1&page_size={config.PAGE_SIZE_MAX + 1}"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
-    assert res.status == 400
-    assert await res.json() == {
-        "errors": [
-            {
-                "code": None,
-                "detail": f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
-                "title": "Invalid query string",
-            }
-        ]
-    }
-
-
-async def test_api_resource_data_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
-    assert res.status == 404
-
-
-async def test_api_with_unsupported_args(client):
-    arg = "limit=1"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{arg}")
-    assert res.status == 400
-    body = {
-        "errors": [
-            {
-                "code": None,
-                "title": "Invalid query string",
-                "detail": f"Malformed query: argument '{arg}' could not be parsed",
-            },
-        ],
-    }
-    assert await res.json() == body
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        (INDEXED_RESOURCE_ID, True),
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
-    ],
-)
-async def test_api_exception_resource_indexes(client, tables_index_rows, exceptions_rows, params):
-    _resource_id, forbidden = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    # sorted because it's made from a set so the order might not be preserved
-    assert sorted(indexes) == list(sorted(content["indexes"]))
-
-    # checking that the resource is readable with no filter
-    res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
-    assert res.status == 200
-
-    # checking that the resource can be filtered on any columns
-    for col in detection["columns"].keys():
-        if detection["columns"][col]["python_type"] == "json":
-            # can't handle json type for now
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
-        )
-        assert res.status == 200
-
-    # checking that the resource cannot be aggregated on a non-indexed column
-    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
-    for col in non_indexed_cols:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403
-
-    # checking whether aggregation is allowed on indexed columns
-    for idx in indexes:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403 if forbidden else 200
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        (RESOURCE_ID, True),
-        (AGG_ALLOWED_RESOURCE_ID, False),
-    ],
-)
-async def test_api_exception_resource_no_indexes(client, tables_index_rows, params):
-    _resource_id, forbidden = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    # checking that we have an `indexes` key in the profile endpoint
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    assert content["indexes"] is None
-
-    # checking that the resource is readable with no filter
-    res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
-    assert res.status == 200
-
-    # checking that the resource can be filtered on all columns
-    for col, results in detection["columns"].items():
-        if results["python_type"] == "json":
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
-        )
-        assert res.status == 200
-
-    # if aggregation is allowed:
-    # checking whether aggregation is allowed on all columns or none
-    for col, results in detection["columns"].items():
-        if results["python_type"] == "json":
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403 if forbidden else 200
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        (503, 503, ["errors"]),
-        (200, 200, ["status", "version", "uptime_since"]),
-    ],
-)
-async def test_health(client, mocker, params):
-    postgrest_resp_code, api_expected_resp_code, expected_keys = params
-    mocked_head = patch_csession(mocker, client, postgrest_resp_code)
-    res = await client.get("/health/")
-    assert res.status == api_expected_resp_code
-    res_json = await res.json()
-    assert all(key in res_json for key in expected_keys)
-    mocked_head.assert_called_once_with(f"{config.PGREST_ENDPOINT}/migrations_csv")
-
-
-async def test_aggregation_exceptions(client):
-    res = await client.get("/api/aggregation-exceptions/")
-    aggregations = await res.json()
-    assert not aggregations["allowed"]
-    assert aggregations["exceptions"] == config.ALLOW_AGGREGATION_EXCEPTIONS
-
-
-@pytest.mark.parametrize(
-    "_resource_id,batch_size",
-    [
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
-        (AGG_ALLOWED_RESOURCE_ID, None),
-        (INDEXED_RESOURCE_ID, None),
-        (RESOURCE_ID, None),
-        (RESOURCE_ID, 5),
-    ],
-)
-async def test_api_csv_export(client, mocker, tables_index_rows, _resource_id, batch_size):
-    if batch_size is not None:
-        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"/api/resources/{_resource_id}/data/csv/")
-    if batch_size is not None:
-        assert res.status == 403
-        return
-    assert res.status == 200
-    content = await res.text()
-    reader = csv.reader(StringIO(content))
-    columns = next(reader)
-    rows = [r for r in reader]
-    # __id is added by tabular-api
-    assert columns == ["__id"] + list(detection["columns"])
-    assert len(rows) == detection["total_lines"]
-
-
-@pytest.mark.parametrize(
-    "_resource_id,batch_size",
-    [
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
-        (AGG_ALLOWED_RESOURCE_ID, None),
-        (INDEXED_RESOURCE_ID, None),
-        (RESOURCE_ID, None),
-        (RESOURCE_ID, 5),
-    ],
-)
-async def test_api_json_export(client, mocker, tables_index_rows, _resource_id, batch_size):
-    if batch_size is not None:
-        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"/api/resources/{_resource_id}/data/json/")
-    if batch_size is not None:
-        assert res.status == 403
-        return
-    assert res.status == 200
-    content = await res.text()
-    rows = json.loads(content)
-    assert len(rows) == detection["total_lines"]
-    for row in rows:
-        # __id is added by tabular-api
-        assert list(row.keys()) == ["__id"] + list(detection["columns"])
-
-
-async def test_api_resource_with_null_values(client):
-    # in this table we have exactly two NULL values per column, 10 rows in total
-    response = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/profile/")
-    profile = await response.json()
-    columns = [col for col in profile["profile"]["columns"].keys()]
-    for col in columns:
-        res = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull")
-        body = await res.json()
-        assert len(body["data"]) == 2
-        assert all(row[col] is None for row in body["data"])
-        res = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull")
-        body = await res.json()
-        assert len(body["data"]) == 8
-        assert all(row[col] is not None for row in body["data"])
-        # checking that `differs` can return NULL values
-        if profile["profile"]["columns"][col]["python_type"] == "json":
-            # except for json type
-            continue
-        value = 1
-        res = await client.get(
-            f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
-        )
-        body = await res.json()
-        assert all(row[col] != value for row in body["data"])
-        assert len([row for row in body["data"] if row[col] is None]) == 2
+def test_doc_is_served(api):
+    assert api.get("/api/doc").status_code == 200
+    assert "Tabular API" in api.get("/api/openapi.json").json()["info"]["title"]

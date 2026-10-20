@@ -1,14 +1,18 @@
 openapi: 3.0.3
 info:
-  title: data.gouv.fr Tabular API
+  title: data.gouv.fr Tabular API (DuckDB)
   description: |
-    Access tabular data (CSV) for data.gouv.fr resources as JSON.
+    Access tabular data for data.gouv.fr resources as JSON. The data is read directly from
+    the `<resource_id>.parquet` files stored in the S3 bucket, and queried by DuckDB.
     Supports pagination, filtering and sorting on columns. Use the resource's
-    `/swagger/` endpoint to get the OpenAPI spec for its data and available filters.
+    `/swagger/` endpoint to get the OpenAPI spec for its data and available filters,
+    and the `/sql/` endpoint to run read-only SQL queries (including aggregations).
   version: 1.0.0
 tags:
   - name: Data retrieval
     description: Retrieve data for resources
+  - name: SQL
+    description: Read-only SQL access
   - name: Health
     description: Service health
 paths:
@@ -16,7 +20,7 @@ paths:
     get:
       tags:
         - Data retrieval
-      description: Returns basic metadata and links to profile, data and OpenAPI spec for this resource.
+      description: Returns basic metadata and links to profile, data, OpenAPI spec and SQL endpoint for this resource.
       summary: Get resource metadata
       operationId: getMetaResourceInfo
       responses:
@@ -36,12 +40,12 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
   /api/resources/{rid}/profile/:
     get:
       tags:
         - Data retrieval
-      description: Returns column types, formats and basic stats for the tabular resource (encoding, separator, row count, etc.).
+      description: Returns column types and basic statistics for the tabular resource, derived from the parquet file.
       summary: Get resource profile
       operationId: getResourceProfile
       responses:
@@ -61,17 +65,17 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
   /api/resources/{rid}/swagger/:
     get:
       tags:
         - Data retrieval
-      description: Returns the OpenAPI spec for this resource's data endpoint, including available columns and filter/sort operators.
+      description: Returns the OpenAPI spec for this resource's data endpoints, including available columns and filter/sort operators.
       summary: Get resource OpenAPI spec
       operationId: getSwaggerResource
       responses:
         200:
-          description: YAML-formatted OpenAPI spec for this resource's data and CSV endpoints
+          description: YAML-formatted OpenAPI spec for this resource's endpoints
         404:
           description: Resource not found
       parameters:
@@ -82,7 +86,7 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
   /api/resources/{rid}/data/:
     get:
       tags:
@@ -90,6 +94,7 @@ paths:
       description: |
         Returns paginated tabular data as JSON. Columns and query params (filtering, sorting, page, page_size) depend on the resource.
         Use this resource's `/swagger/` endpoint for the full OpenAPI spec and available columns.
+        Aggregation operators are not available here, use `/sql/` instead.
       summary: Get resource data (JSON)
       operationId: getResourceData
       responses:
@@ -107,7 +112,7 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
   /api/resources/{rid}/data/csv/:
     get:
       tags:
@@ -118,6 +123,8 @@ paths:
       responses:
         200:
           description: CSV stream
+        403:
+          description: Output is too long
         404:
           description: Resource not found
       parameters:
@@ -128,7 +135,7 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
   /api/resources/{rid}/data/json/:
     get:
       tags:
@@ -139,6 +146,8 @@ paths:
       responses:
         200:
           description: JSON stream
+        403:
+          description: Output is too long
         404:
           description: Resource not found
       parameters:
@@ -149,29 +158,55 @@ paths:
         schema:
           type: string
           format: uuid
-          example: "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
-  /api/aggregation-exceptions/:
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
+  /api/resources/{rid}/sql/:
     get:
       tags:
-        - Data retrieval
-      description: Returns the list of resource IDs for which aggregation queries (groupby, count, sum, etc.) are allowed.
-      summary: List aggregation-allowed resources
-      operationId: getAggregationExceptions
+        - SQL
+      description: |
+        Runs a read-only SQL query against the resource, which is exposed as the table `resource`.
+        This is how aggregations are done, for instance:
+        `SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC`.
+
+        Only a single `SELECT` statement is accepted. Are rejected: any DDL/DML statement
+        (`CREATE`, `INSERT`, `DELETE`, `COPY`, `ATTACH`, `SET`, `PRAGMA`, `CALL`, `INSTALL`...),
+        multiple statements, any table function (`read_parquet`, `read_csv`, `read_text`, `glob`,
+        `duckdb_secrets`...) and any table other than `resource` (your own CTEs are allowed).
+        Results are capped and the query is interrupted after a timeout.
+      summary: Run a read-only SQL query on the resource
+      operationId: getResourceSql
       responses:
-        '200':
-          description: List of resource UUIDs
+        200:
+          description: Query result (body has data and meta)
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
-                  format: uuid
+                $ref: '#/components/schemas/SqlResult'
+        400:
+          description: Invalid or rejected SQL query
+        404:
+          description: Resource not found
+      parameters:
+      - description: UUID of the data.gouv.fr resource
+        in: path
+        name: rid
+        required: true
+        schema:
+          type: string
+          format: uuid
+          example: "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
+      - description: The SQL query to run, the resource being the `resource` table
+        in: query
+        name: q
+        required: true
+        schema:
+          type: string
+          example: "SELECT count(*) AS n FROM resource"
   /health/:
     get:
       tags:
         - Health
-      description: Service health check (status, version, uptime).
+      description: Service health check (status, version, uptime). Checks both DuckDB and the S3 bucket.
       summary: Health check
       operationId: getHealth
       responses:
@@ -182,85 +217,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
         '503':
-          description: Database unavailable
+          description: DuckDB or the bucket is unavailable
 components:
   schemas:
     ResourceProfileResponse:
-      description: Profile endpoint response; contains the csv_detective profile and optional column indexes.
+      description: Profile endpoint response, derived from the parquet schema and statistics.
       type: object
       properties:
         profile:
           $ref: '#/components/schemas/ResourceProfile'
         indexes:
-          description: List of column names that have an index (for filtering/sorting). Null if none.
+          description: Always null in this architecture (no database index, the parquet file is scanned).
           type: array
           items:
             type: string
           nullable: true
     ResourceProfile:
-      description: Column types, formats and statistics from csv_detective (encoding, separator, row count, etc.)
+      description: Column types and statistics derived from the parquet file
       type: object
       properties:
         header:
-          description: Column names (first row)
-          type: object
+          description: Column names
+          type: array
+          items:
+            type: string
+        total_lines:
+          description: Number of rows
+          type: integer
         columns:
-          description: Column type information
+          description: Column type information (python_type and format)
           type: object
         formats:
-          description: Detected formats per column
+          description: Column names grouped by detected format
           type: object
         profile:
-          description: Profiling statistics
+          description: Per-column statistics (min, max, mean, std, nb_distinct, nb_missing_values)
           type: object
-        encoding:
-          description: File encoding (e.g. UTF-8)
-          type: string
-        separator:
-          description: CSV delimiter (e.g. comma, semicolon)
-          type: string
-        engine:
-          description: Which python engine to use to open the file ("openpyxl", "xlrd"...) (if relevant)
-          type: string
-        sheet_name:
-          description: Which sheet of the document was analyzed and converted (if relevant)
-          type: string
-        categorical:
-          description: Columns detected as categorical
-          type: object
-        total_lines:
-          description: Number of data rows
-          type: integer
-        nb_duplicates:
-          description: Number of duplicate rows
-          type: integer
-        columns_fields:
-          description: Field metadata per column (type, format)
-          type: object
-        columns_labels:
-          description: Label metadata per column
-          type: object
-        header_row_idx:
-          description: Index of the header row
-          type: integer
-        heading_columns:
-          description: Number of leading columns
-          type: integer
-        trailing_columns:
-          description: Number of trailing columns
-          type: integer
     MetaResourceInfo:
       description: Metadata and links for a resource
       type: object
       properties:
         created_at:
-          description: Creation date of the resource
+          description: Last modification date of the parquet file in the bucket
           type: string
         url:
-          description: URL of the source file
+          description: Always null in this architecture (the source file is not tracked)
           type: string
+          nullable: true
         links:
-          description: Links to profile, data and OpenAPI spec (rel profile, data, swagger)
+          description: Links to profile, data, OpenAPI spec and SQL endpoints
           type: array
           items:
             type: object
@@ -272,8 +277,35 @@ components:
                 description: HTTP method (e.g. GET)
                 type: string
               rel:
-                description: Link relation (profile, data, or swagger)
+                description: Link relation (profile, data, swagger or sql)
                 type: string
+    SqlResult:
+      description: Result of a read-only SQL query
+      type: object
+      properties:
+        data:
+          description: Result rows
+          type: array
+          items:
+            type: object
+        meta:
+          type: object
+          properties:
+            table:
+              description: Name under which the resource is exposed in the query
+              type: string
+            rows:
+              description: Number of returned rows
+              type: integer
+            truncated:
+              description: True when the row limit was reached
+              type: boolean
+            row_limit:
+              description: Maximum number of rows returned
+              type: integer
+            execution_ms:
+              description: Query duration in milliseconds
+              type: integer
     Health:
       description: Health check response
       type: object

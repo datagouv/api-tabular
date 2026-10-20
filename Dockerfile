@@ -1,28 +1,18 @@
-FROM astral/uv:python3.14-trixie-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-# Which Gunicorn app to run
-# Overridden at build time by the CI so we can use one Dockerfile for both Tabular API and Metrics API
-ARG APP_MODULE=api_tabular.tabular.app:app_factory
+WORKDIR /app
 
-# install needed apt packages
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends git && \
-    rm -rf /var/lib/apt/lists/*
+# install dependencies first, so that code changes don't invalidate the layer
+COPY pyproject.toml README.md ./
+COPY tabular_duckdb ./tabular_duckdb
+RUN uv sync --no-dev
 
-# create user & group
-RUN groupadd --system datagouv && \
-    useradd --system --gid datagouv --create-home datagouv
+COPY tabular_swagger.yaml ./
 
-# install
-WORKDIR /home/datagouv
-ADD . /home/datagouv/
-RUN chown -R datagouv:datagouv /home/datagouv
-USER datagouv
-RUN uv sync --frozen
+# download the httpfs extension at build time: at runtime we only LOAD it
+RUN uv run python -c "from tabular_duckdb.engine import install_extensions; install_extensions()"
 
-# run (ENV from ARG so shell can expand APP_MODULE at runtime)
-ENV APP_MODULE=${APP_MODULE}
-# Use `python -m gunicorn` instead of `gunicorn` due to uv issue #15246: https://github.com/astral-sh/uv/issues/15246
-# Shell so APP_MODULE is expanded; bind to 8005 (map to different host ports when running both containers)
-ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["uv run python -m gunicorn $APP_MODULE --bind 0.0.0.0:8005 --worker-class aiohttp.GunicornWebWorker --workers 2 --access-logfile -"]
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8005
+
+CMD ["uv", "run", "uvicorn", "tabular_duckdb.main:app", "--host", "0.0.0.0", "--port", "8005"]
