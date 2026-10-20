@@ -1,9 +1,14 @@
-"""Every query here must be rejected before DuckDB executes anything."""
+"""The SQL endpoint: validation of the queries, then the sandbox of the connections running them."""
 
+import duckdb
 import pytest
 
+from tabular_duckdb.config import settings
+from tabular_duckdb.engine import DuckDBEngine
 from tabular_duckdb.errors import QueryException
 from tabular_duckdb.sql import validate_sql
+
+from .conftest import RESOURCE_ID
 
 WRITE_STATEMENTS = [
     "CREATE TABLE evil AS SELECT 1",
@@ -73,6 +78,7 @@ ALLOWED_STATEMENTS = [
     WRITE_STATEMENTS + FILE_ACCESS_STATEMENTS + CATALOG_STATEMENTS + MULTI_STATEMENTS,
 )
 def test_rejected_statements(duckdb_connection, statement):
+    """Every query here must be rejected before DuckDB executes anything."""
     with pytest.raises(QueryException) as raised:
         validate_sql(duckdb_connection, statement)
     assert raised.value.status == 400
@@ -119,3 +125,41 @@ def test_nothing_is_executed_during_validation(duckdb_connection):
         "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'side_effect'"
     ).fetchone()
     assert tables[0] == 0
+
+
+@pytest.fixture
+def sandboxed_connection(parquet_dir, monkeypatch):
+    """A connection of the SQL endpoint pool, whose only readable prefix is `parquet_dir`."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
+    connection = DuckDBEngine()._new_sql_connection()
+    yield connection
+    connection.close()
+
+
+def test_sandbox_reads_the_parquet_prefix(sandboxed_connection, parquet_dir):
+    count = sandboxed_connection.execute(
+        f"SELECT count(*) FROM read_parquet('{parquet_dir}/{RESOURCE_ID}.parquet')"
+    ).fetchone()
+    assert count[0] > 0
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "SELECT * FROM read_text('/etc/passwd')",
+        "SET enable_external_access=true",
+        "SET allowed_directories=['/']",
+    ],
+)
+def test_sandbox_denies_anything_else(sandboxed_connection, statement):
+    """Even a statement that went through the validation could not escape the sandbox."""
+    with pytest.raises(duckdb.Error):
+        sandboxed_connection.execute(statement)
+
+
+def test_sandbox_denies_files_outside_the_prefix(sandboxed_connection, tmp_path):
+    outside = tmp_path / "outside.parquet"
+    with duckdb.connect(":memory:") as conn:
+        conn.execute(f"COPY (SELECT 1 AS a) TO '{outside}' (FORMAT parquet)")
+    with pytest.raises(duckdb.Error):
+        sandboxed_connection.execute(f"SELECT * FROM read_parquet('{outside}')")
