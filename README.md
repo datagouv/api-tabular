@@ -349,6 +349,7 @@ uv run pytest
 - `/api/resources/{rid}/` returns `"url": null` (the origin of the file is not tracked here).
 - `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged.
 - Aggregations are allowed on every resource and every column: `/api/aggregation-exceptions/` always answers `{"allowed": true, "exceptions": []}`.
+- `page` and `page_size` must be positive integers, any other value answers a 400. The PostgREST version served the first page for `page=0` or a negative page, and the whole table, without any limit, for `page_size=0`.
 - The metrics API is out of scope.
 
 ## 🤝 Contributing

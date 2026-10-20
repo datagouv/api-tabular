@@ -250,6 +250,24 @@ def test_resource_data_with_page_size_error(client):
     }
 
 
+@pytest.mark.parametrize(
+    "name, value, detail",
+    [
+        ("page", "0", "`page` must be greater than 0"),
+        ("page", "-3", "`page` must be greater than 0"),
+        ("page_size", "0", "`page_size` must be greater than 0"),
+        ("page_size", "-1", "`page_size` must be greater than 0"),
+        ("page", "abc", "`page` must be an integer, got 'abc'"),
+    ],
+)
+def test_resource_data_with_invalid_page(client, name, value, detail):
+    response = client.get(DATA_URL, params={name: value})
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": [{"code": None, "title": "Invalid query string", "detail": detail}]
+    }
+
+
 def test_resource_data_filter(client):
     response = client.get(DATA_URL, params={"decompte__exact": 3, "is_true__exact": "true"})
     assert response.status_code == 200
