@@ -1,3 +1,5 @@
+import json
+
 import duckdb
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +26,48 @@ FROM range(1, {TOTAL_LINES + 1}) AS t(i)
 """
 HEADER = ["id", "score", "decompte", "is_true", "birth", "Nom de l'élu", "liste"]
 
+# a resource converted by hydra, which embeds the csv-detective inspection in the parquet
+# key-value metadata; json columns are stored as strings, like hydra does
+INSPECTED_RESOURCE_ID = "aaaaaaaa-5555-bbbb-6666-cccccccccccc"
+INSPECTED_RESOURCE_SQL = """
+SELECT * FROM (VALUES ('62', '[1, 2]', 3), ('59', NULL, 4)) AS t(code, liste, n)
+"""
+INSPECTION = {
+    "encoding": "utf-8",
+    "separator": ";",
+    "header_row_idx": 0,
+    "header": ["code", "liste", "n"],
+    "columns": {
+        "code": {"python_type": "string", "format": "code_departement", "score": 1.0},
+        "liste": {"python_type": "json", "format": "json", "score": 1.0},
+        "n": {"python_type": "int", "format": "int", "score": 1.0},
+    },
+    "formats": {"code_departement": ["code"], "json": ["liste"], "int": ["n"]},
+    "categorical": ["code"],
+    "total_lines": 2,
+    "nb_duplicates": 0,
+    "profile": {
+        "code": {
+            "tops": [{"value": "62", "count": 1}, {"value": "59", "count": 1}],
+            "nb_distinct": 2,
+            "nb_missing_values": 0,
+        },
+        "liste": {
+            "tops": [{"value": "[1, 2]", "count": 1}],
+            "nb_distinct": 1,
+            "nb_missing_values": 1,
+        },
+        "n": {
+            "min": 3,
+            "max": 4,
+            "mean": 3.5,
+            "std": 0.7,
+            "nb_distinct": 2,
+            "nb_missing_values": 0,
+        },
+    },
+}
+
 
 @pytest.fixture(scope="session")
 def parquet_dir(tmp_path_factory) -> str:
@@ -31,6 +75,11 @@ def parquet_dir(tmp_path_factory) -> str:
     with duckdb.connect(":memory:") as conn:
         conn.execute(
             f"COPY ({RESOURCE_SQL}) TO '{directory}/{RESOURCE_ID}.parquet' (FORMAT parquet)"
+        )
+        inspection = json.dumps(INSPECTION).replace("'", "''")
+        conn.execute(
+            f"COPY ({INSPECTED_RESOURCE_SQL}) TO '{directory}/{INSPECTED_RESOURCE_ID}.parquet' "
+            f"(FORMAT parquet, KV_METADATA {{csv_detective: '{inspection}'}})"
         )
     return str(directory)
 

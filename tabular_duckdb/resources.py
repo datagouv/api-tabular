@@ -1,4 +1,5 @@
 import asyncio
+import json
 import re
 import time
 import urllib.error
@@ -19,6 +20,9 @@ RESOURCE_ID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 
+# key-value metadata where hydra embeds the csv-detective inspection of the source file
+INSPECTION_KEY = "csv_detective"
+
 
 @dataclass
 class Resource:
@@ -26,6 +30,8 @@ class Resource:
     created_at: str | None
     total_lines: int
     columns: dict[str, str] = field(default_factory=dict)
+    # the csv-detective inspection, absent from the files converted before hydra embedded it
+    inspection: dict[str, Any] | None = None
 
     @property
     def object_url(self) -> str:
@@ -134,17 +140,27 @@ class ResourceCache:
             _, described = await engine.query(
                 f"DESCRIBE SELECT * FROM read_parquet({quote_literal(object_url)})"
             )
-            total_lines = await engine.query_value(
-                f"SELECT count(*) FROM read_parquet({quote_literal(object_url)})"
+            embedded = await engine.query_value(
+                f"SELECT value FROM parquet_kv_metadata({quote_literal(object_url)}) "
+                "WHERE decode(key) = ?",
+                [INSPECTION_KEY],
+            )
+            inspection = json.loads(embedded) if embedded is not None else None
+            total_lines = (
+                inspection["total_lines"]
+                if inspection
+                else await engine.query_value(
+                    f"SELECT count(*) FROM read_parquet({quote_literal(object_url)})"
+                )
             )
         except duckdb.Error as exc:
             raise _read_error(object_url, exc) from exc
-        columns = {row[0]: row[1] for row in described}
         return Resource(
             resource_id=resource_id,
             created_at=created_at,
             total_lines=int(total_lines or 0),
-            columns=columns,
+            columns={row[0]: row[1] for row in described},
+            inspection=inspection,
         )
 
 
@@ -156,6 +172,9 @@ async def get_resource(resource_id: str) -> Resource:
 
 
 def profile_columns(resource: Resource) -> dict[str, dict[str, Any]]:
+    if resource.inspection:
+        return resource.inspection["columns"]
+    # without the inspection, the types are guessed from the parquet schema
     return {
         name: {"python_type": python_type(duckdb_type), "format": python_type(duckdb_type)}
         for name, duckdb_type in resource.columns.items()
@@ -163,7 +182,9 @@ def profile_columns(resource: Resource) -> dict[str, dict[str, Any]]:
 
 
 async def build_profile(resource: Resource) -> dict:
-    """Build a csv-detective-like profile out of the parquet file itself."""
+    """The csv-detective inspection, or a profile derived from the parquet file without it."""
+    if resource.inspection:
+        return resource.inspection
     columns = profile_columns(resource)
     formats: dict[str, list[str]] = {}
     for name, description in columns.items():

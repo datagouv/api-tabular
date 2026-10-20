@@ -3,12 +3,20 @@ import io
 
 import duckdb
 import pytest
+import yaml
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
 from tabular_duckdb.main import build_link_with_page
 
-from .conftest import HEADER, RESOURCE_ID, TOTAL_LINES, UNKNOWN_RESOURCE_ID
+from .conftest import (
+    HEADER,
+    INSPECTED_RESOURCE_ID,
+    INSPECTION,
+    RESOURCE_ID,
+    TOTAL_LINES,
+    UNKNOWN_RESOURCE_ID,
+)
 
 DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
 FIRST_ROW = {
@@ -118,6 +126,39 @@ def test_resource_profile(client):
     # SUMMARIZE renders min and max as strings, whatever the column type
     assert profile["profile"]["decompte"]["min"] == "0"
     assert profile["profile"]["decompte"]["max"] == "6"
+
+
+def test_resource_profile_from_the_parquet_inspection(client):
+    """The csv-detective inspection embedded by hydra is served as is."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    assert response.json() == {"profile": INSPECTION, "indexes": None}
+
+
+def test_resource_swagger_uses_the_inspection_types(client):
+    """`liste` is stored as a string but csv-detective typed it as json: null checks only."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/swagger/")
+    swagger = yaml.safe_load(response.text)
+    names = {
+        p["name"]
+        for p in swagger["paths"][f"/api/resources/{INSPECTED_RESOURCE_ID}/data/"]["parameters"]
+    }
+    assert {name for name in names if name.startswith("liste__")} == {
+        "liste__isnull",
+        "liste__isnotnull",
+    }
+    assert "code__contains" in names
+
+
+def test_resource_data_with_a_parquet_inspection(client):
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [
+        {"__id": 1, "code": "62", "liste": "[1, 2]", "n": 3},
+        {"__id": 2, "code": "59", "liste": None, "n": 4},
+    ]
+    assert body["meta"]["total"] == 2
 
 
 def test_resource_swagger(client):
