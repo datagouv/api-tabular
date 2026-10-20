@@ -219,6 +219,9 @@ def test_query_text_equality_stays_exact(names):
         ),
         ("decompte__in=1,2", lambda r: r["decompte"] in (1, 2)),
         ("decompte__notin=1,2", lambda r: r["decompte"] not in (1, 2)),
+        # an empty list, as built by a client from no selected value: like PostgREST's `in.()`
+        (f"{NAME}__in=", lambda r: False),
+        (f"{NAME}__notin=", lambda r: True),
         ("decompte__less=3", lambda r: r["decompte"] <= 3),
         ("decompte__greater=3", lambda r: r["decompte"] >= 3),
         ("decompte__strictly_less=3", lambda r: r["decompte"] < 3),

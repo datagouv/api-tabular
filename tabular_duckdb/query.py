@@ -231,7 +231,8 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tu
     if comparator in ("in", "notin"):
         items = _split_list(value)
         if not items:
-            raise ValueError(f"argument '{argument}={value}' could not be parsed")
+            # PostgREST's `in.()`: no row is in an empty list, NULLs included
+            return ("(FALSE)" if comparator == "in" else "(TRUE)"), []
         coerced = [coerce_value(item, duckdb_type) for item in items]
         as_varchar = any(fallback for _, fallback in coerced)
         params = [item for item, _ in coerced]
