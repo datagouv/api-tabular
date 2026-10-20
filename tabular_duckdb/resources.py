@@ -144,7 +144,9 @@ class ResourceCache:
 
     def __init__(self) -> None:
         self._entries: dict[str, tuple[float, Resource]] = {}
-        self._lock = asyncio.Lock()
+        # one lock per resource: concurrent requests on a resource load it once, without
+        # waiting on the (remote, possibly slow) loads of other resources
+        self._locks: dict[str, asyncio.Lock] = {}
 
     def invalidate(self) -> None:
         self._entries.clear()
@@ -155,16 +157,22 @@ class ResourceCache:
         now = time.monotonic()
         if cached and cached[0] > now:
             return cached[1]
-        async with self._lock:
-            cached = self._entries.get(resource_id)
-            if cached and cached[0] > time.monotonic():
-                return cached[1]
-            resource = await self._load(resource_id)
-            self._entries[resource_id] = (
-                time.monotonic() + settings.RESOURCE_CACHE_TTL,
-                resource,
-            )
-            return resource
+        lock = self._locks.setdefault(resource_id, asyncio.Lock())
+        try:
+            async with lock:
+                cached = self._entries.get(resource_id)
+                if cached and cached[0] > time.monotonic():
+                    return cached[1]
+                resource = await self._load(resource_id)
+                self._entries[resource_id] = (
+                    time.monotonic() + settings.RESOURCE_CACHE_TTL,
+                    resource,
+                )
+                return resource
+        finally:
+            # unknown resource ids must not pile up locks
+            if not lock.locked():
+                self._locks.pop(resource_id, None)
 
     async def _load(self, resource_id: str) -> Resource:
         object_url = settings.object_url(resource_id)
