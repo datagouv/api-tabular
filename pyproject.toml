@@ -40,6 +40,7 @@ include = ["api_tabular*"]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
 
-# Provisional: drop when sentry-sdk requires a patched urllib3 lower bound (GHSA-mf9v-mfxr-j63j).
+# Provisional: drop when sentry-sdk requires a patched urllib3 lower bound.
+# 2.8.0 covers GHSA-mf9v-mfxr-j63j and the September 2026 advisories.
 [tool.uv]
-constraint-dependencies = ["urllib3>=2.7.0"]
+constraint-dependencies = ["urllib3>=2.8.0"]
