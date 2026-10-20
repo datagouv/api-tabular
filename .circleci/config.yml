@@ -105,7 +105,10 @@ jobs:
             - dist
             - pyproject.toml
       - run:
-          name: Log in to Docker registry
+          name: Set image version
+          command: echo "version=${CIRCLE_SHA1:0:7}" >> "$BASH_ENV"
+      - run:
+          name: Log in to container registry
           command: |
             : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
             : "${CONTAINER_REGISTRY_USERNAME:?missing CONTAINER_REGISTRY_USERNAME}"
@@ -114,43 +117,31 @@ jobs:
               -u "${CONTAINER_REGISTRY_USERNAME}" \
               --password-stdin "${CONTAINER_REGISTRY_SERVER}"
       - run:
-          name: Build and push Docker images (Tabular API and Metrics API)
+          name: Build and push
           command: |
             source "$BASH_ENV"
             : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
             IMAGE_PREFIX="${CONTAINER_REGISTRY_SERVER}/<< pipeline.parameters.container-registry-namespace >>"
-            REPO_TABULAR="${IMAGE_PREFIX}/<< pipeline.parameters.docker-image-tabular >>"
-            REPO_METRICS="${IMAGE_PREFIX}/<< pipeline.parameters.docker-image-metrics >>"
-            # Five distinct tags per image (SCM version, SHA short/long, branch, optional git tag (always v-prefixed, e.g. v0.4.1)).
-            # Docker tags allow only [a-zA-Z0-9_.-]; setuptools_scm can output e.g. 0.4.0.dev5+gabc1234
-            DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
-            DOCKER_TAG_SHA_SHORT="${CIRCLE_SHA1:0:7}"
-            DOCKER_TAG_SHA_LONG="$CIRCLE_SHA1"
-            # CIRCLE_BRANCH is often empty on tag pipelines; skip an invalid empty Docker tag.
-            DOCKER_TAG_BRANCH=$(printf '%s' "${CIRCLE_BRANCH:-}" | tr '/' '-' | sed 's/[^a-zA-Z0-9_.-]/-/g')
             DOCKER_TAG_GIT="${CIRCLE_TAG:-$(git describe --tags --exact-match 2>/dev/null || true)}"
             build_and_push() {
               local app_module="$1"
-              local repo="$2"
+              local IMAGE_NAME="$2"
+              local repo="${IMAGE_PREFIX}/${IMAGE_NAME}"
               docker build --build-arg APP_MODULE="$app_module" \
-                -t "${repo}:${DOCKER_TAG_SCM}" \
-                -t "${repo}:${DOCKER_TAG_SHA_SHORT}" \
-                -t "${repo}:${DOCKER_TAG_SHA_LONG}" \
-                ${DOCKER_TAG_BRANCH:+-t "${repo}:${DOCKER_TAG_BRANCH}"} \
+                -t "${repo}:${version}" \
+                $([ "${CIRCLE_BRANCH:-}" = "main" ] && echo -t "${repo}:latest") \
                 ${DOCKER_TAG_GIT:+-t "${repo}:${DOCKER_TAG_GIT}"} \
                 .
-              docker push "${repo}:${DOCKER_TAG_SCM}"
-              docker push "${repo}:${DOCKER_TAG_SHA_SHORT}"
-              docker push "${repo}:${DOCKER_TAG_SHA_LONG}"
-              if [ -n "$DOCKER_TAG_BRANCH" ]; then
-                docker push "${repo}:${DOCKER_TAG_BRANCH}"
+              docker push "${repo}:${version}"
+              if [ "${CIRCLE_BRANCH:-}" = "main" ]; then
+                docker push "${repo}:latest"
               fi
               if [ -n "$DOCKER_TAG_GIT" ]; then
                 docker push "${repo}:${DOCKER_TAG_GIT}"
               fi
             }
-            build_and_push api_tabular.tabular.app:app_factory "$REPO_TABULAR"
-            build_and_push api_tabular.metrics.app:app_factory "$REPO_METRICS"
+            build_and_push api_tabular.tabular.app:app_factory "<< pipeline.parameters.docker-image-tabular >>"
+            build_and_push api_tabular.metrics.app:app_factory "<< pipeline.parameters.docker-image-metrics >>"
 
   publish-pypi:
     docker:
