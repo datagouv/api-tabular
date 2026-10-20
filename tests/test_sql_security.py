@@ -1,5 +1,7 @@
 """The SQL endpoint: validation of the queries, then the sandbox of the connections running them."""
 
+from pathlib import Path
+
 import duckdb
 import pytest
 
@@ -50,6 +52,10 @@ CATALOG_STATEMENTS = [
     # a CTE name must not unlock a qualified table, nor a table outside of the CTE's scope
     "WITH duckdb_views AS (SELECT 1) SELECT sql FROM system.main.duckdb_views",
     "SELECT * FROM (WITH duckdb_databases AS (SELECT 1) SELECT 1), duckdb_databases",
+    # in its body, a CTE only sees the CTEs declared before it: DuckDB binds the other names,
+    # its own included, to the catalog
+    "WITH x AS (SELECT sql FROM duckdb_views), duckdb_views AS (SELECT 1 AS sql) SELECT * FROM x",
+    "WITH duckdb_views AS (SELECT sql FROM duckdb_views) SELECT * FROM duckdb_views",
 ]
 
 MULTI_STATEMENTS = [
@@ -65,6 +71,7 @@ ALLOWED_STATEMENTS = [
     "WITH a AS (SELECT * FROM resource) SELECT count(*) FROM a",
     "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT n FROM b",
     "WITH a AS (SELECT 1 AS n) SELECT * FROM (SELECT n FROM a)",
+    "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r",
     "SELECT __id FROM resource WHERE __id < 10 ORDER BY __id",
     "SELECT unnest([1, 2, 3]) AS x",
     "SELECT * FROM generate_series(1, 5)",
@@ -157,9 +164,21 @@ def test_sandbox_denies_anything_else(sandboxed_connection, statement):
         sandboxed_connection.execute(statement)
 
 
-def test_sandbox_denies_files_outside_the_prefix(sandboxed_connection, tmp_path):
-    outside = tmp_path / "outside.parquet"
+@pytest.mark.parametrize(
+    "outside",
+    [
+        "{tmp}/outside.parquet",
+        # the prefix is a directory, not the start of a path
+        "{prefix}_private/outside.parquet",
+        "{prefix}/../outside.parquet",
+    ],
+)
+def test_sandbox_denies_files_outside_the_prefix(
+    sandboxed_connection, parquet_dir, tmp_path, outside
+):
+    path = Path(outside.format(tmp=tmp_path, prefix=parquet_dir))
+    path.parent.mkdir(exist_ok=True)
     with duckdb.connect(":memory:") as conn:
-        conn.execute(f"COPY (SELECT 1 AS a) TO '{outside}' (FORMAT parquet)")
+        conn.execute(f"COPY (SELECT 1 AS a) TO '{path}' (FORMAT parquet)")
     with pytest.raises(duckdb.Error):
-        sandboxed_connection.execute(f"SELECT * FROM read_parquet('{outside}')")
+        sandboxed_connection.execute(f"SELECT * FROM read_parquet('{path}')")

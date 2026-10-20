@@ -11,10 +11,13 @@ from tabular_duckdb.errors import QueryException
 from tabular_duckdb.main import build_link_with_page
 
 from .conftest import (
+    CORRUPT_RESOURCE_ID,
     FLOATS_RESOURCE_ID,
     HEADER,
     INSPECTED_RESOURCE_ID,
     INSPECTION,
+    RARE_NULL_RESOURCE_ID,
+    RARE_NULL_TOTAL_LINES,
     RESOURCE_ID,
     TOTAL_LINES,
     UNKNOWN_RESOURCE_ID,
@@ -49,6 +52,27 @@ def test_health_when_duckdb_is_down(client, monkeypatch):
     response = client.get("/health/")
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "DB unavailable"
+
+
+def test_health_when_the_storage_denies_the_base_url(client, storage, monkeypatch):
+    """A 403 on the base URL still proves that the storage answers."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/403")
+    assert client.get("/health/").status_code == 200
+
+
+def test_health_when_the_storage_is_unreachable(client, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", "http://127.0.0.1:1")
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Storage unavailable"
+
+
+def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
+    monkeypatch.setattr(settings, "HTTP_TIMEOUT", 1)
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Storage unavailable"
 
 
 def test_query_timeout(client, monkeypatch):
@@ -122,6 +146,17 @@ def test_malformed_resource_id(client):
     assert response.text == "404: Not Found"
 
 
+@pytest.mark.parametrize("suffix", ["", "data/", "sql/?q=SELECT 1 AS n FROM resource"])
+def test_invalid_resource_file(client, parquet_dir, suffix):
+    response = client.get(f"/api/resources/{CORRUPT_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 400
+    error = response.json()["errors"][0]
+    assert error["title"] == "Invalid resource file"
+    # the storage location is not disclosed
+    assert parquet_dir not in error["detail"]
+    assert f"<resource>/{CORRUPT_RESOURCE_ID}.parquet" in error["detail"]
+
+
 @pytest.mark.parametrize(
     "path",
     ["/health/", f"/api/resources/{RESOURCE_ID}/", f"/api/resources/{RESOURCE_ID}/data/"],
@@ -152,6 +187,22 @@ def test_resource_profile(client):
     # SUMMARIZE renders min and max as strings, whatever the column type
     assert profile["profile"]["decompte"]["min"] == "0"
     assert profile["profile"]["decompte"]["max"] == "6"
+    assert profile["profile"]["Nom de l'élu"]["nb_missing_values"] == TOTAL_LINES // 5
+    assert profile["profile"]["decompte"]["nb_missing_values"] == 0
+
+
+def test_resource_profile_counts_a_rare_missing_value(client):
+    response = client.get(f"/api/resources/{RARE_NULL_RESOURCE_ID}/profile/")
+    profile = response.json()["profile"]
+    assert profile["total_lines"] == RARE_NULL_TOTAL_LINES
+    assert profile["profile"]["value"]["nb_missing_values"] == 1
+
+
+def test_resource_profile_without_statistics(client, monkeypatch):
+    monkeypatch.setattr(settings, "PROFILE_STATS", False)
+    profile = client.get(f"/api/resources/{RESOURCE_ID}/profile/").json()["profile"]
+    assert profile["total_lines"] == TOTAL_LINES
+    assert profile["profile"] == {}
 
 
 def test_resource_profile_from_the_parquet_inspection(client):
@@ -313,6 +364,13 @@ def test_resource_data_value_not_castable(client):
     assert response.status_code == 400
 
 
+def test_resource_data_database_error(client):
+    """An error only DuckDB detects, such as the average of a text column."""
+    response = client.get(f"{DATA_URL}?id__avg")
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Database error"
+
+
 def test_resource_data_or_group(client):
     response = client.get(DATA_URL, params={"or": '("Nom de l\'élu"__isnull,decompte__exact.6)'})
     assert response.status_code == 200
@@ -432,6 +490,32 @@ def test_resource_data_json(client):
     assert response.text.endswith("]\n")
 
 
+def test_resource_data_downloads_in_several_chunks(client, monkeypatch):
+    monkeypatch.setattr(settings, "STREAM_CHUNK_SIZE", 7)
+    rows = client.get(f"{DATA_URL}json/").json()
+    assert [row["__id"] for row in rows] == list(range(1, TOTAL_LINES + 1))
+    lines = list(csv.reader(io.StringIO(client.get(f"{DATA_URL}csv/").text)))
+    assert lines[0] == ["__id"] + HEADER
+    assert [line[0] for line in lines[1:]] == [str(i) for i in range(1, TOTAL_LINES + 1)]
+
+
+def test_resource_data_downloads_without_any_row(client):
+    """The CSV keeps its header, so that it can still be read with its columns."""
+    csv_response = client.get(f"{DATA_URL}csv/?decompte__exact=99")
+    assert list(csv.reader(io.StringIO(csv_response.text))) == [["__id"] + HEADER]
+    assert client.get(f"{DATA_URL}json/?decompte__exact=99").json() == []
+
+
+@pytest.mark.parametrize("suffix", ["data/", "data/json/"])
+def test_resource_data_non_finite_floats_in_json(client, suffix):
+    """NaN and infinities are not valid JSON."""
+    response = client.get(f"/api/resources/{FLOATS_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 200
+    body = response.json()
+    rows = body["data"] if suffix == "data/" else body
+    assert [row["value"] for row in rows] == [None, None, None, None, 1.5]
+
+
 @pytest.mark.parametrize("output", ["csv", "json"])
 def test_resource_data_download_too_long(client, monkeypatch, output):
     monkeypatch.setattr(settings, "BATCH_SIZE", 5)
@@ -519,6 +603,34 @@ def test_sql_busy_pool(client, monkeypatch):
     assert response.json()["errors"][0]["title"] == "Server busy"
 
 
+def test_sql_rejects_a_cte_referenced_before_its_declaration(client, parquet_dir):
+    """DuckDB would bind the name to its system view, which holds the storage location."""
+    query = (
+        "WITH x AS (SELECT sql FROM duckdb_views), duckdb_views AS (SELECT 1 AS sql) "
+        "SELECT * FROM x"
+    )
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 400
+    assert parquet_dir not in response.text
+
+
+def test_sql_timeout_then_the_connection_is_reused(client, monkeypatch):
+    monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
+    response = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/",
+        params={"q": "SELECT sum(hash(range)) AS n FROM range(10000000000)"},
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Query timeout"
+    # every connection of the pool, the interrupted one included, still answers
+    for _ in range(settings.SQL_POOL_SIZE):
+        response = client.get(
+            f"/api/resources/{RESOURCE_ID}/sql/",
+            params={"q": "SELECT count(*) AS n FROM resource"},
+        )
+        assert response.json()["data"] == [{"n": TOTAL_LINES}]
+
+
 def test_sql_still_works_after_a_rejected_query(client):
     client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "DELETE FROM resource"})
     response = client.get(
@@ -530,5 +642,5 @@ def test_sql_still_works_after_a_rejected_query(client):
 
 def test_doc_is_served(client):
     assert client.get("/api/doc").status_code == 200
-    # the path where aiohttp_swagger served the spec
+    # the path where the PostgREST-based API served its spec
     assert "Tabular API" in client.get("/api/doc/swagger.json").json()["info"]["title"]

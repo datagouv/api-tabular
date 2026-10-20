@@ -1,3 +1,4 @@
+from pydantic import PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,13 +40,13 @@ class Settings(BaseSettings):
     # every query of the data endpoints is interrupted after QUERY_TIMEOUT seconds, and at most
     # QUERY_WORKERS of them run at once
     QUERY_TIMEOUT: int = 30
-    QUERY_WORKERS: int = 8
+    QUERY_WORKERS: PositiveInt = 8
     RESOURCE_CACHE_TTL: int = 300
     PROFILE_STATS: bool = True
 
     # read-only SQL endpoint
-    SQL_POOL_SIZE: int = 4
-    SQL_MAX_ROWS: int = 10000
+    SQL_POOL_SIZE: PositiveInt = 4
+    SQL_MAX_ROWS: PositiveInt = 10000
     SQL_TIMEOUT: int = 30
     SQL_MAX_LENGTH: int = 10000
 
@@ -53,8 +54,9 @@ class Settings(BaseSettings):
     SENTRY_SAMPLE_RATE: float = 1.0
 
     @property
-    def has_s3_credentials(self) -> bool:
-        return bool(self.S3_ACCESS_KEY and self.S3_SECRET_KEY)
+    def storage_over_http(self) -> bool:
+        """An s3:// base URL is only reachable through DuckDB, not with a plain HTTP request."""
+        return self.PARQUET_BASE_URL.startswith(("http://", "https://"))
 
     def object_url(self, resource_id: str) -> str:
         return f"{self.PARQUET_BASE_URL.rstrip('/')}/{resource_id}.parquet"

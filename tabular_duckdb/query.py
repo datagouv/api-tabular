@@ -7,9 +7,6 @@ from typing import Any
 from urllib.parse import unquote_plus
 from uuid import UUID
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.errors import QueryException
-
 # synthetic row identifier, kept for compatibility with the PostgREST-based API
 ID_COLUMN = "__id"
 
@@ -97,17 +94,6 @@ def decode_structure(value: str) -> str:
     for encoded, character in STRUCTURAL_CHARACTERS:
         value = value.replace(encoded, character)
     return value
-
-
-def build_offset(page: int, page_size: int) -> int:
-    if page_size > settings.PAGE_SIZE_MAX:
-        raise QueryException(
-            400,
-            None,
-            "Invalid query string",
-            f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}",
-        )
-    return page_size * (page - 1) if page > 1 else 0
 
 
 def parse_sort(value: str) -> str:
@@ -312,8 +298,6 @@ def parse_operator(
     top_level: bool = False,
 ) -> tuple[str, list]:
     """Translate `or=(a__exact.1,and(b__less.2,c__isnotnull))` into a parenthesized SQL group."""
-    if not query.endswith(")"):
-        raise ValueError(f"argument '{query}' could not be parsed")
     match = re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query)
     if not match:
         raise ValueError(f"argument '{query}' could not be parsed")

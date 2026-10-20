@@ -1,5 +1,7 @@
 import sentry_sdk
 
+from tabular_duckdb.config import settings
+
 
 class QueryException(Exception):
     """Error rendered with the same body as the PostgREST-based API."""
@@ -13,6 +15,23 @@ class QueryException(Exception):
 
     def body(self) -> dict[str, list[dict[str, str | None]]]:
         return {"errors": [{"code": self.error_code, "title": self.title, "detail": self.detail}]}
+
+
+def safe_message(message: str) -> str:
+    """Do not leak the storage location nor credentials in DuckDB error messages."""
+    # the `LINE 1: ...` context quotes the SQL that ran, which reads the parquet file by its
+    # location and is cut at an arbitrary length: no replacement can catch a truncated prefix.
+    # It is never what the client wrote anyway, even on /sql/ where the query is rebuilt.
+    redacted = message.partition("\nLINE ")[0]
+    redacted = redacted.replace(settings.PARQUET_BASE_URL.rstrip("/") + "/", "<resource>/")
+    for secret in (settings.S3_SECRET_KEY, settings.S3_ACCESS_KEY):
+        if secret:
+            redacted = redacted.replace(secret, "***")
+    return redacted.strip()
+
+
+def invalid_query_string(detail: str) -> QueryException:
+    return QueryException(400, None, "Invalid query string", detail)
 
 
 def query_timeout(seconds: float) -> QueryException:

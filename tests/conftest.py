@@ -1,4 +1,7 @@
 import json
+import socket
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import duckdb
 import pytest
@@ -76,6 +79,16 @@ SELECT * FROM (
 ) AS t(value)
 """
 
+# a single NULL among many rows: SUMMARIZE rounds its percentage of NULLs down to 0
+RARE_NULL_RESOURCE_ID = "aaaaaaaa-9999-bbbb-0000-cccccccccccc"
+RARE_NULL_TOTAL_LINES = 30001
+RARE_NULL_RESOURCE_SQL = f"""
+SELECT CASE WHEN i = 0 THEN NULL ELSE i END AS value FROM range({RARE_NULL_TOTAL_LINES}) AS t(i)
+"""
+
+# not a parquet file, whose DuckDB error message holds the path of the file
+CORRUPT_RESOURCE_ID = "aaaaaaaa-dead-bbbb-beef-cccccccccccc"
+
 
 @pytest.fixture(scope="session")
 def parquet_dir(tmp_path_factory) -> str:
@@ -93,6 +106,11 @@ def parquet_dir(tmp_path_factory) -> str:
             f"COPY ({FLOATS_RESOURCE_SQL}) TO '{directory}/{FLOATS_RESOURCE_ID}.parquet' "
             "(FORMAT parquet)"
         )
+        conn.execute(
+            f"COPY ({RARE_NULL_RESOURCE_SQL}) TO '{directory}/{RARE_NULL_RESOURCE_ID}.parquet' "
+            "(FORMAT parquet)"
+        )
+    (directory / f"{CORRUPT_RESOURCE_ID}.parquet").write_bytes(b"not a parquet")
     return str(directory)
 
 
@@ -109,6 +127,40 @@ def client(parquet_dir):
 @pytest.fixture
 def base_url() -> str:
     return "http://testserver"
+
+
+LAST_MODIFIED = "Mon, 01 Jan 2024 12:00:00 GMT"
+
+
+class StorageHandler(BaseHTTPRequestHandler):
+    """Answers a HEAD on `/<status>/...` with that status, and a Last-Modified date on 200."""
+
+    def do_HEAD(self) -> None:
+        status = int(self.path.strip("/").split("/")[0])
+        self.send_response(status)
+        if status == 200:
+            self.send_header("Last-Modified", LAST_MODIFIED)
+        self.end_headers()
+
+    def log_message(self, *args) -> None:
+        pass
+
+
+@pytest.fixture(scope="session")
+def storage():
+    """Base URL of an HTTP storage answering the status written in the path."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), StorageHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture
+def silent_storage():
+    """Base URL of a storage accepting connections but never answering."""
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        yield f"http://127.0.0.1:{server.getsockname()[1]}"
 
 
 @pytest.fixture

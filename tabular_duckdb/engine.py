@@ -4,12 +4,13 @@ import threading
 from collections.abc import AsyncIterator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import duckdb
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.errors import QueryException, query_timeout, server_busy
+from tabular_duckdb.errors import query_timeout, server_busy
 
 T = TypeVar("T")
 
@@ -23,6 +24,16 @@ def quote_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+@dataclass(frozen=True)
+class QueryResult:
+    columns: list[str]
+    rows: list[tuple]
+
+
+def column_names(cursor: duckdb.DuckDBPyConnection) -> list[str]:
+    return [description[0] for description in cursor.description or []]
+
+
 def install_extensions() -> None:
     """Download the extensions once, so that runtime only has to LOAD them."""
     with duckdb.connect(":memory:") as conn:
@@ -31,15 +42,17 @@ def install_extensions() -> None:
 
 
 class DuckDBEngine:
-    """Owns the DuckDB connections: one for the API queries, a locked-down pool for user SQL."""
+    """Owns the DuckDB connections: one for the API queries, a locked-down pool for user SQL.
 
-    def __init__(self) -> None:
-        self._conn: duckdb.DuckDBPyConnection | None = None
-        self._sql_pool: asyncio.Queue[duckdb.DuckDBPyConnection] | None = None
-        # the data queries get their own threads: when they saturate, the default executor
-        # stays free for /health/, which must keep answering
-        self._executor: ThreadPoolExecutor | None = None
-        self._slots: asyncio.Semaphore | None = None
+    Everything is set by `start()`, which the application lifespan runs before serving any
+    request."""
+
+    _conn: duckdb.DuckDBPyConnection
+    _sql_pool: asyncio.Queue[duckdb.DuckDBPyConnection]
+    # the data queries get their own threads: when they saturate, the default executor
+    # stays free for /health/, which must keep answering
+    _executor: ThreadPoolExecutor
+    _slots: asyncio.Semaphore
 
     # --- lifecycle -----------------------------------------------------------------
 
@@ -60,7 +73,7 @@ class DuckDBEngine:
         if metadata_cache:
             conn.execute("SET enable_http_metadata_cache=true")
             conn.execute("SET parquet_metadata_cache=true")
-        if settings.has_s3_credentials:
+        if settings.S3_ACCESS_KEY and settings.S3_SECRET_KEY:
             # only needed for a private bucket, public files are read over plain HTTPS
             conn.execute(
                 f"""
@@ -112,39 +125,24 @@ class DuckDBEngine:
 
     async def start(self) -> None:
         self._conn = await asyncio.to_thread(self._new_main_connection)
-        workers = max(1, settings.QUERY_WORKERS)
-        self._executor = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="duckdb")
-        self._slots = asyncio.Semaphore(workers)
-        pool: asyncio.Queue[duckdb.DuckDBPyConnection] = asyncio.Queue()
-        for _ in range(max(1, settings.SQL_POOL_SIZE)):
-            pool.put_nowait(await asyncio.to_thread(self._new_sql_connection))
-        self._sql_pool = pool
+        self._executor = ThreadPoolExecutor(
+            max_workers=settings.QUERY_WORKERS, thread_name_prefix="duckdb"
+        )
+        self._slots = asyncio.Semaphore(settings.QUERY_WORKERS)
+        self._sql_pool = asyncio.Queue()
+        for _ in range(settings.SQL_POOL_SIZE):
+            self._sql_pool.put_nowait(await asyncio.to_thread(self._new_sql_connection))
 
     async def stop(self) -> None:
-        if self._sql_pool is not None:
-            while not self._sql_pool.empty():
-                self._sql_pool.get_nowait().close()
-            self._sql_pool = None
-        if self._executor is not None:
-            self._executor.shutdown(wait=False, cancel_futures=True)
-            self._executor = None
-            self._slots = None
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
-
-    @property
-    def connection(self) -> duckdb.DuckDBPyConnection:
-        if self._conn is None:
-            raise QueryException(503, None, "DB unavailable", "DuckDB is not initialized yet")
-        return self._conn
+        while not self._sql_pool.empty():
+            self._sql_pool.get_nowait().close()
+        self._executor.shutdown(wait=False, cancel_futures=True)
+        self._conn.close()
 
     # --- queries -------------------------------------------------------------------
 
     async def _run(self, cursor: duckdb.DuckDBPyConnection, call: Callable[[], T]) -> T:
         """Run a blocking call on the data threads, interrupted after QUERY_TIMEOUT."""
-        if self._executor is None or self._slots is None:
-            raise QueryException(503, None, "DB unavailable", "DuckDB is not initialized yet")
         timeout = settings.QUERY_TIMEOUT
         try:
             await asyncio.wait_for(self._slots.acquire(), timeout)
@@ -177,16 +175,13 @@ class DuckDBEngine:
         finally:
             watchdog.cancel()
 
-    async def query(
-        self, sql: str, params: Sequence[Any] | None = None
-    ) -> tuple[list[str], list[tuple]]:
-        """Run a query on a dedicated cursor and return (column names, rows)."""
-        cursor = self.connection.cursor()
+    async def query(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
+        """Run a query on a dedicated cursor."""
+        cursor = self._conn.cursor()
 
-        def run() -> tuple[list[str], list[tuple]]:
+        def run() -> QueryResult:
             cursor.execute(sql, list(params or []))
-            columns = [description[0] for description in cursor.description or []]
-            return columns, cursor.fetchall()
+            return QueryResult(column_names(cursor), cursor.fetchall())
 
         try:
             return await self._run(cursor, run)
@@ -194,25 +189,31 @@ class DuckDBEngine:
             cursor.close()
 
     async def query_value(self, sql: str, params: Sequence[Any] | None = None) -> Any:
-        _, rows = await self.query(sql, params)
+        rows = (await self.query(sql, params)).rows
         return rows[0][0] if rows else None
 
     async def stream(
         self, sql: str, params: Sequence[Any] | None = None
-    ) -> AsyncIterator[tuple[list[str], list[tuple]]]:
-        """Yield (column names, rows) chunks, keeping a cursor open across chunks.
+    ) -> AsyncIterator[QueryResult]:
+        """Yield the result in chunks, keeping a cursor open across chunks.
 
-        The timeout applies to each chunk, not to the whole download, whose pace is the
-        client's."""
-        cursor = self.connection.cursor()
+        The first chunk is yielded even when empty, so that a CSV export without any row still
+        gets its header. The timeout applies to each chunk, not to the whole download, whose
+        pace is the client's."""
+        cursor = self._conn.cursor()
+
+        async def fetch() -> list[tuple]:
+            return await self._run(cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE))
+
         try:
             await self._run(cursor, lambda: cursor.execute(sql, list(params or [])))
-            columns = [description[0] for description in cursor.description or []]
-            while True:
-                rows = await self._run(cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE))
-                if not rows:
-                    break
-                yield columns, rows
+            columns = column_names(cursor)
+            rows = await fetch()
+            yield QueryResult(columns, rows)
+            while rows:
+                rows = await fetch()
+                if rows:
+                    yield QueryResult(columns, rows)
         finally:
             cursor.close()
 
@@ -220,7 +221,7 @@ class DuckDBEngine:
         """Liveness check, run on the default executor so that busy data threads don't fail it."""
 
         def run() -> None:
-            cursor = self.connection.cursor()
+            cursor = self._conn.cursor()
             try:
                 cursor.execute("SELECT 1").fetchall()
             finally:
@@ -233,8 +234,6 @@ class DuckDBEngine:
     @asynccontextmanager
     async def sql_connection(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
         """Borrow a locked-down connection from the pool for the /sql/ endpoint."""
-        if self._sql_pool is None:
-            raise QueryException(503, None, "DB unavailable", "DuckDB is not initialized yet")
         try:
             # a few slow queries can hold every connection, the others must not queue forever
             conn = await asyncio.wait_for(self._sql_pool.get(), settings.SQL_TIMEOUT)
@@ -259,16 +258,13 @@ class DuckDBEngine:
             return self._new_sql_connection()
 
     @staticmethod
-    def run_with_timeout(
-        conn: duckdb.DuckDBPyConnection, sql: str, timeout: int
-    ) -> tuple[list[str], list[tuple]]:
+    def run_with_timeout(conn: duckdb.DuckDBPyConnection, sql: str, timeout: float) -> QueryResult:
         """Blocking execution interrupted after `timeout` seconds (run in a thread)."""
         watchdog = threading.Timer(timeout, conn.interrupt)
         watchdog.start()
         try:
             cursor = conn.execute(sql)
-            columns = [description[0] for description in cursor.description or []]
-            return columns, cursor.fetchall()
+            return QueryResult(column_names(cursor), cursor.fetchall())
         finally:
             watchdog.cancel()
 

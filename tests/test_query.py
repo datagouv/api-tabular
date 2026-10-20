@@ -34,7 +34,7 @@ def expected_ids(predicate) -> list[int]:
 def source(duckdb_connection, parquet_dir, monkeypatch):
     """The test resource, exposed exactly like the API does (`__id` included)."""
     monkeypatch.setattr("tabular_duckdb.resources.settings.PARQUET_BASE_URL", parquet_dir)
-    resource = Resource(resource_id=RESOURCE_ID, created_at=None, total_lines=TOTAL_LINES)
+    resource = Resource(resource_id=RESOURCE_ID, created_at=None)
     duckdb_connection.execute(f"CREATE VIEW source AS SELECT * FROM {resource.source_sql}")
     columns = {
         name: kind for name, kind, *_ in duckdb_connection.execute("DESCRIBE source").fetchall()
@@ -202,6 +202,75 @@ def test_query_text_min_and_max_follow_the_french_order(names):
 def test_query_text_equality_stays_exact(names):
     assert [r["name"] for r in run_on_names(names, ["name__exact=anne"])] == ["anne"]
     assert [r["name"] for r in run_on_names(names, ["name__in=Anne,Elm"])] == ["Elm", "Anne"]
+
+
+def test_query_in_list_keeps_the_commas_of_quoted_values():
+    parsed = build_query(['name__in="a,b",c'], {"__id": "BIGINT", "name": "VARCHAR"})
+    assert parsed.params == ["a,b", "c"]
+
+
+FIRST_UUID = "6f1c1e9a-2b3c-4d5e-8f90-0a1b2c3d4e5f"
+SECOND_UUID = "7a2d2f0b-3c4d-4e5f-9a01-1b2c3d4e5f60"
+
+
+@pytest.fixture
+def typed(duckdb_connection):
+    """Columns of the types whose filter values need a conversion of their own."""
+    duckdb_connection.execute(
+        f"""
+        CREATE TABLE typed AS SELECT * FROM (VALUES
+            (1, TIMESTAMP '2024-01-01 05:00:00', TIMESTAMPTZ '2024-01-01 05:00:00+00',
+             1.25::DECIMAL(10, 2), '{FIRST_UUID}'::UUID, TIME '08:30:00'),
+            (2, TIMESTAMP '2024-01-02 12:00:00', TIMESTAMPTZ '2024-01-02 12:00:00+00',
+             2.50::DECIMAL(10, 2), '{SECOND_UUID}'::UUID, TIME '17:00:00'),
+            (3, TIMESTAMP '2024-01-03 00:00:00', TIMESTAMPTZ '2024-01-03 00:00:00+00',
+             3.75::DECIMAL(10, 2), NULL, TIME '23:59:00')
+        ) AS t(__id, ts, tstz, montant, uid, heure)
+        """
+    )
+    columns = {
+        name: kind for name, kind, *_ in duckdb_connection.execute("DESCRIBE typed").fetchall()
+    }
+    return duckdb_connection, columns
+
+
+def typed_ids(typed, argument: str) -> list[int]:
+    conn, columns = typed
+    sql, params = build_query([argument], columns).data_sql("typed")
+    return [r[0] for r in conn.execute(sql, params).fetchall()]
+
+
+@pytest.mark.parametrize(
+    "argument, expected",
+    [
+        ("ts__exact=2024-01-01T05:00:00", [1]),
+        # a date compares with a timestamp as its midnight
+        ("ts__greater=2024-01-02", [2, 3]),
+        # `+` means a space in a query string
+        ("tstz__strictly_less=2024-01-02T00:00:00%2B00:00", [1]),
+        ("montant__less=2.5", [1, 2]),
+        (f"uid__exact={SECOND_UUID}", [2]),
+        (f"uid__in={FIRST_UUID},{SECOND_UUID}", [1, 2]),
+        ("heure__greater=12:00", [2, 3]),
+    ],
+)
+def test_query_filters_on_typed_columns(typed, argument, expected):
+    assert typed_ids(typed, argument) == expected
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "ts__exact=hier",
+        "tstz__less=2024-13-01",
+        "montant__less=abc",
+        "uid__exact=12",
+        "heure__exact=25:00",
+    ],
+)
+def test_query_value_not_castable_to_a_typed_column(typed, argument):
+    with pytest.raises(ValueError, match="invalid value"):
+        typed_ids(typed, argument)
 
 
 @pytest.mark.parametrize(

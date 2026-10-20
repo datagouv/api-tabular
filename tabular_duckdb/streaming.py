@@ -22,13 +22,13 @@ def check_output_size(total: int) -> None:
 
 async def stream_csv(sql: str, params: list) -> AsyncIterator[bytes]:
     header_written = False
-    async for columns, rows in engine.stream(sql, params):
+    async for chunk in engine.stream(sql, params):
         buffer = io.StringIO()
         writer = csv.writer(buffer, lineterminator="\n")
         if not header_written:
-            writer.writerow(columns)
+            writer.writerow(chunk.columns)
             header_written = True
-        for row in rows:
+        for row in chunk.rows:
             writer.writerow([as_csv_value(value) for value in row])
         yield buffer.getvalue().encode("utf-8")
 
@@ -36,8 +36,10 @@ async def stream_csv(sql: str, params: list) -> AsyncIterator[bytes]:
 async def stream_json(sql: str, params: list) -> AsyncIterator[bytes]:
     separator = ""
     yield b"["
-    async for columns, rows in engine.stream(sql, params):
-        chunk = ",".join(json.dumps(row, ensure_ascii=False) for row in rows_to_json(columns, rows))
-        yield (separator + chunk).encode("utf-8")
+    async for chunk in engine.stream(sql, params):
+        rows = rows_to_json(chunk.columns, chunk.rows)
+        yield (separator + ",".join(json.dumps(row, ensure_ascii=False) for row in rows)).encode(
+            "utf-8"
+        )
         separator = ","
     yield b"]\n"

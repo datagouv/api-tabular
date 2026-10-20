@@ -8,7 +8,8 @@ Defence in depth, in order:
 3. no table function at all in the tree, which rules out `read_parquet`, `read_csv`, `read_text`,
    `glob`, `duckdb_secrets()`... hence any read of an arbitrary path with our S3 credentials.
 4. the only base table allowed is the resource view (a bare s3:// path in a FROM clause is parsed
-   as a base table named after the path, so it is rejected here too). CTEs are allowed.
+   as a base table named after the path, so it is rejected here too). CTEs are allowed, where
+   DuckDB binds them to the CTE and not to a table of the catalog.
 5. what gets executed is not the user string but the SQL rebuilt by DuckDB from the validated
    tree, so comments and anything trailing cannot survive the validation.
 6. execution happens on a sandboxed connection (`enable_external_access=false` with only the
@@ -26,8 +27,8 @@ import duckdb
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
-from tabular_duckdb.errors import QueryException, query_timeout
-from tabular_duckdb.resources import Resource
+from tabular_duckdb.errors import QueryException, query_timeout, safe_message
+from tabular_duckdb.resources import Resource, read_error
 
 # the resource is always exposed under this table name
 RESOURCE_TABLE = "resource"
@@ -69,13 +70,24 @@ def _collect(
     """Walk the serialized query tree and collect what we need to check."""
     if isinstance(node, dict):
         cte_map = node.get("cte_map")
-        if isinstance(cte_map, dict):
-            # the CTEs of a query are visible in the whole query, their own bodies included
-            visible_ctes = visible_ctes | {
-                str(entry["key"]).lower()
-                for entry in cte_map.get("map") or []
-                if isinstance(entry, dict) and entry.get("key")
-            }
+        entries = cte_map.get("map") or [] if isinstance(cte_map, dict) else []
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("key"):
+                continue
+            name = str(entry["key"]).lower()
+            body = entry.get("value") or {}
+            body_type = (body.get("query") or {}).get("node", {}).get("type")
+            # in the body of a CTE, DuckDB binds the CTEs declared after it, and its own name
+            # unless it is recursive, to the catalog: `WITH x AS (SELECT * FROM duckdb_views),
+            # duckdb_views AS (...)` reads the system view
+            _collect(
+                body,
+                tables,
+                table_functions,
+                functions,
+                (visible_ctes | {name}) if body_type == "RECURSIVE_CTE_NODE" else visible_ctes,
+            )
+            visible_ctes = visible_ctes | {name}
         node_type = node.get("type")
         if node_type == "BASE_TABLE":
             tables.add(
@@ -91,8 +103,9 @@ def _collect(
             table_functions.add((function.get("function_name") or "").lower())
         elif node_type == "FUNCTION":
             functions.add((node.get("function_name") or "").lower())
-        for value in node.values():
-            _collect(value, tables, table_functions, functions, visible_ctes)
+        for key, value in node.items():
+            if key != "cte_map":
+                _collect(value, tables, table_functions, functions, visible_ctes)
     elif isinstance(node, list):
         for value in node:
             _collect(value, tables, table_functions, functions, visible_ctes)
@@ -177,7 +190,7 @@ class SqlResult:
 
 async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
     """Validate then run the query, within SQL_TIMEOUT once a connection is borrowed."""
-    row_limit = max(1, settings.SQL_MAX_ROWS)
+    row_limit = settings.SQL_MAX_ROWS
     view_sql = (
         f"CREATE OR REPLACE TEMP VIEW {RESOURCE_TABLE} AS SELECT * FROM {resource.source_sql}"
     )
@@ -192,36 +205,22 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         except duckdb.InterruptException as exc:
             raise query_timeout(settings.SQL_TIMEOUT) from exc
         except duckdb.Error as exc:
-            raise QueryException(
-                400,
-                None,
-                "Invalid resource file",
-                f"Could not read the parquet file: {_safe_message(str(exc))}",
-            ) from exc
+            raise read_error(exc) from exc
         remaining = settings.SQL_TIMEOUT - (asyncio.get_running_loop().time() - started)
         try:
-            columns, rows = await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 engine.run_with_timeout, conn, wrapped_sql, max(remaining, 0.001)
             )
         except duckdb.InterruptException as exc:
             raise query_timeout(settings.SQL_TIMEOUT) from exc
         except duckdb.Error as exc:
-            raise invalid_query(_safe_message(str(exc))) from exc
+            raise invalid_query(safe_message(str(exc))) from exc
         execution_ms = round((asyncio.get_running_loop().time() - started) * 1000)
 
     return SqlResult(
-        columns=columns,
-        rows=rows[:row_limit],
-        truncated=len(rows) > row_limit,
+        columns=result.columns,
+        rows=result.rows[:row_limit],
+        truncated=len(result.rows) > row_limit,
         row_limit=row_limit,
         execution_ms=execution_ms,
     )
-
-
-def _safe_message(message: str) -> str:
-    """Do not leak the storage location nor credentials in DuckDB error messages."""
-    redacted = message.replace(settings.PARQUET_BASE_URL.rstrip("/") + "/", "<resource>/")
-    for secret in (settings.S3_SECRET_KEY, settings.S3_ACCESS_KEY):
-        if secret:
-            redacted = redacted.replace(secret, "***")
-    return redacted.strip()

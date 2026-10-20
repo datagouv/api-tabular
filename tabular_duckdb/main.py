@@ -18,9 +18,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tabular_duckdb import __version__
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine
-from tabular_duckdb.errors import QueryException, handle_exception
-from tabular_duckdb.query import ParsedQuery, build_offset, build_query
+from tabular_duckdb.engine import QueryResult, engine
+from tabular_duckdb.errors import (
+    QueryException,
+    handle_exception,
+    invalid_query_string,
+    safe_message,
+)
+from tabular_duckdb.query import ParsedQuery, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
@@ -65,11 +70,9 @@ def int_argument(request: Request, name: str, default: int) -> int:
     try:
         value = int(raw)
     except ValueError:
-        raise QueryException(
-            400, None, "Invalid query string", f"`{name}` must be an integer, got '{raw}'"
-        ) from None
+        raise invalid_query_string(f"`{name}` must be an integer, got '{raw}'") from None
     if value < 1:
-        raise QueryException(400, None, "Invalid query string", f"`{name}` must be greater than 0")
+        raise invalid_query_string(f"`{name}` must be greater than 0")
     return value
 
 
@@ -82,21 +85,19 @@ def parse_query(
     try:
         return build_query(query_string, columns, page_size, offset)
     except ValueError as exc:
-        raise QueryException(400, None, "Invalid query string", f"Malformed query: {exc}") from exc
+        raise invalid_query_string(f"Malformed query: {exc}") from exc
 
 
-async def run_query(
-    sql: str, params: list, resource_id: str | None = None
-) -> tuple[list[str], list[tuple]]:
+async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
     try:
         return await engine.query(sql, params)
     except duckdb.Error as exc:
-        raise handle_exception(400, "Database error", str(exc), resource_id) from exc
+        raise handle_exception(400, "Database error", safe_message(str(exc)), resource_id) from exc
 
 
 def check_storage() -> None:
     """The storage is considered up as soon as it answers, even with a 403 on the base URL."""
-    if not settings.PARQUET_BASE_URL.startswith(("http://", "https://")):
+    if not settings.storage_over_http:
         return
     try:
         head(settings.PARQUET_BASE_URL)
@@ -110,8 +111,7 @@ def check_storage() -> None:
 
 async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
     sql, params = parsed.count_sql(resource.source_sql)
-    _, rows = await run_query(sql, params, resource_id)
-    return int(rows[0][0])
+    return int((await run_query(sql, params, resource_id)).rows[0][0])
 
 
 @asynccontextmanager
@@ -149,7 +149,7 @@ app.add_middleware(
 
 
 def get(path: str, **kwargs: Any) -> Callable:
-    """GET route also answering HEAD, as aiohttp did for every GET route."""
+    """GET route also answering HEAD, like every GET route of the PostgREST-based API."""
     return app.api_route(path, methods=["GET", "HEAD"], **kwargs)
 
 
@@ -162,7 +162,7 @@ async def query_exception_handler(request: Request, exc: QueryException) -> JSON
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException
 ) -> PlainTextResponse:
-    # the plain text body aiohttp renders for its HTTP exceptions, e.g. "404: Not Found"
+    # the plain text body of the PostgREST-based API for its HTTP errors, e.g. "404: Not Found"
     return PlainTextResponse(
         f"{exc.status_code}: {HTTPStatus(exc.status_code).phrase}",
         status_code=exc.status_code,
@@ -208,16 +208,18 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     query_string = query_arguments(request)
     page = int_argument(request, "page", 1)
     page_size = int_argument(request, "page_size", settings.PAGE_SIZE_DEFAULT)
-    offset = build_offset(page, page_size)
+    if page_size > settings.PAGE_SIZE_MAX:
+        raise invalid_query_string(f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}")
+    offset = page_size * (page - 1)
 
     parsed = parse_query(query_string, resource.query_columns, page_size, offset)
     sql, params = parsed.data_sql(resource.source_sql)
-    columns, rows = await run_query(sql, params, rid)
+    result = await run_query(sql, params, rid)
     meta: dict[str, int] = {"page": page, "page_size": page_size}
     if parsed.is_aggregated:
         # like the PostgREST-based API, which reported no total for aggregated queries: a full
         # page is the only hint that another one may follow
-        has_next = len(rows) >= page_size
+        has_next = len(result.rows) >= page_size
     else:
         meta["total"] = await run_count(parsed, resource, rid)
         has_next = page_size + offset < meta["total"]
@@ -225,7 +227,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     path = f"/api/resources/{rid}/data/"
     return JSONResponse(
         {
-            "data": rows_to_json(columns, rows),
+            "data": rows_to_json(result.columns, result.rows),
             "links": {
                 "profile": resource_url(rid, "profile/"),
                 "swagger": resource_url(rid, "swagger/"),
@@ -292,7 +294,7 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
 async def health(request: Request) -> JSONResponse:
     try:
         await engine.ping()
-    except (duckdb.Error, QueryException) as exc:
+    except duckdb.Error as exc:
         raise QueryException(
             503, None, "DB unavailable", f"DuckDB is not available: {exc}"
         ) from exc
