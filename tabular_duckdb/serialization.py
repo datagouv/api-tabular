@@ -38,6 +38,11 @@ def as_csv_value(value: Any) -> str:
     """Render a DuckDB value for a CSV cell."""
     if value is None:
         return ""
+    if isinstance(value, float) and not math.isfinite(value):
+        # the text form of PostgreSQL, served by the PostgREST version
+        if math.isnan(value):
+            return "NaN"
+        return "Infinity" if value > 0 else "-Infinity"
     converted = jsonable(value)
     if isinstance(converted, bool):
         return "true" if converted else "false"

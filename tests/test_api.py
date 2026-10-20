@@ -11,6 +11,7 @@ from tabular_duckdb.errors import QueryException
 from tabular_duckdb.main import build_link_with_page
 
 from .conftest import (
+    FLOATS_RESOURCE_ID,
     HEADER,
     INSPECTED_RESOURCE_ID,
     INSPECTION,
@@ -404,6 +405,21 @@ def test_resource_data_csv(client):
     assert rows[0] == ["__id"] + HEADER
     assert len(rows) == TOTAL_LINES + 1
     assert rows[1] == ["1", "id-1", "0.1", "1", "false", "1951-01-01", "Élu 1", '["a", "b"]']
+
+
+def test_resource_data_csv_non_finite_floats(client):
+    """Rendered like PostgreSQL does, which is also what pandas reads back as floats."""
+    response = client.get(f"/api/resources/{FLOATS_RESOURCE_ID}/data/csv/")
+    assert response.status_code == 200
+    rows = list(csv.reader(io.StringIO(response.text)))
+    assert rows == [
+        ["__id", "value"],
+        ["1", "NaN"],
+        ["2", "Infinity"],
+        ["3", "-Infinity"],
+        ["4", ""],
+        ["5", "1.5"],
+    ]
 
 
 def test_resource_data_json(client):

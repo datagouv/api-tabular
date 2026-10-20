@@ -68,6 +68,14 @@ INSPECTION = {
     },
 }
 
+# PostgreSQL float columns accept NaN and infinities, and hydra copies them to the parquet
+FLOATS_RESOURCE_ID = "aaaaaaaa-7777-bbbb-8888-cccccccccccc"
+FLOATS_RESOURCE_SQL = """
+SELECT * FROM (
+    VALUES ('nan'::DOUBLE), ('inf'::DOUBLE), ('-inf'::DOUBLE), (NULL), (1.5)
+) AS t(value)
+"""
+
 
 @pytest.fixture(scope="session")
 def parquet_dir(tmp_path_factory) -> str:
@@ -80,6 +88,10 @@ def parquet_dir(tmp_path_factory) -> str:
         conn.execute(
             f"COPY ({INSPECTED_RESOURCE_SQL}) TO '{directory}/{INSPECTED_RESOURCE_ID}.parquet' "
             f"(FORMAT parquet, KV_METADATA {{csv_detective: '{inspection}'}})"
+        )
+        conn.execute(
+            f"COPY ({FLOATS_RESOURCE_SQL}) TO '{directory}/{FLOATS_RESOURCE_ID}.parquet' "
+            "(FORMAT parquet)"
         )
     return str(directory)
 
