@@ -213,7 +213,14 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     parsed = parse_query(query_string, resource.query_columns, page_size, offset)
     sql, params = parsed.data_sql(resource.source_sql)
     columns, rows = await run_query(sql, params, rid)
-    total = await run_count(parsed, resource, rid)
+    meta: dict[str, int] = {"page": page, "page_size": page_size}
+    if parsed.is_aggregated:
+        # like the PostgREST-based API, which reported no total for aggregated queries: a full
+        # page is the only hint that another one may follow
+        has_next = len(rows) >= page_size
+    else:
+        meta["total"] = await run_count(parsed, resource, rid)
+        has_next = page_size + offset < meta["total"]
 
     path = f"/api/resources/{rid}/data/"
     return JSONResponse(
@@ -224,7 +231,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
                 "swagger": resource_url(rid, "swagger/"),
                 "next": (
                     build_link_with_page(path, query_string, page + 1, page_size)
-                    if page_size + offset < total
+                    if has_next
                     else None
                 ),
                 "prev": (
@@ -233,7 +240,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
                     else None
                 ),
             },
-            "meta": {"page": page, "page_size": page_size, "total": total},
+            "meta": meta,
         }
     )
 
@@ -291,6 +298,12 @@ async def health(request: Request) -> JSONResponse:
             "uptime_since": request.app.state.started_at.isoformat(),
         }
     )
+
+
+@get("/api/aggregation-exceptions/")
+async def aggregation_exceptions() -> JSONResponse:
+    # the PostgREST-based API restricted aggregations to indexed tables, which do not exist here
+    return JSONResponse({"allowed": True, "exceptions": []})
 
 
 # the path where aiohttp_swagger served the spec of the PostgREST-based API

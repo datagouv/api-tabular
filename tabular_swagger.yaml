@@ -6,7 +6,7 @@ info:
     the `<resource_id>.parquet` files stored in the S3 bucket, and queried by DuckDB.
     Supports pagination, filtering and sorting on columns. Use the resource's
     `/swagger/` endpoint to get the OpenAPI spec for its data and available filters,
-    and the `/sql/` endpoint to run read-only SQL queries (including aggregations).
+    and the `/sql/` endpoint to run read-only SQL queries.
   version: 1.0.0
 tags:
   - name: Data retrieval
@@ -94,7 +94,6 @@ paths:
       description: |
         Returns paginated tabular data as JSON. Columns and query params (filtering, sorting, page, page_size) depend on the resource.
         Use this resource's `/swagger/` endpoint for the full OpenAPI spec and available columns.
-        Aggregation operators are not available here, use `/sql/` instead.
       summary: Get resource data (JSON)
       operationId: getResourceData
       responses:
@@ -165,7 +164,7 @@ paths:
         - SQL
       description: |
         Runs a read-only SQL query against the resource, which is exposed as the table `resource`.
-        This is how aggregations are done, for instance:
+        For instance:
         `SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC`.
 
         Only a single `SELECT` statement is accepted. Are rejected: any DDL/DML statement
@@ -202,6 +201,28 @@ paths:
         schema:
           type: string
           example: "SELECT count(*) AS n FROM resource"
+  /api/aggregation-exceptions/:
+    get:
+      tags:
+        - Data retrieval
+      description: Kept for compatibility, aggregation queries (groupby, count, sum, etc.) are allowed on every resource.
+      summary: List aggregation-allowed resources
+      operationId: getAggregationExceptions
+      responses:
+        '200':
+          description: Aggregation is allowed on every resource
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  exceptions:
+                    type: array
+                    items:
+                      type: string
+                      format: uuid
   /health/:
     get:
       tags:

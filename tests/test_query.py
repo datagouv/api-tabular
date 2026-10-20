@@ -221,10 +221,96 @@ def test_query_operator_without_value(source):
         run(source, ["decompte__exact"])
 
 
-@pytest.mark.parametrize("aggregator", ["groupby", "count", "avg", "min", "max", "sum"])
-def test_query_aggregators_are_rejected(source, aggregator):
-    with pytest.raises(ValueError, match="sql"):
-        run(source, [f"decompte__{aggregator}"])
+AGGREGATES = {
+    "count": len,
+    "avg": lambda values: sum(values) / len(values),
+    "min": min,
+    "max": max,
+    "sum": sum,
+}
+
+
+@pytest.mark.parametrize("operator", AGGREGATES)
+def test_query_aggregate_by_group(source, operator):
+    rows = run(source, ["decompte__groupby", f"score__{operator}"])
+    groups = sorted({r["decompte"] for r in ROWS})
+    assert [list(r) for r in rows] == [["decompte", f"score__{operator}"]] * len(groups)
+    assert [r["decompte"] for r in rows] == groups
+    assert [r[f"score__{operator}"] for r in rows] == pytest.approx(
+        [
+            AGGREGATES[operator]([r["score"] for r in ROWS if r["decompte"] == group])
+            for group in groups
+        ]
+    )
+
+
+def test_query_aggregate_without_group(source):
+    # like SQL, count only counts the non NULL values
+    assert run(source, [f"{NAME}__count", "decompte__max"]) == [
+        {f"{NAME}__count": len(expected_ids(lambda r: r[NAME] is not None)), "decompte__max": 6}
+    ]
+
+
+def test_query_groupby_alone_selects_the_column(source):
+    """Like PostgREST, rows are only grouped once an aggregate function is requested."""
+    assert run(source, ["decompte__groupby"]) == [{"decompte": r["decompte"]} for r in ROWS]
+
+
+def test_query_aggregated_columns_follow_the_query_string(source):
+    rows = run(source, ["score__sum", "decompte__groupby", "is_true__groupby"], page_size=1)
+    assert list(rows[0]) == ["score__sum", "decompte", "is_true"]
+
+
+def test_query_filters_apply_before_aggregation(source):
+    rows = run(source, ["decompte__groupby", "id__count", "is_true__exact=true"])
+    assert {r["decompte"]: r["id__count"] for r in rows} == {
+        group: sum(1 for r in ROWS if r["is_true"] and r["decompte"] == group) for group in range(7)
+    }
+
+
+def test_query_sort_on_a_grouped_column(source):
+    rows = run(source, ["decompte__groupby", "id__count", "decompte__sort=desc"])
+    assert [r["decompte"] for r in rows] == list(range(6, -1, -1))
+
+
+def test_query_groups_are_paginated_in_a_stable_order(source):
+    conn, columns = source
+    conn.execute("CREATE TABLE reversed AS SELECT * FROM source ORDER BY __id DESC")
+    groups = []
+    for offset in range(0, 7, 3):
+        parsed = build_query(["decompte__groupby", "id__count"], columns, 3, offset)
+        sql, params = parsed.data_sql("reversed")
+        groups.extend(group for group, _ in conn.execute(sql, params).fetchall())
+    assert groups == list(range(7))
+
+
+def test_query_count_sql_of_an_aggregation_counts_the_groups(source):
+    conn, columns = source
+    parsed = build_query(["decompte__groupby", "id__count", "decompte__less=2"], columns)
+    sql, params = parsed.count_sql("source")
+    assert conn.execute(sql, params).fetchone()[0] == 3
+
+
+@pytest.mark.parametrize(
+    "query_string",
+    [
+        ["columns=id,decompte", "decompte__groupby"],
+        ["decompte__count", "columns=id"],
+    ],
+)
+def test_query_columns_alongside_aggregators(source, query_string):
+    with pytest.raises(ValueError, match="`columns` cannot be set alongside aggregators"):
+        run(source, query_string)
+
+
+def test_query_aggregator_with_a_value(source):
+    with pytest.raises(ValueError, match="could not be parsed"):
+        run(source, ["decompte__count=1"])
+
+
+def test_query_aggregator_on_unknown_column(source):
+    with pytest.raises(ValueError, match="unknown column"):
+        run(source, ["nope__groupby"])
 
 
 @pytest.mark.parametrize(

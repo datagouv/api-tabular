@@ -15,25 +15,30 @@ STRING_LIKE = {
     "notin",
     "sort",
 } | COMPARE
+GROUPING = {"groupby", "count"}
+NUMERIC_AGGREGATES = GROUPING | {"avg", "min", "max", "sum"}
+NUMERIC = {"isnull", "isnotnull", "differs", "exact", "in", "notin", "sort"} | COMPARE
+NULL_CHECKS = {"isnull", "isnotnull"}
 
 
 @pytest.mark.parametrize(
-    "python_type, operators",
+    "python_type, operators, aggregators",
     [
-        ("string", STRING_LIKE),
-        ("date", STRING_LIKE),
-        ("datetime", STRING_LIKE),
-        ("int", {"isnull", "isnotnull", "differs", "exact", "in", "notin", "sort"} | COMPARE),
-        ("float", {"isnull", "isnotnull", "differs", "exact", "in", "notin", "sort"} | COMPARE),
-        ("bool", {"isnull", "isnotnull", "differs", "exact", "sort"}),
-        ("json", {"isnull", "isnotnull"}),
+        ("string", STRING_LIKE, GROUPING),
+        ("date", STRING_LIKE, GROUPING),
+        ("datetime", STRING_LIKE, GROUPING),
+        ("int", NUMERIC, NUMERIC_AGGREGATES),
+        ("float", NUMERIC, NUMERIC_AGGREGATES),
+        ("bool", {"isnull", "isnotnull", "differs", "exact", "sort"}, GROUPING),
+        ("json", NULL_CHECKS, set()),
     ],
 )
-def test_swagger_parameters_per_type(python_type, operators):
+def test_swagger_parameters_per_type(python_type, operators, aggregators):
     parameters = swagger_parameters({"col": {"python_type": python_type}})
-    assert {p["name"] for p in parameters} == GLOBAL_PARAMETERS | {f"col__{op}" for op in operators}
-    # is(not)null do not take a value
+    assert {p["name"] for p in parameters} == GLOBAL_PARAMETERS | {
+        f"col__{op}" for op in operators | aggregators
+    }
+    # is(not)null and aggregators do not take a value
     assert {p["name"] for p in parameters if p.get("allowEmptyValue")} == {
-        "col__isnull",
-        "col__isnotnull",
+        f"col__{op}" for op in NULL_CHECKS | aggregators
     }

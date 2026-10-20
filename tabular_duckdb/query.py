@@ -13,12 +13,8 @@ from tabular_duckdb.errors import QueryException
 # synthetic row identifier, kept for compatibility with the PostgREST-based API
 ID_COLUMN = "__id"
 
-# aggregations are done by the read-only SQL endpoint, these operators point to it
-AGGREGATORS = ("groupby", "count", "avg", "min", "max", "sum")
-AGGREGATION_HINT = (
-    "aggregation operators (`groupby`, `count`, `avg`, `min`, `max`, `sum`) are not supported "
-    "by this endpoint, use `/api/resources/<resource_id>/sql/?q=...` to run a GROUP BY query"
-)
+GROUP_BY = "groupby"
+AGGREGATE_FUNCTIONS = ("count", "avg", "min", "max", "sum")
 
 COMPARATORS = {
     "exact": "=",
@@ -200,8 +196,6 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tu
     if argument in RESERVED_ARGUMENTS:
         raise ValueError(f"Argument `{argument}` can't be set within an operator")
     column_name, comparator = split_column_operator(argument)
-    if comparator in AGGREGATORS:
-        raise ValueError(AGGREGATION_HINT)
     if comparator == "sort":
         raise ValueError(f"Argument `{argument}` can't be set within an operator")
 
@@ -333,25 +327,55 @@ class ParsedQuery:
     conditions: list[str] = field(default_factory=list)
     params: list[Any] = field(default_factory=list)
     order_by: list[str] = field(default_factory=list)
+    # operator -> column names, in the order of the query string, which is the order of the
+    # output columns
+    aggregators: dict[str, list[str]] = field(default_factory=dict)
     limit: int | None = None
     offset: int = 0
+
+    @property
+    def is_aggregated(self) -> bool:
+        """Like PostgREST, `groupby` alone only selects its columns: rows are grouped once an
+        aggregate function is requested."""
+        return any(operator != GROUP_BY for operator in self.aggregators)
+
+    @property
+    def group_by(self) -> list[str]:
+        return [quote_ident(column) for column in self.aggregators.get(GROUP_BY, [])]
 
     def where_clause(self) -> str:
         return f" WHERE {' AND '.join(self.conditions)}" if self.conditions else ""
 
     def select_clause(self) -> str:
+        if self.aggregators:
+            selected = []
+            for operator, column_names in self.aggregators.items():
+                for column in column_names:
+                    selected.append(
+                        quote_ident(column)
+                        if operator == GROUP_BY
+                        else f"{operator}({quote_ident(column)}) AS {quote_ident(f'{column}__{operator}')}"
+                    )
+            return ", ".join(selected)
         if self.selected:
             return ", ".join(self.selected)
         quoted_id = quote_ident(ID_COLUMN)
         return f"{quoted_id}, * EXCLUDE ({quoted_id})"
 
+    def from_clause(self, source: str) -> str:
+        sql = f"FROM {source}{self.where_clause()}"
+        if self.is_aggregated and self.group_by:
+            sql += f" GROUP BY {', '.join(self.group_by)}"
+        return sql
+
     def data_sql(self, source: str) -> tuple[str, list]:
-        # __id last breaks the ties of the requested sort, so that pagination is deterministic
-        order_by = [*self.order_by, f"{quote_ident(ID_COLUMN)} ASC"]
-        sql = (
-            f"SELECT {self.select_clause()} FROM {source}{self.where_clause()}"
-            f" ORDER BY {', '.join(order_by)}"
-        )
+        # the last keys break the ties of the requested sort, so that pagination is
+        # deterministic: __id for rows, the grouped columns for groups
+        tiebreak = self.group_by if self.is_aggregated else [f"{quote_ident(ID_COLUMN)} ASC"]
+        order_by = [*self.order_by, *tiebreak]
+        sql = f"SELECT {self.select_clause()} {self.from_clause(source)}"
+        if order_by:
+            sql += f" ORDER BY {', '.join(order_by)}"
         if self.limit is not None:
             sql += f" LIMIT {int(self.limit)}"
         if self.offset:
@@ -359,6 +383,11 @@ class ParsedQuery:
         return sql, list(self.params)
 
     def count_sql(self, source: str) -> tuple[str, list]:
+        if self.is_aggregated:
+            return (
+                f"SELECT count(*) FROM (SELECT {self.select_clause()} {self.from_clause(source)})",
+                list(self.params),
+            )
         return f"SELECT count(*) FROM {source}{self.where_clause()}", list(self.params)
 
 
@@ -387,10 +416,12 @@ def build_query(
         key = unquote_plus(key)
         value = unquote_plus(raw_value)
         if not separator:
-            # without a value, only `is(not)null` makes sense
-            _, comparator = split_column_operator(key)
-            if comparator in AGGREGATORS:
-                raise ValueError(AGGREGATION_HINT)
+            # without a value: an aggregator, or `is(not)null`
+            column_name, comparator = split_column_operator(key)
+            if comparator == GROUP_BY or comparator in AGGREGATE_FUNCTIONS:
+                resolve_column(column_name, columns)
+                parsed.aggregators.setdefault(comparator, []).append(column_name)
+                continue
             if comparator not in ("isnull", "isnotnull"):
                 raise ValueError(f"argument '{key}' could not be parsed")
             condition, params = build_condition(key, "", columns)
@@ -422,4 +453,6 @@ def build_query(
         condition, params = build_condition(key, value, columns)
         parsed.conditions.append(condition)
         parsed.params.extend(params)
+    if parsed.aggregators and parsed.selected is not None:
+        raise ValueError("the argument `columns` cannot be set alongside aggregators")
     return parsed

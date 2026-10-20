@@ -14,6 +14,8 @@ TYPE_POSSIBILITIES = {
         "in",
         "notin",
         "sort",
+        "groupby",
+        "count",
     ],
     "float": [
         "isnull",
@@ -24,6 +26,12 @@ TYPE_POSSIBILITIES = {
         "in",
         "notin",
         "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
     ],
     "int": [
         "isnull",
@@ -34,8 +42,14 @@ TYPE_POSSIBILITIES = {
         "in",
         "notin",
         "sort",
+        "groupby",
+        "count",
+        "avg",
+        "max",
+        "min",
+        "sum",
     ],
-    "bool": ["isnull", "isnotnull", "differs", "exact", "sort"],
+    "bool": ["isnull", "isnotnull", "differs", "exact", "sort", "groupby", "count"],
     "date": [
         "isnull",
         "isnotnull",
@@ -47,6 +61,8 @@ TYPE_POSSIBILITIES = {
         "in",
         "notin",
         "sort",
+        "groupby",
+        "count",
     ],
     "datetime": [
         "isnull",
@@ -59,6 +75,8 @@ TYPE_POSSIBILITIES = {
         "in",
         "notin",
         "sort",
+        "groupby",
+        "count",
     ],
     # columns holding nested values only support null checks
     "json": [
@@ -106,6 +124,36 @@ OPERATORS_DESCRIPTIONS = {
     "notin": {
         "name": "{}__notin",
         "description": "Value not in list in column: {} ({}__notin=value1,value2,...)",
+    },
+    "groupby": {
+        "name": "{}__groupby",
+        "description": "Performs `group by values` operation in column: {}",
+        "is_aggregator": True,
+    },
+    "count": {
+        "name": "{}__count",
+        "description": "Performs `count values` operation in column: {}",
+        "is_aggregator": True,
+    },
+    "avg": {
+        "name": "{}__avg",
+        "description": "Performs `mean` operation in column: {}",
+        "is_aggregator": True,
+    },
+    "min": {
+        "name": "{}__min",
+        "description": "Performs `minimum` operation in column: {}",
+        "is_aggregator": True,
+    },
+    "max": {
+        "name": "{}__max",
+        "description": "Performs `maximum` operation in column: {}",
+        "is_aggregator": True,
+    },
+    "sum": {
+        "name": "{}__sum",
+        "description": "Performs `sum` operation in column: {}",
+        "is_aggregator": True,
     },
 }
 
@@ -169,9 +217,9 @@ def swagger_parameters(resource_columns: dict) -> list:
                     "schema": {"type": "string"},
                 }
                 | (
-                    # is(not)null does not need a value
+                    # aggregators and is(not)null don't need a value
                     {"schema": {"type": "boolean"}, "allowEmptyValue": True}
-                    if op in ("isnull", "isnotnull")
+                    if op in ("isnull", "isnotnull") or description.get("is_aggregator")
                     else {}
                 )
             )
@@ -284,8 +332,7 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
         "info": {
             "title": "Tabular API",
             "description": (
-                "Retrieve data for a specified resource with optional filtering and sorting. "
-                "Aggregations are available through the `/sql/` endpoint."
+                "Retrieve data for a specified resource with optional filtering and sorting."
             ),
             "version": "1.0.0",
         },
@@ -352,8 +399,7 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
                     "description": (
                         "Runs a read-only SQL query on this resource, exposed as the `resource` "
                         "table. Only a single SELECT statement is accepted: no DDL/DML, no table "
-                        "function (`read_parquet`, `read_csv`...) and no other table. This is the "
-                        "way to run `GROUP BY` aggregations."
+                        "function (`read_parquet`, `read_csv`...) and no other table."
                     ),
                     "summary": "Run a read-only SQL query on the resource",
                     "operationId": "getResourceSql",

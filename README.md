@@ -194,7 +194,30 @@ column_name__sort=asc
 column_name__sort=desc
 ```
 
-> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering** for now, except `isnull` and `isnotnull`.
+#### Aggregation Operators
+```
+# group by values
+column_name__groupby
+
+# count values
+column_name__count
+
+# mean / average
+column_name__avg
+
+# minimum
+column_name__min
+
+# maximum
+column_name__max
+
+# sum
+column_name__sum
+```
+
+> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`). Filtering is always done **before** aggregation, no matter the order in the parameters. An aggregated response has no `meta.total`, and `links.next` is set as long as the page is full. `columns` cannot be set alongside aggregators.
+
+> ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except `isnull` and `isnotnull`.
 
 #### Pagination
 ```
@@ -238,11 +261,14 @@ curl "http://localhost:8005/api/resources/$RID/data/?or=(\"Code%20du%20d%C3%A9pa
 # sort, pagination, column selection
 curl "http://localhost:8005/api/resources/$RID/data/?Date%20de%20naissance__sort=desc&page=2&page_size=50"
 curl "http://localhost:8005/api/resources/$RID/data/?columns=Code%20du%20d%C3%A9partement,Nom%20de%20l%27%C3%A9lu"
+
+# number of elected officials per department, among women
+curl "http://localhost:8005/api/resources/$RID/data/?Code%20sexe__exact=F&Code%20du%20d%C3%A9partement__groupby&Nom%20de%20l%27%C3%A9lu__count"
 ```
 
-### SQL Endpoint (aggregations)
+### SQL Endpoint
 
-Aggregation operators (`__groupby`, `__count`, `__avg`, `__min`, `__max`, `__sum`) are not available on `/data/`: aggregations are done with real SQL, where the resource is the table `resource`.
+Runs a read-only SQL query, where the resource is the table `resource`.
 
 ```shell
 curl -G "http://localhost:8005/api/resources/$RID/sql/" \
@@ -318,8 +344,8 @@ uv run pytest
 
 - No ingestion in PostgreSQL, no `tables_index` table: a `<resource_id>.parquet` file in the bucket is enough. Resource metadata is derived from the parquet file itself (schema, row count, statistics) and from the object's `Last-Modified` header (`created_at`).
 - `/api/resources/{rid}/` returns `"url": null` (the origin of the file is not tracked here).
-- `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged. `/api/aggregation-exceptions/` is gone with the aggregation operators.
-- Aggregations are done through `/sql/` instead of `__groupby` & friends.
+- `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged.
+- Aggregations are allowed on every resource and every column: `/api/aggregation-exceptions/` always answers `{"allowed": true, "exceptions": []}`.
 - The metrics API is out of scope.
 
 ## 🤝 Contributing

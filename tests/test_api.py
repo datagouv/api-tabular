@@ -287,10 +287,70 @@ def test_resource_data_unknown_column(client):
     assert "unknown column" in response.json()["errors"][0]["detail"]
 
 
-def test_resource_data_aggregation_is_rejected(client):
-    response = client.get(f"{DATA_URL}?decompte__groupby")
+@pytest.mark.parametrize(
+    "page, page_size, groups, has_next",
+    [
+        (1, 3, [0, 1, 2], True),
+        (3, 3, [6], False),
+        # like the PostgREST-based API, a full page always links to the next one
+        (1, 7, list(range(7)), True),
+    ],
+)
+def test_resource_data_aggregation(client, page, page_size, groups, has_next):
+    response = client.get(
+        f"{DATA_URL}?decompte__groupby&id__count&page={page}&page_size={page_size}"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [
+        {
+            "decompte": group,
+            "id__count": sum(1 for i in range(1, TOTAL_LINES + 1) if i % 7 == group),
+        }
+        for group in groups
+    ]
+    # the total of an aggregation is not computed
+    assert body["meta"] == {"page": page, "page_size": page_size}
+    assert (body["links"]["next"] is not None) == has_next
+
+
+def test_resource_data_groupby_alone(client):
+    response = client.get(f"{DATA_URL}?decompte__groupby&page_size=2")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [{"decompte": 1}, {"decompte": 2}]
+    assert body["meta"]["total"] == TOTAL_LINES
+
+
+def test_resource_data_aggregation_with_columns(client):
+    response = client.get(f"{DATA_URL}?decompte__groupby&columns=decompte")
     assert response.status_code == 400
-    assert "/sql/" in response.json()["errors"][0]["detail"]
+    assert response.json()["errors"][0] == {
+        "code": None,
+        "title": "Invalid query string",
+        "detail": "Malformed query: the argument `columns` cannot be set alongside aggregators",
+    }
+
+
+def test_resource_data_csv_aggregation(client):
+    response = client.get(f"{DATA_URL}csv/?is_true__groupby&decompte__sum")
+    assert response.status_code == 200
+    rows = list(csv.reader(io.StringIO(response.text)))
+    expected_sum = {
+        value: sum(i % 7 for i in range(1, TOTAL_LINES + 1) if (i % 2 == 0) == value)
+        for value in (False, True)
+    }
+    assert rows == [
+        ["is_true", "decompte__sum"],
+        ["false", str(expected_sum[False])],
+        ["true", str(expected_sum[True])],
+    ]
+
+
+def test_aggregation_exceptions(client):
+    response = client.get("/api/aggregation-exceptions/")
+    assert response.status_code == 200
+    assert response.json() == {"allowed": True, "exceptions": []}
 
 
 def test_resource_data_csv(client):
