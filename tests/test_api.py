@@ -6,6 +6,7 @@ import pytest
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
+from tabular_duckdb.main import build_link_with_page
 
 from .conftest import HEADER, RESOURCE_ID, TOTAL_LINES, UNKNOWN_RESOURCE_ID
 
@@ -140,6 +141,11 @@ def test_resource_data_with_meta_args(client, base_url, args):
         "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
     }
     assert body["meta"] == {"page": page, "page_size": page_size, "total": TOTAL_LINES}
+
+
+def test_pagination_links_keep_filters_on_columns_named_page():
+    link = build_link_with_page(DATA_URL, ["pages__exact=3", "page=2", "page_size=5"], 3, 5)
+    assert link.endswith(f"{DATA_URL}?pages__exact=3&page=3&page_size=5")
 
 
 def test_resource_data_last_page_has_no_next(client):

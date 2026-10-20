@@ -38,7 +38,11 @@ def resource_url(resource_id: str, suffix: str = "") -> str:
 
 
 def build_link_with_page(path: str, query_string: list[str], page: int, page_size: int) -> str:
-    query = [argument for argument in query_string if not argument.startswith("page")]
+    query = [
+        argument
+        for argument in query_string
+        if argument.partition("=")[0] not in ("page", "page_size")
+    ]
     query.extend([f"page={page}", f"page_size={page_size}"])
     return external_url(f"{path}?{'&'.join(query)}")
 
