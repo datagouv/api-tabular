@@ -121,6 +121,89 @@ def test_query_sort_ties_are_ordered_by_id(source):
     assert paginated_ids == [r["__id"] for r in expected]
 
 
+# in the French order: accents and case only break ties, a space or a hyphen sorts before letters
+FRENCH_ORDER = [
+    "anne",
+    "Anne",
+    "Anne Marie",
+    "Anne-Flore",
+    "Élise",
+    "Elm",
+    "Hélène",
+    "Henri",
+    "Zoé",
+]
+
+
+@pytest.fixture
+def names(duckdb_connection):
+    """A text column holding the cases where the French order differs from the byte order."""
+    shuffled = [
+        "Henri",
+        "Zoé",
+        "Anne-Flore",
+        "Élise",
+        "anne",
+        "Hélène",
+        None,
+        "Elm",
+        "Anne Marie",
+        "Anne",
+    ]
+    duckdb_connection.execute(
+        "CREATE TABLE names AS SELECT * FROM (VALUES "
+        + ", ".join(f"({i}, ?)" for i in range(1, len(shuffled) + 1))
+        + ") AS t(__id, name)",
+        shuffled,
+    )
+    return duckdb_connection, {"__id": "BIGINT", "name": "VARCHAR"}
+
+
+def run_on_names(names, query_string: list[str]) -> list[dict]:
+    conn, columns = names
+    sql, params = build_query(query_string, columns).data_sql("names")
+    cursor = conn.execute(sql, params)
+    labels = [description[0] for description in cursor.description]
+    return [dict(zip(labels, values)) for values in cursor.fetchall()]
+
+
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_query_text_sort_follows_the_french_order(names, direction):
+    rows = run_on_names(names, [f"name__sort={direction}"])
+    expected = FRENCH_ORDER if direction == "asc" else FRENCH_ORDER[::-1]
+    # NULL is the largest value, like in PostgreSQL
+    assert [r["name"] for r in rows] == (
+        [*expected, None] if direction == "asc" else [None, *expected]
+    )
+
+
+@pytest.mark.parametrize(
+    "argument, expected",
+    [
+        ("name__less=Elm", FRENCH_ORDER[:6]),
+        # a lowercase letter sorts before its uppercase, so `Élise` is greater than `élise`
+        ("name__less=élise", FRENCH_ORDER[:4]),
+        ("name__strictly_less=Anne Marie", FRENCH_ORDER[:2]),
+        ("name__greater=Hélène", FRENCH_ORDER[6:]),
+        ("name__strictly_greater=Anne Marie", FRENCH_ORDER[3:]),
+    ],
+)
+def test_query_text_comparisons_follow_the_french_order(names, argument, expected):
+    rows = run_on_names(names, [argument, "name__sort=asc"])
+    assert [r["name"] for r in rows] == expected
+
+
+def test_query_text_min_and_max_follow_the_french_order(names):
+    assert run_on_names(names, ["name__min", "name__max"]) == [
+        {"name__min": FRENCH_ORDER[0], "name__max": FRENCH_ORDER[-1]}
+    ]
+
+
+def test_query_text_equality_stays_exact(names):
+    assert [r["name"] for r in run_on_names(names, ["name__exact=anne"])] == ["anne"]
+    assert [r["name"] for r in run_on_names(names, ["name__in=Anne,Elm"])] == ["Elm", "Anne"]
+
+
 @pytest.mark.parametrize(
     "argument, predicate",
     [

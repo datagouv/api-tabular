@@ -16,6 +16,16 @@ ID_COLUMN = "__id"
 GROUP_BY = "groupby"
 AGGREGATE_FUNCTIONS = ("count", "avg", "min", "max", "sum")
 
+TEXT_TYPES = ("VARCHAR", "CHAR", "TEXT", "STRING")
+# PostgreSQL ordered text with the linguistic collation of the database, DuckDB orders bytes
+# (`É` after `Z`): text is sorted and compared with ICU's French rules instead, where accents
+# and case only break ties. Unlike glibc, ICU counts spaces and hyphens ("Anne Marie" comes
+# before "Anne-Flore", which comes before "Annette"), a convention that does not move with the
+# server's glibc version.
+TEXT_COLLATION = "fr"
+RANGE_COMPARATORS = ("less", "greater", "strictly_less", "strictly_greater")
+ORDERED_AGGREGATES = ("min", "max")
+
 COMPARATORS = {
     "exact": "=",
     "differs": "IS DISTINCT FROM",
@@ -124,6 +134,14 @@ def split_column_operator(argument: str) -> tuple[str, str]:
     return "__".join(column_split), comparator.lower()
 
 
+def is_text(duckdb_type: str) -> bool:
+    return duckdb_type.upper() in TEXT_TYPES
+
+
+def collated(quoted_column: str) -> str:
+    return f"{quoted_column} COLLATE {TEXT_COLLATION}"
+
+
 def resolve_column(name: str, columns: Mapping[str, str]) -> tuple[str, str]:
     """Check the column against the parquet schema and return (quoted name, DuckDB type)."""
     if name not in columns:
@@ -144,7 +162,7 @@ def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
     if kind == "json":
         return value, True
     try:
-        if normalized in ("VARCHAR", "CHAR", "TEXT", "STRING"):
+        if is_text(duckdb_type):
             return value, False
         if normalized == "UUID":
             UUID(value)
@@ -222,10 +240,11 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tu
         return f"({_comparable(quoted, as_varchar)} {operator} ({placeholders}))", params
     if comparator in COMPARATORS:
         coerced, as_varchar = coerce_value(value, duckdb_type)
-        return (
-            f"({_comparable(quoted, as_varchar)} {COMPARATORS[comparator]} ?)",
-            [coerced],
-        )
+        compared = _comparable(quoted, as_varchar)
+        # equality stays exact, as with the deterministic collations of PostgreSQL
+        if comparator in RANGE_COMPARATORS and is_text(duckdb_type):
+            compared = collated(compared)
+        return f"({compared} {COMPARATORS[comparator]} ?)", [coerced]
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
@@ -330,6 +349,8 @@ class ParsedQuery:
     # operator -> column names, in the order of the query string, which is the order of the
     # output columns
     aggregators: dict[str, list[str]] = field(default_factory=dict)
+    # aggregated columns holding text, whose min and max follow TEXT_COLLATION
+    text_columns: set[str] = field(default_factory=set)
     limit: int | None = None
     offset: int = 0
 
@@ -351,11 +372,14 @@ class ParsedQuery:
             selected = []
             for operator, column_names in self.aggregators.items():
                 for column in column_names:
-                    selected.append(
-                        quote_ident(column)
-                        if operator == GROUP_BY
-                        else f"{operator}({quote_ident(column)}) AS {quote_ident(f'{column}__{operator}')}"
-                    )
+                    quoted = quote_ident(column)
+                    if operator == GROUP_BY:
+                        selected.append(quoted)
+                        continue
+                    if operator in ORDERED_AGGREGATES and column in self.text_columns:
+                        quoted = collated(quoted)
+                    alias = quote_ident(f"{column}__{operator}")
+                    selected.append(f"{operator}({quoted}) AS {alias}")
             return ", ".join(selected)
         if self.selected:
             return ", ".join(self.selected)
@@ -419,8 +443,10 @@ def build_query(
             # without a value: an aggregator, or `is(not)null`
             column_name, comparator = split_column_operator(key)
             if comparator == GROUP_BY or comparator in AGGREGATE_FUNCTIONS:
-                resolve_column(column_name, columns)
+                _, duckdb_type = resolve_column(column_name, columns)
                 parsed.aggregators.setdefault(comparator, []).append(column_name)
+                if is_text(duckdb_type):
+                    parsed.text_columns.add(column_name)
                 continue
             if comparator not in ("isnull", "isnotnull"):
                 raise ValueError(f"argument '{key}' could not be parsed")
@@ -444,9 +470,10 @@ def build_query(
             raise ValueError(f"argument '{key}={value}' could not be parsed")
         column_name, comparator = split_column_operator(key)
         if comparator == "sort":
-            quoted, _ = resolve_column(column_name, columns)
+            quoted, duckdb_type = resolve_column(column_name, columns)
+            sorted_by = collated(quoted) if is_text(duckdb_type) else quoted
             try:
-                parsed.order_by.append(f"{quoted} {parse_sort(value)}")
+                parsed.order_by.append(f"{sorted_by} {parse_sort(value)}")
             except ValueError:
                 raise ValueError(f"argument '{key}={value}' could not be parsed") from None
             continue

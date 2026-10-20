@@ -194,6 +194,8 @@ column_name__sort=asc
 column_name__sort=desc
 ```
 
+> **Note**: text is sorted and compared (`sort`, `less`, `greater`, `strictly_less`, `strictly_greater`, `min`, `max`) in the French order, where accents and case only break ties (`Eléonore` comes before `Elie`). A space or a hyphen sorts before letters (`Anne Marie`, then `Anne-Flore`, then `Annette`). `exact`, `differs` and `in` stay exact matches.
+
 #### Aggregation Operators
 ```
 # group by values
