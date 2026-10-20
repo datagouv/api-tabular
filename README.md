@@ -2,7 +2,7 @@
 
 # Tabular API
 
-[![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
+[![CI](https://github.com/datagouv/api-tabular/actions/workflows/ci.yml/badge.svg)](https://github.com/datagouv/api-tabular/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). Hydra converts each tabular resource to a `<resource_id>.parquet` file in object storage; this service reads those files directly with an embedded [DuckDB](https://duckdb.org/), and offers HTTP querying capabilities, pagination, and data streaming on top of them.
@@ -352,7 +352,7 @@ The pre-commit hook that automatically:
 ### 🧪 Running Tests
 
 **Pull requests cannot be merged unless all CI/CD tests pass.**
-Tests are automatically run on every pull request and push to main branch. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration, and the [🧪 Testing](#-testing) section above for detailed testing commands.
+Tests are automatically run on every pull request and push to main branch. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the complete CI/CD configuration, and the [🧪 Testing](#-testing) section above for detailed testing commands.
 
 ### 🏷️ Releases and versioning
 

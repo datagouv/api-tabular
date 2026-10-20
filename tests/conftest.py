@@ -52,7 +52,11 @@ def api():
     try:
         client.get("/health/")
     except httpx.HTTPError:
-        pytest.skip(f"no API running on {BASE_URL}, start it with `docker compose up -d`")
+        message = f"no API running on {BASE_URL}, start it with `docker compose up -d`"
+        # in CI a missing API is a broken setup, skipping would turn the suite green silently
+        if os.environ.get("CI"):
+            pytest.fail(message)
+        pytest.skip(message)
     yield client
     client.close()
 

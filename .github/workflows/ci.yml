@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.13"
+  DOCKER_REGISTRY_HOST: registry.gitlab.com
+  DOCKER_REPO_TABULAR: registry.gitlab.com/etalab/data.gouv.fr/infra/tabular-api
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Lint and format code and sort imports
+        run: |
+          uv run ruff check --extend-select I .
+          uv run ruff format --check .
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start the API
+        # --wait blocks until the healthcheck of docker-compose.yml passes
+        run: docker compose up -d --build --wait
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python dependencies
+        run: uv sync --frozen
+      - name: Run tests
+        run: uv run pytest
+      - name: Show API logs
+        if: failure()
+        run: docker compose logs api
+
+  build:
+    needs: [lint, tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # the version is derived from the git tags
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Compute the release version and build the wheel
+        run: |
+          RELEASE_VERSION=$(uvx --with hatch-vcs hatch version)
+          echo "Building a wheel release with version $RELEASE_VERSION"
+          echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          uv build --wheel
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.DOCKER_REGISTRY_HOST }}
+          username: oauth2
+          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+      - name: Build and push the Docker image
+        run: |
+          # Docker tags allow only [a-zA-Z0-9_.-]; the version can be e.g. 0.4.2.dev5
+          DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
+          docker build --build-arg VERSION="$RELEASE_VERSION" \
+            -t "$DOCKER_REPO_TABULAR:$DOCKER_TAG_SCM" \
+            -t "$DOCKER_REPO_TABULAR:${GITHUB_SHA:0:7}" \
+            -t "$DOCKER_REPO_TABULAR:$GITHUB_SHA" \
+            -t "$DOCKER_REPO_TABULAR:main" \
+            .
+          docker push --all-tags "$DOCKER_REPO_TABULAR"
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - uses: astral-sh/setup-uv@v10
+      - name: Publish on PyPI
+        run: uv publish --username "${{ secrets.PYPI_USERNAME }}" --password "${{ secrets.PYPI_PASSWORD }}"

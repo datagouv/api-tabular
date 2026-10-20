@@ -5,6 +5,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8005:8005"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health/')"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
     environment:
       # a resource is read at <PARQUET_BASE_URL>/<resource_id>.parquet
       PARQUET_BASE_URL: ${PARQUET_BASE_URL:-https://hydra.s3.rbx.io.cloud.ovh.net/parquet}
