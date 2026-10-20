@@ -42,6 +42,9 @@ CATALOG_STATEMENTS = [
     "SELECT * FROM other_table",
     "SELECT * FROM resource JOIN other_table ON true",
     "SELECT (SELECT count(*) FROM other_table) FROM resource",
+    # a CTE name must not unlock a qualified table, nor a table outside of the CTE's scope
+    "WITH duckdb_views AS (SELECT 1) SELECT sql FROM system.main.duckdb_views",
+    "SELECT * FROM (WITH duckdb_databases AS (SELECT 1) SELECT 1), duckdb_databases",
 ]
 
 MULTI_STATEMENTS = [
@@ -55,6 +58,8 @@ ALLOWED_STATEMENTS = [
     'SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC',
     "WITH per_dep AS (SELECT 1 AS n) SELECT sum(n) FROM per_dep",
     "WITH a AS (SELECT * FROM resource) SELECT count(*) FROM a",
+    "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT n FROM b",
+    "WITH a AS (SELECT 1 AS n) SELECT * FROM (SELECT n FROM a)",
     "SELECT __id FROM resource WHERE __id < 10 ORDER BY __id",
     "SELECT unnest([1, 2, 3]) AS x",
     "SELECT * FROM generate_series(1, 5)",

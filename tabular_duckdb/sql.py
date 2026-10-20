@@ -19,6 +19,7 @@ Defence in depth, in order:
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import duckdb
@@ -45,16 +46,45 @@ def invalid_query(detail: str) -> QueryException:
     return QueryException(400, None, "Invalid SQL query", detail)
 
 
-def _collect(node: Any, base_tables: set, table_functions: set, functions: set, ctes: set) -> None:
+@dataclass(frozen=True)
+class TableReference:
+    catalog: str
+    schema: str
+    table: str
+    # names of the CTEs in scope where the table is referenced
+    visible_ctes: frozenset[str]
+
+    @property
+    def is_cte(self) -> bool:
+        # a CTE can only be referenced unqualified, and only within its own query
+        return not self.catalog and not self.schema and self.table.lower() in self.visible_ctes
+
+
+def _collect(
+    node: Any,
+    tables: set[TableReference],
+    table_functions: set[str],
+    functions: set[str],
+    visible_ctes: frozenset[str] = frozenset(),
+) -> None:
     """Walk the serialized query tree and collect what we need to check."""
     if isinstance(node, dict):
+        cte_map = node.get("cte_map")
+        if isinstance(cte_map, dict):
+            # the CTEs of a query are visible in the whole query, their own bodies included
+            visible_ctes = visible_ctes | {
+                str(entry["key"]).lower()
+                for entry in cte_map.get("map") or []
+                if isinstance(entry, dict) and entry.get("key")
+            }
         node_type = node.get("type")
         if node_type == "BASE_TABLE":
-            base_tables.add(
-                (
-                    node.get("catalog_name") or "",
-                    node.get("schema_name") or "",
-                    node.get("table_name") or "",
+            tables.add(
+                TableReference(
+                    catalog=node.get("catalog_name") or "",
+                    schema=node.get("schema_name") or "",
+                    table=node.get("table_name") or "",
+                    visible_ctes=visible_ctes,
                 )
             )
         elif node_type == "TABLE_FUNCTION":
@@ -62,16 +92,11 @@ def _collect(node: Any, base_tables: set, table_functions: set, functions: set, 
             table_functions.add((function.get("function_name") or "").lower())
         elif node_type == "FUNCTION":
             functions.add((node.get("function_name") or "").lower())
-        cte_map = node.get("cte_map")
-        if isinstance(cte_map, dict):
-            for entry in cte_map.get("map") or []:
-                if isinstance(entry, dict) and entry.get("key"):
-                    ctes.add(str(entry["key"]).lower())
         for value in node.values():
-            _collect(value, base_tables, table_functions, functions, ctes)
+            _collect(value, tables, table_functions, functions, visible_ctes)
     elif isinstance(node, list):
         for value in node:
-            _collect(value, base_tables, table_functions, functions, ctes)
+            _collect(value, tables, table_functions, functions, visible_ctes)
 
 
 def validate_sql(conn: duckdb.DuckDBPyConnection, user_sql: str) -> str:
@@ -100,11 +125,10 @@ def validate_sql(conn: duckdb.DuckDBPyConnection, user_sql: str) -> str:
     if len(statements) != 1:
         raise invalid_query("Exactly one SELECT statement is allowed")
 
-    base_tables: set[tuple[str, str, str]] = set()
+    tables: set[TableReference] = set()
     table_functions: set[str] = set()
     functions: set[str] = set()
-    ctes: set[str] = set()
-    _collect(statements[0], base_tables, table_functions, functions, ctes)
+    _collect(statements[0], tables, table_functions, functions)
 
     forbidden_table_functions = table_functions - ALLOWED_TABLE_FUNCTIONS
     if forbidden_table_functions:
@@ -117,16 +141,16 @@ def validate_sql(conn: duckdb.DuckDBPyConnection, user_sql: str) -> str:
     if forbidden_functions:
         raise invalid_query(f"Functions not allowed: {', '.join(sorted(forbidden_functions))}")
 
-    for catalog, schema, table in base_tables:
-        if table.lower() in ctes:
+    for reference in tables:
+        if reference.is_cte:
             continue
         if (
-            table != RESOURCE_TABLE
-            or schema not in ALLOWED_SCHEMAS
-            or catalog not in ("", "memory")
+            reference.table != RESOURCE_TABLE
+            or reference.schema not in ALLOWED_SCHEMAS
+            or reference.catalog not in ("", "memory")
         ):
             raise invalid_query(
-                f"Unknown table `{table}`: only the `{RESOURCE_TABLE}` table "
+                f"Unknown table `{reference.table}`: only the `{RESOURCE_TABLE}` table "
                 "(and your own CTEs) can be queried"
             )
 
