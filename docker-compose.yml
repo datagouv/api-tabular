@@ -10,17 +10,18 @@ services:
       interval: 5s
       timeout: 10s
       retries: 12
+    # passed through only when set: the defaults live in tabular_duckdb/config.py
     environment:
       # a resource is read at <PARQUET_BASE_URL>/<resource_id>.parquet
-      PARQUET_BASE_URL: ${PARQUET_BASE_URL:-https://hydra.s3.rbx.io.cloud.ovh.net/parquet}
-      SERVER_NAME: ${SERVER_NAME:-localhost:8005}
-      SCHEME: http
-      DUCKDB_METADATA_CACHE: ${DUCKDB_METADATA_CACHE:-false}
-      PROFILE_STATS: ${PROFILE_STATS:-true}
-      SQL_MAX_ROWS: ${SQL_MAX_ROWS:-10000}
-      SQL_TIMEOUT: ${SQL_TIMEOUT:-30}
+      - PARQUET_BASE_URL
+      - SERVER_NAME
+      - SCHEME
+      - DUCKDB_METADATA_CACHE
+      - PROFILE_STATS
+      - SQL_MAX_ROWS
+      - SQL_TIMEOUT
       # only needed for a private bucket
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
-      S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_REGION: ${S3_REGION:-us-east-1}
+      - S3_ACCESS_KEY
+      - S3_SECRET_KEY
+      - S3_ENDPOINT
+      - S3_REGION

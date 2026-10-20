@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
 from tabular_duckdb.errors import QueryException
-from tabular_duckdb.serialization import as_csv_value, jsonable
+from tabular_duckdb.serialization import as_csv_value, rows_to_json
 
 
 def check_output_size(total: int) -> None:
@@ -31,19 +31,13 @@ async def stream_csv(sql: str, params: list) -> AsyncIterator[bytes]:
         for row in rows:
             writer.writerow([as_csv_value(value) for value in row])
         yield buffer.getvalue().encode("utf-8")
-    if not header_written:
-        yield b""
 
 
 async def stream_json(sql: str, params: list) -> AsyncIterator[bytes]:
-    first = True
+    separator = ""
     yield b"["
     async for columns, rows in engine.stream(sql, params):
-        for row in rows:
-            payload = json.dumps(
-                {column: jsonable(value) for column, value in zip(columns, row)},
-                ensure_ascii=False,
-            )
-            yield (payload if first else "," + payload).encode("utf-8")
-            first = False
+        chunk = ",".join(json.dumps(row, ensure_ascii=False) for row in rows_to_json(columns, rows))
+        yield (separator + chunk).encode("utf-8")
+        separator = ","
     yield b"]\n"

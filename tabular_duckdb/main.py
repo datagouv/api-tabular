@@ -1,6 +1,5 @@
 import asyncio
-import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -9,6 +8,7 @@ from typing import Any
 
 import duckdb
 import sentry_sdk
+import uvicorn
 import yaml
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,13 +21,17 @@ from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
 from tabular_duckdb.errors import QueryException, handle_exception
 from tabular_duckdb.query import ParsedQuery, build_offset, build_query
-from tabular_duckdb.resources import build_profile, get_resource, head, profile_columns
+from tabular_duckdb.resources import (
+    Resource,
+    build_profile,
+    get_resource,
+    head,
+    profile_columns,
+)
 from tabular_duckdb.serialization import jsonable, rows_to_json
 from tabular_duckdb.sql import RESOURCE_TABLE, run_user_sql
 from tabular_duckdb.streaming import check_output_size, stream_csv, stream_json
 from tabular_duckdb.swagger import build_swagger_file
-
-log = logging.getLogger(__name__)
 
 SWAGGER_FILE = Path(__file__).resolve().parent.parent / "tabular_swagger.yaml"
 
@@ -70,7 +74,10 @@ def int_argument(request: Request, name: str, default: int) -> int:
 
 
 def parse_query(
-    query_string: list[str], columns: dict, page_size: int | None = None, offset: int = 0
+    query_string: list[str],
+    columns: Mapping[str, str],
+    page_size: int | None = None,
+    offset: int = 0,
 ) -> ParsedQuery:
     try:
         return build_query(query_string, columns, page_size, offset)
@@ -78,7 +85,9 @@ def parse_query(
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {exc}") from exc
 
 
-async def run_query(sql: str, params: list, resource_id: str | None = None):
+async def run_query(
+    sql: str, params: list, resource_id: str | None = None
+) -> tuple[list[str], list[tuple]]:
     try:
         return await engine.query(sql, params)
     except duckdb.Error as exc:
@@ -99,14 +108,14 @@ def check_storage() -> None:
             raise
 
 
-async def run_count(parsed: ParsedQuery, resource, resource_id: str) -> int:
+async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
     sql, params = parsed.count_sql(resource.source_sql)
     _, rows = await run_query(sql, params, resource_id)
-    return int(rows[0][0]) if rows else 0
+    return int(rows[0][0])
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.SENTRY_DSN:
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,
@@ -115,11 +124,8 @@ async def lifespan(app: FastAPI):
         )
     await engine.start()
     app.state.started_at = datetime.now(UTC)
-    app.state.openapi_document = (
-        yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8")) if SWAGGER_FILE.exists() else {}
-    )
-    if app.state.openapi_document:
-        app.state.openapi_document.setdefault("info", {})["version"] = __version__
+    app.state.openapi_document = yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8"))
+    app.state.openapi_document["info"]["version"] = __version__
     try:
         yield
     finally:
@@ -302,8 +308,6 @@ async def documentation() -> Response:
 
 
 def run() -> None:
-    import uvicorn
-
     uvicorn.run("tabular_duckdb.main:app", host="0.0.0.0", port=8005)
 
 

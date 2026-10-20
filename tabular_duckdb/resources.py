@@ -11,55 +11,13 @@ import duckdb
 from starlette.exceptions import HTTPException
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine, quote_literal, rows_as_dicts
+from tabular_duckdb.engine import engine, quote_literal
 from tabular_duckdb.errors import QueryException
-from tabular_duckdb.query import ID_COLUMN
+from tabular_duckdb.query import ID_COLUMN, python_type
 
 RESOURCE_ID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-
-# csv-detective python_type, as expected by the swagger builder
-PYTHON_TYPES: dict[str, str] = {
-    "BOOLEAN": "bool",
-    "TINYINT": "int",
-    "SMALLINT": "int",
-    "INTEGER": "int",
-    "BIGINT": "int",
-    "HUGEINT": "int",
-    "UTINYINT": "int",
-    "USMALLINT": "int",
-    "UINTEGER": "int",
-    "UBIGINT": "int",
-    "UHUGEINT": "int",
-    "FLOAT": "float",
-    "REAL": "float",
-    "DOUBLE": "float",
-    "DATE": "date",
-    "TIME": "string",
-    "TIMESTAMP": "datetime",
-    "TIMESTAMP WITH TIME ZONE": "datetime",
-    "TIMESTAMP_S": "datetime",
-    "TIMESTAMP_MS": "datetime",
-    "TIMESTAMP_NS": "datetime",
-    "INTERVAL": "string",
-    "VARCHAR": "string",
-    "UUID": "string",
-    "BLOB": "string",
-    "JSON": "json",
-}
-
-JSON_LIKE_PREFIXES = ("STRUCT", "MAP", "UNION", "JSON")
-
-
-def python_type(duckdb_type: str) -> str:
-    """Map a DuckDB column type to the csv-detective python_type vocabulary."""
-    normalized = duckdb_type.upper()
-    if normalized.endswith("[]") or normalized.startswith(JSON_LIKE_PREFIXES):
-        return "json"
-    if normalized.startswith("DECIMAL"):
-        return "float"
-    return PYTHON_TYPES.get(normalized, "string")
 
 
 @dataclass
@@ -144,9 +102,6 @@ class ResourceCache:
         # one lock per resource: concurrent requests on a resource load it once, without
         # waiting on the (remote, possibly slow) loads of other resources
         self._locks: dict[str, asyncio.Lock] = {}
-
-    def invalidate(self) -> None:
-        self._entries.clear()
 
     async def get(self, resource_id: str) -> Resource:
         validate_resource_id(resource_id)
@@ -242,7 +197,7 @@ async def summarize(resource: Resource) -> dict[str, dict[str, Any]]:
     except duckdb.Error:
         return {}
     stats: dict[str, dict[str, Any]] = {}
-    for row in rows_as_dicts(columns, rows):
+    for row in (dict(zip(columns, values)) for values in rows):
         name = row.get("column_name")
         if name in (None, ID_COLUMN):
             continue

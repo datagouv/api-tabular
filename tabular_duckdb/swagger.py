@@ -1,4 +1,4 @@
-"""Per-resource OpenAPI spec, ported from the PostgREST-based API without the aggregators."""
+"""Per-resource OpenAPI spec: the filters and sorts available on each column of the resource."""
 
 import yaml
 

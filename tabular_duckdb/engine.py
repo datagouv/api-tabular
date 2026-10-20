@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import threading
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -148,16 +148,15 @@ class DuckDBEngine:
         return rows[0][0] if rows else None
 
     async def stream(
-        self, sql: str, params: Sequence[Any] | None = None, chunk_size: int | None = None
+        self, sql: str, params: Sequence[Any] | None = None
     ) -> AsyncIterator[tuple[list[str], list[tuple]]]:
         """Yield (column names, rows) chunks, keeping a cursor open across chunks."""
-        size = chunk_size or settings.STREAM_CHUNK_SIZE
         cursor = self.connection.cursor()
         try:
             await asyncio.to_thread(cursor.execute, sql, list(params or []))
             columns = [description[0] for description in cursor.description or []]
             while True:
-                rows = await asyncio.to_thread(cursor.fetchmany, size)
+                rows = await asyncio.to_thread(cursor.fetchmany, settings.STREAM_CHUNK_SIZE)
                 if not rows:
                     break
                 yield columns, rows
@@ -192,16 +191,13 @@ class DuckDBEngine:
 
     @staticmethod
     def run_with_timeout(
-        conn: duckdb.DuckDBPyConnection,
-        sql: str,
-        timeout: int,
-        params: Sequence[Any] | None = None,
+        conn: duckdb.DuckDBPyConnection, sql: str, timeout: int
     ) -> tuple[list[str], list[tuple]]:
         """Blocking execution interrupted after `timeout` seconds (run in a thread)."""
         watchdog = threading.Timer(timeout, conn.interrupt)
         watchdog.start()
         try:
-            cursor = conn.execute(sql, list(params or []))
+            cursor = conn.execute(sql)
             columns = [description[0] for description in cursor.description or []]
             return columns, cursor.fetchall()
         finally:
@@ -209,7 +205,3 @@ class DuckDBEngine:
 
 
 engine = DuckDBEngine()
-
-
-def rows_as_dicts(columns: list[str], rows: Iterator[tuple] | list[tuple]) -> list[dict]:
-    return [dict(zip(columns, row)) for row in rows]

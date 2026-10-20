@@ -25,9 +25,8 @@ from typing import Any
 import duckdb
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine, quote_literal
+from tabular_duckdb.engine import engine
 from tabular_duckdb.errors import QueryException
-from tabular_duckdb.query import ID_COLUMN
 from tabular_duckdb.resources import Resource
 
 # the resource is always exposed under this table name
@@ -171,9 +170,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> dict:
     """Validate then run the query, returning the response body of the /sql/ endpoint."""
     row_limit = max(1, settings.SQL_MAX_ROWS)
     view_sql = (
-        f"CREATE OR REPLACE TEMP VIEW {RESOURCE_TABLE} AS "
-        f"SELECT * EXCLUDE (file_row_number), file_row_number + 1 AS {ID_COLUMN} "
-        f"FROM read_parquet({quote_literal(resource.object_url)}, file_row_number = true)"
+        f"CREATE OR REPLACE TEMP VIEW {RESOURCE_TABLE} AS SELECT * FROM {resource.source_sql}"
     )
 
     async with engine.sql_connection() as conn:

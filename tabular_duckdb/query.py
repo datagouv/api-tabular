@@ -13,7 +13,7 @@ from tabular_duckdb.errors import QueryException
 # synthetic row identifier, kept for compatibility with the PostgREST-based API
 ID_COLUMN = "__id"
 
-# aggregation moved to the dedicated read-only SQL endpoint
+# aggregations are done by the read-only SQL endpoint, these operators point to it
 AGGREGATORS = ("groupby", "count", "avg", "min", "max", "sum")
 AGGREGATION_HINT = (
     "aggregation operators (`groupby`, `count`, `avg`, `min`, `max`, `sum`) are not supported "
@@ -35,18 +35,47 @@ RESERVED_ARGUMENTS = ("page", "page_size", "columns")
 TRUE_VALUES = ("true", "t", "1", "yes", "y")
 FALSE_VALUES = ("false", "f", "0", "no", "n")
 
-INTEGER_TYPES = (
-    "TINYINT",
-    "SMALLINT",
-    "INTEGER",
-    "BIGINT",
-    "HUGEINT",
-    "UTINYINT",
-    "USMALLINT",
-    "UINTEGER",
-    "UBIGINT",
-    "UHUGEINT",
-)
+# csv-detective python_type of each DuckDB type, as exposed in the profile and the swagger
+PYTHON_TYPES: dict[str, str] = {
+    "BOOLEAN": "bool",
+    "TINYINT": "int",
+    "SMALLINT": "int",
+    "INTEGER": "int",
+    "BIGINT": "int",
+    "HUGEINT": "int",
+    "UTINYINT": "int",
+    "USMALLINT": "int",
+    "UINTEGER": "int",
+    "UBIGINT": "int",
+    "UHUGEINT": "int",
+    "FLOAT": "float",
+    "REAL": "float",
+    "DOUBLE": "float",
+    "DATE": "date",
+    "TIME": "string",
+    "TIMESTAMP": "datetime",
+    "TIMESTAMP WITH TIME ZONE": "datetime",
+    "TIMESTAMP_S": "datetime",
+    "TIMESTAMP_MS": "datetime",
+    "TIMESTAMP_NS": "datetime",
+    "INTERVAL": "string",
+    "VARCHAR": "string",
+    "UUID": "string",
+    "BLOB": "string",
+    "JSON": "json",
+}
+
+JSON_LIKE_PREFIXES = ("STRUCT", "MAP", "UNION", "JSON")
+
+
+def python_type(duckdb_type: str) -> str:
+    """Map a DuckDB column type to the csv-detective python_type vocabulary."""
+    normalized = duckdb_type.upper()
+    if normalized.endswith("[]") or normalized.startswith(JSON_LIKE_PREFIXES):
+        return "json"
+    if normalized.startswith("DECIMAL"):
+        return "float"
+    return PYTHON_TYPES.get(normalized, "string")
 
 
 def quote_ident(name: str) -> str:
@@ -115,7 +144,8 @@ def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
     would silently return wrong rows ('9' >= '12.5').
     """
     normalized = duckdb_type.upper()
-    if normalized.endswith("[]") or normalized.startswith(("STRUCT", "MAP", "UNION", "JSON")):
+    kind = python_type(duckdb_type)
+    if kind == "json":
         return value, True
     try:
         if normalized in ("VARCHAR", "CHAR", "TEXT", "STRING"):
@@ -134,7 +164,7 @@ def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
             return Decimal(value), False
         if normalized in ("FLOAT", "REAL", "DOUBLE"):
             return float(value), False
-        if normalized in INTEGER_TYPES:
+        if kind == "int":
             return int(value), False
         if normalized == "DATE":
             return date.fromisoformat(value), False
@@ -157,7 +187,7 @@ def _comparable(quoted_column: str, as_varchar: bool) -> str:
 def _split_list(value: str) -> list[str]:
     """`a,"b,c",d` -> ["a", "b,c", "d"]"""
     items = []
-    for item in split_top_level(value, separators=(",",)):
+    for item in split_top_level(value):
         item = item.strip()
         if len(item) >= 2 and item.startswith('"') and item.endswith('"'):
             item = item[1:-1]
@@ -165,13 +195,7 @@ def _split_list(value: str) -> list[str]:
     return items
 
 
-def build_condition(
-    argument: str,
-    value: str,
-    columns: Mapping[str, str],
-    *,
-    in_operator: bool = False,
-) -> tuple[str, list]:
+def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tuple[str, list]:
     """Translate a single `<column>__<operator>[=<value>]` filter into SQL."""
     if argument in RESERVED_ARGUMENTS:
         raise ValueError(f"Argument `{argument}` can't be set within an operator")
@@ -198,7 +222,7 @@ def build_condition(
             raise ValueError(f"argument '{argument}={value}' could not be parsed")
         coerced = [coerce_value(item, duckdb_type) for item in items]
         as_varchar = any(fallback for _, fallback in coerced)
-        params = [item if not as_varchar else raw for (item, _), raw in zip(coerced, items)]
+        params = [item for item, _ in coerced]
         placeholders = ", ".join("?" for _ in params)
         operator = "IN" if comparator == "in" else "NOT IN"
         return f"({_comparable(quoted, as_varchar)} {operator} ({placeholders}))", params
@@ -211,8 +235,8 @@ def build_condition(
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
-def split_top_level(value: str, separators: tuple[str, ...] = (",",)) -> list[str]:
-    """Split on separators that are not nested within parentheses or double quotes."""
+def split_top_level(value: str) -> list[str]:
+    """Split on the commas that are not nested within parentheses or double quotes."""
     parts: list[str] = []
     current = ""
     depth = 0
@@ -227,7 +251,7 @@ def split_top_level(value: str, separators: tuple[str, ...] = (",",)) -> list[st
         elif char == ")" and not quoted:
             depth -= 1
             current += char
-        elif char in separators and depth == 0 and not quoted:
+        elif char == "," and depth == 0 and not quoted:
             parts.append(current)
             current = ""
         else:
@@ -286,12 +310,12 @@ def parse_operator(
             condition, condition_params = parse_operator(param, param.split("(")[0], columns)
         elif param.endswith(("__isnull", "__isnotnull")):
             condition, condition_params = build_condition(
-                unquote_plus(param).replace('"', ""), "", columns, in_operator=True
+                unquote_plus(param).replace('"', ""), "", columns
             )
         else:
             argument, value = find_arg_val(param)
             condition, condition_params = build_condition(
-                unquote_plus(argument), unquote_plus(value), columns, in_operator=True
+                unquote_plus(argument), unquote_plus(value), columns
             )
         conditions.append(condition)
         params.extend(condition_params)

@@ -11,7 +11,7 @@ class QueryException(Exception):
         self.title = title
         self.detail = detail
 
-    def body(self) -> dict:
+    def body(self) -> dict[str, list[dict[str, str | None]]]:
         return {"errors": [{"code": self.error_code, "title": self.title, "detail": self.detail}]}
 
 

@@ -218,7 +218,9 @@ def test_resource_data_with_unparseable_argument(client, argument):
 def test_resource_data_contains_wildcard(client):
     """PostgREST treats `*` as a wildcard in `ilike` patterns."""
     response = client.get(DATA_URL, params={"id__contains": "d-*0"})
-    assert response.json()["meta"]["total"] == len([i for i in range(1, TOTAL_LINES + 1) if i % 10 == 0])
+    assert response.json()["meta"]["total"] == len(
+        [i for i in range(1, TOTAL_LINES + 1) if i % 10 == 0]
+    )
 
 
 def test_resource_data_value_not_castable(client):
