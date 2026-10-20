@@ -46,4 +46,4 @@ async def stream_json(sql: str, params: list) -> AsyncIterator[bytes]:
             )
             yield (payload if first else "," + payload).encode("utf-8")
             first = False
-    yield b"]"
+    yield b"]\n"

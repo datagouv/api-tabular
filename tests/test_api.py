@@ -75,11 +75,27 @@ def test_resource_meta(client, base_url):
 
 @pytest.mark.parametrize("suffix", ["", "profile/", "swagger/", "data/", "data/csv/", "sql/"])
 def test_unknown_resource(client, suffix):
-    assert client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/{suffix}").status_code == 404
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 404
+    # the plain text body of aiohttp, which served the PostgREST-based API
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "404: Not Found"
 
 
 def test_malformed_resource_id(client):
-    assert client.get("/api/resources/not-an-uuid/data/").status_code == 404
+    response = client.get("/api/resources/not-an-uuid/data/")
+    assert response.status_code == 404
+    assert response.text == "404: Not Found"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/health/", f"/api/resources/{RESOURCE_ID}/", f"/api/resources/{RESOURCE_ID}/data/"],
+)
+def test_head_requests(client, path):
+    response = client.head(path)
+    assert response.status_code == 200
+    assert response.content == b""
 
 
 def test_resource_profile(client):
@@ -107,6 +123,7 @@ def test_resource_profile(client):
 def test_resource_swagger(client):
     response = client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
     assert response.status_code == 200
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
     assert f"/api/resources/{RESOURCE_ID}/data/" in response.text
 
 
@@ -176,6 +193,34 @@ def test_resource_data_filter(client):
     assert body["meta"]["total"] == len(expected)
 
 
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "limit=1",
+        # a missing `&` makes an argument with two `=`
+        "TESTCOLUM_NAME__EXACT=BIDULEpage=1",
+    ],
+)
+def test_resource_data_with_unparseable_argument(client, argument):
+    response = client.get(f"{DATA_URL}?{argument}")
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": [
+            {
+                "code": None,
+                "title": "Invalid query string",
+                "detail": f"Malformed query: argument '{argument}' could not be parsed",
+            }
+        ]
+    }
+
+
+def test_resource_data_contains_wildcard(client):
+    """PostgREST treats `*` as a wildcard in `ilike` patterns."""
+    response = client.get(DATA_URL, params={"id__contains": "d-*0"})
+    assert response.json()["meta"]["total"] == len([i for i in range(1, TOTAL_LINES + 1) if i % 10 == 0])
+
+
 def test_resource_data_value_not_castable(client):
     response = client.get(DATA_URL, params={"decompte__greater": "12.5"})
     assert response.status_code == 400
@@ -222,6 +267,7 @@ def test_resource_data_json(client):
     assert len(rows) == TOTAL_LINES
     assert rows[0] == FIRST_ROW
     assert all(list(row) == ["__id"] + HEADER for row in rows)
+    assert response.text.endswith("]\n")
 
 
 @pytest.mark.parametrize("output", ["csv", "json"])
@@ -306,4 +352,5 @@ def test_sql_still_works_after_a_rejected_query(client):
 
 def test_doc_is_served(client):
     assert client.get("/api/doc").status_code == 200
-    assert "Tabular API" in client.get("/api/openapi.json").json()["info"]["title"]
+    # the path where aiohttp_swagger served the spec
+    assert "Tabular API" in client.get("/api/doc/swagger.json").json()["info"]["title"]

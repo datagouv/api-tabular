@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 import duckdb
+from starlette.exceptions import HTTPException
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine, quote_literal, rows_as_dicts
@@ -88,7 +89,7 @@ class Resource:
 
 def validate_resource_id(resource_id: str) -> str:
     if not RESOURCE_ID_PATTERN.match(resource_id):
-        raise QueryException(404, None, "Resource not found", f"Unknown resource {resource_id}")
+        raise HTTPException(404)
     return resource_id
 
 
@@ -101,9 +102,7 @@ def head(url: str) -> dict[str, str]:
     except urllib.error.HTTPError as exc:
         # a bucket that does not grant listing answers 403 instead of 404 for a missing object
         if exc.code in (403, 404):
-            raise QueryException(
-                404, None, "Resource not found", f"No parquet file at {url}"
-            ) from exc
+            raise HTTPException(404) from exc
         raise QueryException(
             502, None, "Storage error", f"Unexpected HTTP {exc.code} for {url}"
         ) from exc
@@ -125,15 +124,13 @@ def _created_at(url: str) -> str | None:
         return None
 
 
-def _read_error(resource_id: str, object_url: str, exc: duckdb.Error) -> QueryException:
+def _read_error(object_url: str, exc: duckdb.Error) -> Exception:
     """DuckDB cannot read the file: missing resource or genuinely unusable parquet."""
     if isinstance(exc, (duckdb.HTTPException, duckdb.IOException)) and not object_url.startswith(
         ("http://", "https://")
     ):
         # no HEAD was possible on an s3:// URL, so an IO error most likely means "not found"
-        return QueryException(
-            404, None, "Resource not found", f"No readable parquet file for {resource_id}"
-        )
+        return HTTPException(404)
     return QueryException(
         400, None, "Invalid resource file", f"Could not read the parquet file: {exc}"
     )
@@ -186,7 +183,7 @@ class ResourceCache:
                 f"SELECT count(*) FROM read_parquet({quote_literal(object_url)})"
             )
         except duckdb.Error as exc:
-            raise _read_error(resource_id, object_url, exc) from exc
+            raise _read_error(object_url, exc) from exc
         columns = {row[0]: row[1] for row in described}
         return Resource(
             resource_id=resource_id,

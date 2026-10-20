@@ -1,8 +1,11 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import sentry_sdk
@@ -10,7 +13,7 @@ import yaml
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from tabular_duckdb import __version__
@@ -88,8 +91,10 @@ def check_storage() -> None:
         return
     try:
         head(settings.PARQUET_BASE_URL)
-    except QueryException as exc:
+    except StarletteHTTPException:
         # 403/404 on the base URL means the storage answered, which is what we check here
+        return
+    except QueryException as exc:
         if exc.status == 503:
             raise
 
@@ -132,9 +137,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "HEAD", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+def get(path: str, **kwargs: Any) -> Callable:
+    """GET route also answering HEAD, as aiohttp did for every GET route."""
+    return app.api_route(path, methods=["GET", "HEAD"], **kwargs)
 
 
 @app.exception_handler(QueryException)
@@ -143,14 +153,18 @@ async def query_exception_handler(request: Request, exc: QueryException) -> JSON
 
 
 @app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    return JSONResponse(
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> PlainTextResponse:
+    # the plain text body aiohttp renders for its HTTP exceptions, e.g. "404: Not Found"
+    return PlainTextResponse(
+        f"{exc.status_code}: {HTTPStatus(exc.status_code).phrase}",
         status_code=exc.status_code,
-        content={"errors": [{"code": None, "title": "Error", "detail": str(exc.detail)}]},
+        headers=exc.headers,
     )
 
 
-@app.get("/api/resources/{rid}/", name="meta")
+@get("/api/resources/{rid}/", name="meta")
 async def resource_meta(rid: str) -> JSONResponse:
     resource = await get_resource(rid)
     return JSONResponse(
@@ -167,7 +181,7 @@ async def resource_meta(rid: str) -> JSONResponse:
     )
 
 
-@app.get("/api/resources/{rid}/profile/", name="profile")
+@get("/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(rid: str) -> JSONResponse:
     resource = await get_resource(rid)
     profile = await build_profile(resource)
@@ -175,14 +189,14 @@ async def resource_profile(rid: str) -> JSONResponse:
     return JSONResponse(jsonable({"profile": profile, "indexes": None}))
 
 
-@app.get("/api/resources/{rid}/swagger/", name="swagger")
+@get("/api/resources/{rid}/swagger/", name="swagger")
 async def resource_swagger(rid: str) -> Response:
     resource = await get_resource(rid)
     swagger = build_swagger_file(profile_columns(resource), rid)
-    return Response(content=swagger, media_type="text/yaml")
+    return PlainTextResponse(swagger)
 
 
-@app.get("/api/resources/{rid}/data/", name="data")
+@get("/api/resources/{rid}/data/", name="data")
 async def resource_data(request: Request, rid: str) -> JSONResponse:
     resource = await get_resource(rid)
     query_string = query_arguments(request)
@@ -233,17 +247,17 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
     )
 
 
-@app.get("/api/resources/{rid}/data/csv/", name="csv")
+@get("/api/resources/{rid}/data/csv/", name="csv")
 async def resource_data_csv(request: Request, rid: str) -> StreamingResponse:
     return await stream_resource_data(request, rid, format="csv")
 
 
-@app.get("/api/resources/{rid}/data/json/", name="json")
+@get("/api/resources/{rid}/data/json/", name="json")
 async def resource_data_json(request: Request, rid: str) -> StreamingResponse:
     return await stream_resource_data(request, rid, format="json")
 
 
-@app.get("/api/resources/{rid}/sql/", name="sql")
+@get("/api/resources/{rid}/sql/", name="sql")
 async def resource_sql(rid: str, q: str = "") -> JSONResponse:
     resource = await get_resource(rid)
     result = await run_user_sql(resource, q)
@@ -255,7 +269,7 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
     )
 
 
-@app.get("/health/")
+@get("/health/")
 async def health(request: Request) -> JSONResponse:
     try:
         await engine.query("SELECT 1")
@@ -273,14 +287,18 @@ async def health(request: Request) -> JSONResponse:
     )
 
 
-@app.get("/api/openapi.json", include_in_schema=False)
+# the path where aiohttp_swagger served the spec of the PostgREST-based API
+OPENAPI_PATH = f"{settings.DOC_PATH}/swagger.json"
+
+
+@get(OPENAPI_PATH, include_in_schema=False)
 async def openapi_document(request: Request) -> JSONResponse:
     return JSONResponse(request.app.state.openapi_document)
 
 
-@app.get(settings.DOC_PATH, include_in_schema=False)
+@get(settings.DOC_PATH, include_in_schema=False)
 async def documentation() -> Response:
-    return get_swagger_ui_html(openapi_url="/api/openapi.json", title="Tabular API (DuckDB)")
+    return get_swagger_ui_html(openapi_url=OPENAPI_PATH, title="Tabular API (DuckDB)")
 
 
 def run() -> None:

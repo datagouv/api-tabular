@@ -189,7 +189,9 @@ def build_condition(
         return f"({quoted} IS NOT NULL)", []
     if comparator in ("contains", "notcontains"):
         condition = f"(CAST({quoted} AS VARCHAR) ILIKE '%' || ? || '%')"
-        return (condition if comparator == "contains" else f"(NOT {condition})"), [value]
+        # `*` is the wildcard of PostgREST's ilike patterns
+        pattern = value.replace("*", "%")
+        return (condition if comparator == "contains" else f"(NOT {condition})"), [pattern]
     if comparator in ("in", "notin"):
         items = _split_list(value)
         if not items:
@@ -355,6 +357,9 @@ def build_query(
             parsed.conditions.append(condition)
             parsed.params.extend(params)
             continue
+        if raw_value.count("=") > 0:
+            # like the PostgREST-based API, typically a missing `&` between two arguments
+            raise ValueError(f"argument '{unquote_plus(raw_arg)}' could not be parsed")
         key = unquote_plus(key)
         value = unquote_plus(raw_value)
         if not separator:
@@ -380,6 +385,8 @@ def build_query(
             if not parsed.selected:
                 raise ValueError(f"argument '{raw_arg}' could not be parsed")
             continue
+        if "__" not in key:
+            raise ValueError(f"argument '{key}={value}' could not be parsed")
         column_name, comparator = split_column_operator(key)
         if comparator == "sort":
             quoted, _ = resolve_column(column_name, columns)
