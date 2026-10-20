@@ -7,8 +7,9 @@ on:
 
 env:
   PYTHON_VERSION: "3.13"
-  DOCKER_REGISTRY_HOST: registry.gitlab.com
-  DOCKER_REPO_TABULAR: registry.gitlab.com/etalab/data.gouv.fr/infra/tabular-api
+  CONTAINER_REGISTRY_SERVER: ${{ vars.CONTAINER_REGISTRY_SERVER }}
+  CONTAINER_REGISTRY_NAMESPACE: ${{ vars.CONTAINER_REGISTRY_NAMESPACE }}
+  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
 
 jobs:
   lint:
@@ -60,6 +61,8 @@ jobs:
           RELEASE_VERSION=$(uvx --with hatch-vcs hatch version)
           echo "Building a wheel release with version $RELEASE_VERSION"
           echo "RELEASE_VERSION=$RELEASE_VERSION" >> "$GITHUB_ENV"
+          # Docker tags allow only [a-zA-Z0-9_.-]; the version can be e.g. 0.4.2.dev5+gabc1234
+          echo "DOCKER_TAG_VERSION=${RELEASE_VERSION//+/-}" >> "$GITHUB_ENV"
           uv build --wheel
       - uses: actions/upload-artifact@v7
         with:
@@ -67,20 +70,28 @@ jobs:
           path: dist
       - uses: docker/login-action@v4
         with:
-          registry: ${{ env.DOCKER_REGISTRY_HOST }}
-          username: oauth2
-          password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+          registry: ${{ env.CONTAINER_REGISTRY_SERVER }}
+          username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.CONTAINER_REGISTRY_SERVER }}/${{ env.CONTAINER_REGISTRY_NAMESPACE }}/${{ env.CONTAINER_NAME }}
+          tags: |
+            type=raw,value=${{ env.DOCKER_TAG_VERSION }}
+            type=sha,format=short,prefix=
+            type=sha,format=long,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
       - name: Build and push the Docker image
-        run: |
-          # Docker tags allow only [a-zA-Z0-9_.-]; the version can be e.g. 0.4.2.dev5
-          DOCKER_TAG_SCM=$(echo "$RELEASE_VERSION" | tr '+' '-')
-          docker build --build-arg VERSION="$RELEASE_VERSION" \
-            -t "$DOCKER_REPO_TABULAR:$DOCKER_TAG_SCM" \
-            -t "$DOCKER_REPO_TABULAR:${GITHUB_SHA:0:7}" \
-            -t "$DOCKER_REPO_TABULAR:$GITHUB_SHA" \
-            -t "$DOCKER_REPO_TABULAR:main" \
-            .
-          docker push --all-tags "$DOCKER_REPO_TABULAR"
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          build-args: VERSION=${{ env.RELEASE_VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   publish-pypi:
     needs: build
