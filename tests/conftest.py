@@ -1,95 +1,57 @@
-import os
-
 import duckdb
 import pytest
+from fastapi.testclient import TestClient
 
-# any parquet file of the bucket works, these two are only the ones the suite exercises
-RESOURCE_ID = os.environ.get("TABULAR_TEST_RESOURCE_ID", "3b6b2281-b9d9-4959-ae9d-c2c166dff118")
-BIG_RESOURCE_ID = os.environ.get(
-    "TABULAR_TEST_BIG_RESOURCE_ID", "d5f400de-ae3f-4966-8cb6-a85c70c6c24a"
-)
+from tabular_duckdb.config import settings
+from tabular_duckdb.main import app
+
+RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "00000000-0000-0000-0000-000000000000"
-BASE_URL = os.environ.get("TABULAR_API_URL", "http://localhost:8005")
+TOTAL_LINES = 60
 
-# a parquet schema close to the test resource of the PostgREST-based API
-COLUMNS = {
-    "__id": "BIGINT",
-    "id": "VARCHAR",
-    "score": "DOUBLE",
-    "decompte": "BIGINT",
-    "is_true": "BOOLEAN",
-    "birth": "DATE",
-    "liste": "VARCHAR",
-    "column_name": "VARCHAR",
-    "first_col": "VARCHAR",
-    "second_col": "BIGINT",
-    "col1": "VARCHAR",
-    "col2": "VARCHAR",
-    "second.col": "DOUBLE",
-    "third col": "BIGINT",
-    "fourth..col": "VARCHAR",
-}
-
-SOURCE = "source"
-
-
-@pytest.fixture
-def columns() -> dict[str, str]:
-    return dict(COLUMNS)
+# row i (1-based, which is also its __id) is fully determined by i, so that the expected
+# results of a query can be written down in the tests
+RESOURCE_SQL = f"""
+SELECT
+    'id-' || i AS id,
+    (i % 10) / 10 AS score,
+    (i % 7)::BIGINT AS decompte,
+    i % 2 = 0 AS is_true,
+    (DATE '1950-01-01' + to_years(i::INTEGER))::DATE AS birth,
+    CASE WHEN i % 5 = 0 THEN NULL ELSE 'Élu ' || i END AS "Nom de l'élu",
+    ['a', 'b'] AS liste
+FROM range(1, {TOTAL_LINES + 1}) AS t(i)
+"""
+HEADER = ["id", "score", "decompte", "is_true", "birth", "Nom de l'élu", "liste"]
 
 
 @pytest.fixture(scope="session")
+def parquet_dir(tmp_path_factory) -> str:
+    directory = tmp_path_factory.mktemp("parquet")
+    with duckdb.connect(":memory:") as conn:
+        conn.execute(
+            f"COPY ({RESOURCE_SQL}) TO '{directory}/{RESOURCE_ID}.parquet' (FORMAT parquet)"
+        )
+    return str(directory)
+
+
+@pytest.fixture(scope="session")
+def client(parquet_dir):
+    """The API, run in process against the parquet files written by `parquet_dir`."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
+        patch.setattr(settings, "SERVER_NAME", "testserver")
+        with TestClient(app) as test_client:
+            yield test_client
+
+
+@pytest.fixture
+def base_url() -> str:
+    return "http://testserver"
+
+
+@pytest.fixture
 def duckdb_connection():
     connection = duckdb.connect(":memory:")
     yield connection
     connection.close()
-
-
-@pytest.fixture(scope="session")
-def api():
-    httpx = pytest.importorskip("httpx")
-    client = httpx.Client(base_url=BASE_URL, timeout=120)
-    try:
-        client.get("/health/")
-    except httpx.HTTPError:
-        message = f"no API running on {BASE_URL}, start it with `docker compose up -d`"
-        # in CI a missing API is a broken setup, skipping would turn the suite green silently
-        if os.environ.get("CI"):
-            pytest.fail(message)
-        pytest.skip(message)
-    yield client
-    client.close()
-
-
-@pytest.fixture(scope="session")
-def profile(api) -> dict:
-    """The resource profile, used to drive the tests whatever the parquet file is."""
-    response = api.get(f"/api/resources/{RESOURCE_ID}/profile/")
-    assert response.status_code == 200, response.text
-    return response.json()["profile"]
-
-
-@pytest.fixture(scope="session")
-def string_column(profile) -> str:
-    """A string column with a limited number of values, good for filtering assertions."""
-    candidates = [
-        name
-        for name, description in profile["columns"].items()
-        if description["python_type"] == "string"
-        and 1 < (profile["profile"].get(name, {}).get("nb_distinct") or 0) < 100
-    ]
-    if not candidates:
-        pytest.skip("no suitable string column in this resource")
-    return candidates[0]
-
-
-@pytest.fixture(scope="session")
-def sortable_column(profile) -> str:
-    candidates = [
-        name
-        for name, description in profile["columns"].items()
-        if description["python_type"] in ("date", "datetime", "int", "float")
-    ]
-    if not candidates:
-        pytest.skip("no sortable column in this resource")
-    return candidates[0]

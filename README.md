@@ -300,18 +300,17 @@ Reading over the network costs one footer fetch per query (~120 ms on the OVH bu
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing.
+This project uses [pytest](https://pytest.org/) for testing. No infrastructure is needed: the tests write their own parquet files and run the API in process against them.
 
 ```shell
 uv sync
-uv run pytest tests/test_query.py tests/test_sql_security.py   # no infrastructure needed
-docker compose up -d --build && uv run pytest                  # including integration tests
+uv run pytest
 ```
 
 ### Tests Structure
 
-- **`tests/test_api.py`** - API endpoint tests: they need the stack running (they are skipped otherwise) and target `TABULAR_API_URL`, `http://localhost:8005` by default
-- **`tests/test_query.py`** - Query building tests
+- **`tests/test_api.py`** - API endpoint tests, run in process against the local parquet files
+- **`tests/test_query.py`** - Query building tests, executed on DuckDB
 - **`tests/test_sql_security.py`** - Validation tests of the SQL endpoint
 - **`tests/conftest.py`** - Test fixtures and configuration
 

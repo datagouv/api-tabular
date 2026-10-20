@@ -1,249 +1,264 @@
-"""Integration tests, run against a running API (see README).
-
-They are written against whatever parquet file `RESOURCE_ID` points to: expectations are derived
-from the resource profile rather than hardcoded, so the suite works for any resource of the bucket.
-"""
-
 import csv
 import io
 
+import duckdb
 import pytest
 
-from .conftest import BIG_RESOURCE_ID, RESOURCE_ID, UNKNOWN_RESOURCE_ID
+from tabular_duckdb.config import settings
+from tabular_duckdb.engine import engine
 
-# even its own object cannot be reached through a table function
-OWN_OBJECT_URL = f"https://hydra.s3.rbx.io.cloud.ovh.net/parquet/{RESOURCE_ID}.parquet"
+from .conftest import HEADER, RESOURCE_ID, TOTAL_LINES, UNKNOWN_RESOURCE_ID
 
-
-def most_frequent_value(api, column: str) -> tuple[str, int]:
-    """Use the SQL endpoint to get a value and its exact count, to check /data/ against it."""
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/sql/",
-        params={
-            "q": f'SELECT "{column}" AS value, count(*) AS n FROM resource '
-            "WHERE value IS NOT NULL GROUP BY 1 ORDER BY n DESC LIMIT 1"
-        },
-    )
-    assert response.status_code == 200, response.text
-    row = response.json()["data"][0]
-    return row["value"], row["n"]
+DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
+FIRST_ROW = {
+    "__id": 1,
+    "id": "id-1",
+    "score": 0.1,
+    "decompte": 1,
+    "is_true": False,
+    "birth": "1951-01-01",
+    "Nom de l'élu": "Élu 1",
+    "liste": ["a", "b"],
+}
 
 
-def test_health(api):
-    response = api.get("/health/")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_resource_meta(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/")
+def test_health(client):
+    response = client.get("/health/")
     assert response.status_code == 200
     body = response.json()
-    assert body["created_at"]
-    assert {link["rel"] for link in body["links"]} == {"profile", "data", "swagger", "sql"}
+    assert set(body) == {"status", "version", "uptime_since"}
+    assert body["status"] == "ok"
 
 
-def test_resource_profile(api, profile):
-    assert profile["total_lines"] > 0
-    assert profile["header"]
-    assert set(profile["columns"]) == set(profile["header"])
-    assert all("python_type" in column for column in profile["columns"].values())
-    # statistics are computed by SUMMARIZE
-    assert any(stats.get("nb_distinct") for stats in profile["profile"].values())
+def test_health_when_duckdb_is_down(client, monkeypatch):
+    async def broken_query(*args, **kwargs):
+        raise duckdb.ConnectionException("connection closed")
+
+    monkeypatch.setattr(engine, "query", broken_query)
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "DB unavailable"
 
 
-def test_resource_profile_has_no_indexes(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/profile/")
-    assert response.json()["indexes"] is None
+def test_resource_meta(client, base_url):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/")
+    assert response.status_code == 200
+    assert response.json() == {
+        # local files have no Last-Modified header to report
+        "created_at": None,
+        "url": None,
+        "links": [
+            {
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
+                "type": "GET",
+                "rel": "profile",
+            },
+            {
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/data/",
+                "type": "GET",
+                "rel": "data",
+            },
+            {
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
+                "type": "GET",
+                "rel": "swagger",
+            },
+            {
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/sql/",
+                "type": "GET",
+                "rel": "sql",
+            },
+        ],
+    }
 
 
-def test_resource_swagger(api, string_column):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/swagger/")
+@pytest.mark.parametrize("suffix", ["", "profile/", "swagger/", "data/", "data/csv/", "sql/"])
+def test_unknown_resource(client, suffix):
+    assert client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/{suffix}").status_code == 404
+
+
+def test_malformed_resource_id(client):
+    assert client.get("/api/resources/not-an-uuid/data/").status_code == 404
+
+
+def test_resource_profile(client):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["indexes"] is None
+    profile = body["profile"]
+    assert profile["header"] == HEADER
+    assert profile["total_lines"] == TOTAL_LINES
+    assert {name: column["python_type"] for name, column in profile["columns"].items()} == {
+        "id": "string",
+        "score": "float",
+        "decompte": "int",
+        "is_true": "bool",
+        "birth": "date",
+        "Nom de l'élu": "string",
+        "liste": "json",
+    }
+    # SUMMARIZE renders min and max as strings, whatever the column type
+    assert profile["profile"]["decompte"]["min"] == "0"
+    assert profile["profile"]["decompte"]["max"] == "6"
+
+
+def test_resource_swagger(client):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
     assert response.status_code == 200
     assert f"/api/resources/{RESOURCE_ID}/data/" in response.text
-    assert f"{string_column}__exact" in response.text
-    # aggregation operators are gone from the resource swagger
-    assert "__groupby" not in response.text
-    assert "__avg" not in response.text
 
 
-def test_resource_data(api, profile):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/")
+def test_resource_data(client, base_url):
+    response = client.get(DATA_URL)
     assert response.status_code == 200
     body = response.json()
-    assert len(body["data"]) == min(20, profile["total_lines"])
-    assert body["data"][0]["__id"] == 1
-    assert body["meta"] == {"page": 1, "page_size": 20, "total": profile["total_lines"]}
-    assert body["links"]["prev"] is None
-    assert "page=2" in body["links"]["next"]
+    assert body["data"][0] == FIRST_ROW
+    assert [row["__id"] for row in body["data"]] == list(range(1, 21))
+    assert body["links"] == {
+        "next": f"{base_url}{DATA_URL}?page=2&page_size=20",
+        "prev": None,
+        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
+        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
+    }
+    assert body["meta"] == {"page": 1, "page_size": 20, "total": TOTAL_LINES}
 
 
-def test_resource_data_pagination(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?page=3&page_size=5")
+@pytest.mark.parametrize("args", [{"page": 2}, {"page_size": 40}, {"page": 4, "page_size": 5}])
+def test_resource_data_with_meta_args(client, base_url, args):
+    page = args.get("page", 1)
+    page_size = args.get("page_size", settings.PAGE_SIZE_DEFAULT)
+    response = client.get(DATA_URL, params=args)
+    assert response.status_code == 200
     body = response.json()
-    assert [row["__id"] for row in body["data"]] == [11, 12, 13, 14, 15]
-    assert body["meta"]["page"] == 3
-    assert "page=2" in body["links"]["prev"]
+    first = (page - 1) * page_size + 1
+    assert [row["__id"] for row in body["data"]] == list(range(first, first + page_size))
+    assert body["links"] == {
+        "next": f"{base_url}{DATA_URL}?page={page + 1}&page_size={page_size}",
+        "prev": f"{base_url}{DATA_URL}?page={page - 1}&page_size={page_size}" if page > 1 else None,
+        "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
+        "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
+    }
+    assert body["meta"] == {"page": page, "page_size": page_size, "total": TOTAL_LINES}
 
 
-def test_resource_data_page_size_above_maximum(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?page_size=5000")
+def test_resource_data_last_page_has_no_next(client):
+    body = client.get(DATA_URL, params={"page": 3}).json()
+    assert body["links"]["next"] is None
+
+
+def test_resource_data_with_page_size_error(client):
+    response = client.get(DATA_URL, params={"page": 1, "page_size": settings.PAGE_SIZE_MAX + 1})
     assert response.status_code == 400
-    assert "Page size exceeds" in response.json()["errors"][0]["detail"]
+    assert response.json() == {
+        "errors": [
+            {
+                "code": None,
+                "title": "Invalid query string",
+                "detail": f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}",
+            }
+        ]
+    }
 
 
-def test_resource_data_filter_matches_sql_count(api, string_column):
-    value, count = most_frequent_value(api, string_column)
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/", params={f"{string_column}__exact": value}
-    )
+def test_resource_data_filter(client):
+    response = client.get(DATA_URL, params={"decompte__exact": 3, "is_true__exact": "true"})
     assert response.status_code == 200
     body = response.json()
-    assert body["meta"]["total"] == count
-    assert all(row[string_column] == value for row in body["data"])
+    expected = [i for i in range(1, TOTAL_LINES + 1) if i % 7 == 3 and i % 2 == 0]
+    assert [row["__id"] for row in body["data"]] == expected
+    assert body["meta"]["total"] == len(expected)
 
 
-def test_resource_data_sort(api, sortable_column):
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/",
-        params={f"{sortable_column}__sort": "asc", "page_size": 50},
-    )
+def test_resource_data_or_group(client):
+    response = client.get(DATA_URL, params={"or": '("Nom de l\'élu"__isnull,decompte__exact.6)'})
     assert response.status_code == 200
-    values = [row[sortable_column] for row in response.json()["data"] if row[sortable_column]]
-    assert values == sorted(values)
+    expected = [i for i in range(1, TOTAL_LINES + 1) if i % 5 == 0 or i % 7 == 6]
+    assert response.json()["meta"]["total"] == len(expected)
 
 
-def test_resource_data_contains_and_columns(api, string_column):
-    value, _ = most_frequent_value(api, string_column)
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/",
-        params={f"{string_column}__contains": value[:3].lower(), "columns": string_column},
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["meta"]["total"] > 0
-    assert set(body["data"][0].keys()) == {string_column}
+def test_resource_data_columns(client):
+    response = client.get(DATA_URL, params={"columns": "id,decompte", "page_size": 1})
+    assert response.json()["data"] == [{"id": "id-1", "decompte": 1}]
 
 
-def test_resource_data_isnotnull(api, string_column):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?{string_column}__isnotnull")
-    assert response.status_code == 200
-    assert all(row[string_column] is not None for row in response.json()["data"])
-
-
-def test_resource_data_or_group(api, string_column):
-    value, count = most_frequent_value(api, string_column)
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/",
-        params={"or": f'("{string_column}"__exact.{value},"{string_column}"__isnull)'},
-    )
-    assert response.status_code == 200
-    assert response.json()["meta"]["total"] >= count
-
-
-def test_resource_data_unknown_column(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?nope__exact=1")
+def test_resource_data_unknown_column(client):
+    response = client.get(DATA_URL, params={"nope__exact": 1})
     assert response.status_code == 400
     assert "unknown column" in response.json()["errors"][0]["detail"]
 
 
-def test_resource_data_aggregation_is_rejected(api, string_column):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/data/?{string_column}__groupby")
+def test_resource_data_aggregation_is_rejected(client):
+    response = client.get(f"{DATA_URL}?decompte__groupby")
     assert response.status_code == 400
     assert "/sql/" in response.json()["errors"][0]["detail"]
 
 
-def test_unknown_resource(api):
-    response = api.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
-    assert response.status_code == 404
-
-
-def test_malformed_resource_id(api):
-    response = api.get("/api/resources/not-an-uuid/data/")
-    assert response.status_code == 404
-
-
-def test_another_resource_of_the_bucket(api):
-    """Any <resource_id>.parquet of the bucket is queryable, without any ingestion step."""
-    response = api.get(f"/api/resources/{BIG_RESOURCE_ID}/data/?page_size=3")
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body["data"]) == 3
-    assert body["meta"]["total"] > 0
-
-
-def test_resource_data_csv(api, string_column):
-    value, _ = most_frequent_value(api, string_column)
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/csv/", params={f"{string_column}__exact": value}
-    )
+def test_resource_data_csv(client):
+    response = client.get(f"{DATA_URL}csv/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
     rows = list(csv.reader(io.StringIO(response.text)))
-    assert rows[0][0] == "__id"
-    assert string_column in rows[0]
-    assert len(rows) > 1
+    assert rows[0] == ["__id"] + HEADER
+    assert len(rows) == TOTAL_LINES + 1
+    assert rows[1] == ["1", "id-1", "0.1", "1", "false", "1951-01-01", "Élu 1", '["a", "b"]']
 
 
-def test_resource_data_json_stream(api, string_column):
-    value, count = most_frequent_value(api, string_column)
-    response = api.get(
-        f"/api/resources/{RESOURCE_ID}/data/json/", params={f"{string_column}__exact": value}
-    )
+def test_resource_data_json(client):
+    response = client.get(f"{DATA_URL}json/")
     assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body, list)
-    assert len(body) == count
+    rows = response.json()
+    assert len(rows) == TOTAL_LINES
+    assert rows[0] == FIRST_ROW
+    assert all(list(row) == ["__id"] + HEADER for row in rows)
 
 
-def test_resource_data_csv_too_long(api):
-    """The big resource is above BATCH_SIZE, so the download is refused."""
-    response = api.get(f"/api/resources/{BIG_RESOURCE_ID}/data/csv/")
+@pytest.mark.parametrize("output", ["csv", "json"])
+def test_resource_data_download_too_long(client, monkeypatch, output):
+    monkeypatch.setattr(settings, "BATCH_SIZE", 5)
+    response = client.get(f"{DATA_URL}{output}/")
     assert response.status_code == 403
-    assert "too long" in response.json()["errors"][0]["title"].lower()
+    assert response.json()["errors"][0]["title"] == "Output is too long"
 
 
-def test_sql_group_by(api, string_column):
-    value, count = most_frequent_value(api, string_column)
-    response = api.get(
+def test_sql_group_by(client):
+    response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/",
-        params={
-            "q": f'SELECT "{string_column}" AS value, count(*) AS n FROM resource '
-            "GROUP BY 1 ORDER BY n DESC LIMIT 3"
-        },
+        params={"q": "SELECT decompte, count(*) AS n FROM resource GROUP BY 1 ORDER BY 1"},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["data"][0] == {"value": value, "n": count}
+    counts = {d: len([i for i in range(1, TOTAL_LINES + 1) if i % 7 == d]) for d in range(7)}
+    assert body["data"] == [{"decompte": d, "n": n} for d, n in counts.items()]
     assert body["meta"]["truncated"] is False
     assert body["meta"]["table"] == "resource"
 
 
-def test_sql_row_limit(api):
-    response = api.get(
-        f"/api/resources/{BIG_RESOURCE_ID}/sql/", params={"q": "SELECT __id FROM resource"}
+def test_sql_row_limit(client, monkeypatch):
+    monkeypatch.setattr(settings, "SQL_MAX_ROWS", 10)
+    response = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT __id FROM resource"}
     )
     assert response.status_code == 200
     body = response.json()
     assert body["meta"]["truncated"] is True
-    assert body["meta"]["rows"] == body["meta"]["row_limit"]
+    assert body["meta"]["rows"] == body["meta"]["row_limit"] == 10
 
 
-def test_sql_cte_and_join_on_itself(api, string_column):
-    response = api.get(
+def test_sql_cte(client):
+    response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/",
         params={
-            "q": f'WITH counts AS (SELECT "{string_column}" AS value, count(*) AS n '
-            "FROM resource GROUP BY 1) SELECT count(*) AS groups, sum(n) AS total FROM counts"
+            "q": "WITH counts AS (SELECT decompte, count(*) AS n FROM resource GROUP BY 1) "
+            "SELECT count(*) AS groups, sum(n) AS total FROM counts"
         },
     )
     assert response.status_code == 200
-    assert response.json()["data"][0]["groups"] > 0
+    assert response.json()["data"] == [{"groups": 7, "total": TOTAL_LINES}]
 
 
-def test_sql_missing_query(api):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/sql/")
-    assert response.status_code == 400
+def test_sql_missing_query(client):
+    assert client.get(f"/api/resources/{RESOURCE_ID}/sql/").status_code == 400
 
 
 @pytest.mark.parametrize(
@@ -253,7 +268,7 @@ def test_sql_missing_query(api):
         "DELETE FROM resource",
         "COPY (SELECT 1) TO '/tmp/evil.csv'",
         "SELECT * FROM read_csv('/etc/passwd')",
-        f"SELECT * FROM read_parquet('{OWN_OBJECT_URL}')",
+        f"SELECT * FROM read_parquet('<base>/{RESOURCE_ID}.parquet')",
         "SELECT * FROM duckdb_secrets()",
         "SELECT 1; DROP VIEW resource",
         "PRAGMA database_list",
@@ -261,21 +276,23 @@ def test_sql_missing_query(api):
         "SELECT * FROM other_table",
     ],
 )
-def test_sql_rejects_dangerous_queries(api, query):
-    response = api.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+def test_sql_rejects_dangerous_queries(client, parquet_dir, query):
+    # even its own parquet file cannot be reached through a table function
+    query = query.replace("<base>", parquet_dir)
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
     assert response.status_code == 400
     assert response.json()["errors"][0]["title"] == "Invalid SQL query"
 
 
-def test_sql_still_works_after_a_rejected_query(api, profile):
-    api.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "DELETE FROM resource"})
-    response = api.get(
+def test_sql_still_works_after_a_rejected_query(client):
+    client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "DELETE FROM resource"})
+    response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT count(*) AS n FROM resource"}
     )
     assert response.status_code == 200
-    assert response.json()["data"] == [{"n": profile["total_lines"]}]
+    assert response.json()["data"] == [{"n": TOTAL_LINES}]
 
 
-def test_doc_is_served(api):
-    assert api.get("/api/doc").status_code == 200
-    assert "Tabular API" in api.get("/api/openapi.json").json()["info"]["title"]
+def test_doc_is_served(client):
+    assert client.get("/api/doc").status_code == 200
+    assert "Tabular API" in client.get("/api/openapi.json").json()["info"]["title"]
