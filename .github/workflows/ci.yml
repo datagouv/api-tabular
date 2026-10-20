@@ -30,9 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Start the API
-        # --wait blocks until the healthcheck of docker-compose.yml passes
-        run: docker compose up -d --build --wait
       - uses: astral-sh/setup-uv@v10
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -40,9 +37,6 @@ jobs:
         run: uv sync --frozen
       - name: Run tests
         run: uv run pytest
-      - name: Show API logs
-        if: failure()
-        run: docker compose logs api
 
   build:
     needs: [lint, tests]
