@@ -14,6 +14,7 @@ from .conftest import (
     NULL_VALUES_RESOURCE_ID,
     RESOURCE_ID,
     UNKNOWN_RESOURCE_ID,
+    patch_csession,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -380,22 +381,20 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
         (200, 200, ["status", "version", "uptime_since"]),
     ],
 )
-async def test_health(client, rmock, params):
+async def test_health(client, mocker, params):
     postgrest_resp_code, api_expected_resp_code, expected_keys = params
-    rmock.head(
-        f"{config.PGREST_ENDPOINT}/migrations_csv",
-        status=postgrest_resp_code,
-    )
+    mocked_head = patch_csession(mocker, client, postgrest_resp_code)
     res = await client.get("/health/")
     assert res.status == api_expected_resp_code
     res_json = await res.json()
     assert all(key in res_json for key in expected_keys)
+    mocked_head.assert_called_once_with(f"{config.PGREST_ENDPOINT}/migrations_csv")
 
 
 async def test_aggregation_exceptions(client):
-    res = await client.get(f"/api/aggregation-exceptions/")
+    res = await client.get("/api/aggregation-exceptions/")
     aggregations = await res.json()
-    assert aggregations["allowed"] == False
+    assert not aggregations["allowed"]
     assert aggregations["exceptions"] == config.ALLOW_AGGREGATION_EXCEPTIONS
 
 

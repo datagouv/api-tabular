@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.4.1 (2026-06-18)
+
+- fix: fix aiohttp version to be compatible with python 3.14
+
+
+## 0.4.0 (2026-06-18)
+
+- build: simplify Dockerfile ([#115](https://github.com/datagouv/api-tabular/pull/115))
+- build: use Python 3.14 ([#113](https://github.com/datagouv/api-tabular/pull/113))
+- fix: remove trailing whitespace in changelog ([#116](https://github.com/datagouv/api-tabular/pull/116))
+- fix(ci): fix lint check in ci ([#114](https://github.com/datagouv/api-tabular/pull/114))
+- fix(ci): fix push on docker registry when no git tag ([#112](https://github.com/datagouv/api-tabular/pull/112))
+
+
+## 0.3.2 (2026-06-12)
+
+- **feat!: add general allow aggregation config ([#102](https://github.com/datagouv/api-tabular/pull/102))**
+  This would allow to allow aggregation entirely, or disallow it but keep
+  a list of exceptions.
+  :warning: Renamed existing `ALLOW_AGGREGATION` to
+  `ALLOW_AGGREGATION_EXCEPTIONS`.
+- Allow complex conditions in queries ([#103](https://github.com/datagouv/api-tabular/pull/103))
+- ci: build Docker image and push to registry from applicative's CI ([#98](https://github.com/datagouv/api-tabular/pull/98))
+- ci: simplify CircleCI config ([#97](https://github.com/datagouv/api-tabular/pull/97))
+- docs: improve swaggers ([#92](https://github.com/datagouv/api-tabular/pull/92))
+- docs: minor README cleaning
+- Encapsulate column names for `columns` parameter ([#107](https://github.com/datagouv/api-tabular/pull/107))
+- feat: add ty type checker and fix type errors ([#96](https://github.com/datagouv/api-tabular/pull/96))
+- fix: adapt Sentry initialization to fix performance tracking not working ([#91](https://github.com/datagouv/api-tabular/pull/91))
+- fix(ci): avoid double publishing by running publish job only on push on main, run lint/tests/build on any push ([#99](https://github.com/datagouv/api-tabular/pull/99))
+- fix(lint): fix linting issues ([#110](https://github.com/datagouv/api-tabular/pull/110))
+- fix: static * wildcard CORS headers in all responses ([#100](https://github.com/datagouv/api-tabular/pull/100))
+- fix: support multi lines for breaking change commits ([#111](https://github.com/datagouv/api-tabular/pull/111))
+- Replace `uptime_seconds` with `uptime_since` in health endpoint ([#104](https://github.com/datagouv/api-tabular/pull/104))
+
+
 ## 0.3.1 (2026-01-30)
 
 - docs: clean changelog

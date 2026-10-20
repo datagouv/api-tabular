@@ -46,5 +46,5 @@ def test_env_override():
 
     assert config.PGREST_ENDPOINT == "https://example.com"
     assert config.PAGE_SIZE_MAX == 200
-    assert config.ALLOW_AGGREGATION == True
+    assert config.ALLOW_AGGREGATION
     assert config.ALLOW_AGGREGATION_EXCEPTIONS == ["a", "b", "c"]

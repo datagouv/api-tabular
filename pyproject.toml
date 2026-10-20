@@ -10,19 +10,18 @@ authors = [
     {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
 ]
 dependencies = [
-    "aiohttp>=3.13.3,<4.0.0",
+    "aiohttp>=3.14.1,<4.0.0",
     "aiohttp-swagger>=1.0.16,<2.0.0",
     "gunicorn<24.0.0,>=23.0.0",
     "sentry-sdk>=2.49.0,<3.0.0",
 ]
-requires-python = "<3.14,>=3.11"
+requires-python = "<3.15,>=3.11"
 license = "MIT"
 readme = "README.md"
 
 [dependency-groups]
 dev = [
     "aiohttp-devtools<2.0.0,>=1.0.post0",
-    "aioresponses<1.0.0,>=0.7.4",
     "pytest<8.0.0,>=7.2.1",
     "pytest-asyncio<1.0.0,>=0.20.3",
     "pytest-mock<4.0.0,>=3.10.0",
