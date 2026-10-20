@@ -29,6 +29,7 @@ COMPARATORS = {
     "strictly_greater": ">",
 }
 SORT_DIRECTIONS = {"asc": "ASC", "desc": "DESC"}
+NULLS_PLACEMENTS = {"nullsfirst": "NULLS FIRST", "nullslast": "NULLS LAST"}
 RESERVED_ARGUMENTS = ("page", "page_size", "columns")
 
 TRUE_VALUES = ("true", "t", "1", "yes", "y")
@@ -72,6 +73,22 @@ def build_offset(page: int, page_size: int) -> int:
             f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}",
         )
     return page_size * (page - 1) if page > 1 else 0
+
+
+def parse_sort(value: str) -> str:
+    """PostgREST ordering: `asc` or `desc`, followed or replaced by `nullsfirst` or `nullslast`."""
+    parts = value.lower().split(".")
+    direction = SORT_DIRECTIONS.get(parts[0])
+    if direction:
+        parts.pop(0)
+    nulls = NULLS_PLACEMENTS.get(parts[0]) if parts else None
+    if nulls:
+        parts.pop(0)
+    if parts or not (direction or nulls):
+        raise ValueError(f"invalid sort value '{value}'")
+    direction = direction or "ASC"
+    # DuckDB puts NULLs last whatever the direction, PostgreSQL treats them as the largest values
+    return f"{direction} {nulls or ('NULLS FIRST' if direction == 'DESC' else 'NULLS LAST')}"
 
 
 def split_column_operator(argument: str) -> tuple[str, str]:
@@ -303,7 +320,8 @@ class ParsedQuery:
         return f"{quoted_id}, * EXCLUDE ({quoted_id})"
 
     def data_sql(self, source: str) -> tuple[str, list]:
-        order_by = self.order_by or [f"{quote_ident(ID_COLUMN)} ASC"]
+        # __id last breaks the ties of the requested sort, so that pagination is deterministic
+        order_by = [*self.order_by, f"{quote_ident(ID_COLUMN)} ASC"]
         sql = (
             f"SELECT {self.select_clause()} FROM {source}{self.where_clause()}"
             f" ORDER BY {', '.join(order_by)}"
@@ -364,11 +382,11 @@ def build_query(
             continue
         column_name, comparator = split_column_operator(key)
         if comparator == "sort":
-            direction = SORT_DIRECTIONS.get(value.lower())
-            if direction is None:
-                raise ValueError(f"argument '{key}={value}' could not be parsed")
             quoted, _ = resolve_column(column_name, columns)
-            parsed.order_by.append(f"{quoted} {direction}")
+            try:
+                parsed.order_by.append(f"{quoted} {parse_sort(value)}")
+            except ValueError:
+                raise ValueError(f"argument '{key}={value}' could not be parsed") from None
             continue
         condition, params = build_condition(key, value, columns)
         parsed.conditions.append(condition)

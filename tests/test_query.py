@@ -79,9 +79,46 @@ def test_query_multiple_sorts(source):
     assert keys == sorted(keys)
 
 
-def test_query_sort_unknown_direction(source):
+@pytest.mark.parametrize("value", ["sideways", "desc.sideways", "nullsfirst.desc"])
+def test_query_sort_unknown_direction(source, value):
     with pytest.raises(ValueError):
-        run(source, ["decompte__sort=sideways"])
+        run(source, [f"decompte__sort={value}"])
+
+
+@pytest.mark.parametrize(
+    "value, nulls_first",
+    [
+        # PostgreSQL defaults: NULLs are the largest values
+        ("asc", False),
+        ("desc", True),
+        # PostgREST modifiers
+        ("asc.nullsfirst", True),
+        ("desc.nullslast", False),
+        ("nullsfirst", True),
+        ("nullslast", False),
+    ],
+)
+def test_query_sort_nulls_placement(source, value, nulls_first):
+    names = [r[NAME] for r in run(source, [f"{NAME}__sort={value}"])]
+    nulls = len(expected_ids(lambda r: r[NAME] is None))
+    edge = names[:nulls] if nulls_first else names[-nulls:]
+    assert edge == [None] * nulls
+    non_null = [name for name in names if name is not None]
+    assert non_null == sorted(non_null, reverse=value.startswith("desc"))
+
+
+def test_query_sort_ties_are_ordered_by_id(source):
+    """Rows with equal sort values must come in a stable order, or pagination skips rows."""
+    conn, columns = source
+    # stored in the reverse order of __id, so that only an explicit tiebreak gives __id order
+    conn.execute("CREATE TABLE reversed AS SELECT * FROM source ORDER BY __id DESC")
+    paginated_ids = []
+    for offset in range(0, TOTAL_LINES, 7):
+        parsed = build_query(["decompte__sort=asc", "columns=__id"], columns, 7, offset)
+        sql, params = parsed.data_sql("reversed")
+        paginated_ids.extend(value for (value,) in conn.execute(sql, params).fetchall())
+    expected = sorted(ROWS, key=lambda r: (r["decompte"], r["__id"]))
+    assert paginated_ids == [r["__id"] for r in expected]
 
 
 @pytest.mark.parametrize(
