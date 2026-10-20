@@ -15,6 +15,21 @@ class QueryException(Exception):
         return {"errors": [{"code": self.error_code, "title": self.title, "detail": self.detail}]}
 
 
+def query_timeout(seconds: float) -> QueryException:
+    return QueryException(
+        400, None, "Query timeout", f"The query was interrupted after {seconds} seconds"
+    )
+
+
+def server_busy(seconds: float) -> QueryException:
+    return QueryException(
+        503,
+        None,
+        "Server busy",
+        f"No query slot got available within {seconds} seconds, retry later",
+    )
+
+
 def handle_exception(
     status: int, title: str, detail: str, resource_id: str | None = None
 ) -> QueryException:

@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # caches the parquet footers and HTTP metadata: much faster on repeated queries, but a
     # replaced parquet file keeps being served from the cached metadata until restart
     DUCKDB_METADATA_CACHE: bool = False
+    # every query of the data endpoints is interrupted after QUERY_TIMEOUT seconds, and at most
+    # QUERY_WORKERS of them run at once
+    QUERY_TIMEOUT: int = 30
+    QUERY_WORKERS: int = 8
     RESOURCE_CACHE_TTL: int = 300
     PROFILE_STATS: bool = True
 

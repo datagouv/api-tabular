@@ -314,6 +314,7 @@ Configuration is handled through environment variables or a `.env` file (see [.e
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
 | `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | DuckDB limits |
+| `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | data queries are interrupted after this many seconds, and at most this many run at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
 | `SQL_POOL_SIZE` | `4` | connections dedicated to the SQL endpoint |

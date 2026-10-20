@@ -18,6 +18,8 @@ services:
       - SCHEME
       - DUCKDB_METADATA_CACHE
       - PROFILE_STATS
+      - QUERY_TIMEOUT
+      - QUERY_WORKERS
       - SQL_MAX_ROWS
       - SQL_TIMEOUT
       # only needed for a private bucket

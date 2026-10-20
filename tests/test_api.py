@@ -7,6 +7,7 @@ import yaml
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
+from tabular_duckdb.errors import QueryException
 from tabular_duckdb.main import build_link_with_page
 
 from .conftest import (
@@ -40,13 +41,37 @@ def test_health(client):
 
 
 def test_health_when_duckdb_is_down(client, monkeypatch):
-    async def broken_query(*args, **kwargs):
+    async def broken_ping():
         raise duckdb.ConnectionException("connection closed")
 
-    monkeypatch.setattr(engine, "query", broken_query)
+    monkeypatch.setattr(engine, "ping", broken_ping)
     response = client.get("/health/")
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "DB unavailable"
+
+
+def test_query_timeout(client, monkeypatch):
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    with pytest.raises(QueryException) as raised:
+        client.portal.call(engine.query, "SELECT sum(hash(range)) FROM range(10000000000)")
+    assert raised.value.status == 400
+    assert raised.value.title == "Query timeout"
+
+
+def test_health_and_data_when_every_query_slot_is_taken(client, monkeypatch):
+    """Slow /data/ queries must neither make /health/ fail nor queue the others forever."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    slots = settings.QUERY_WORKERS
+    for _ in range(slots):
+        client.portal.call(engine._slots.acquire)
+    try:
+        assert client.get("/health/").status_code == 200
+        response = client.get(DATA_URL)
+    finally:
+        for _ in range(slots):
+            client.portal.call(engine._slots.release)
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Server busy"
 
 
 def test_resource_meta(client, base_url):
@@ -457,7 +482,7 @@ def test_sql_busy_pool(client, monkeypatch):
         for conn in held:
             pool.put_nowait(conn)
     assert response.status_code == 503
-    assert response.json()["errors"][0]["title"] == "SQL endpoint busy"
+    assert response.json()["errors"][0]["title"] == "Server busy"
 
 
 def test_sql_still_works_after_a_rejected_query(client):

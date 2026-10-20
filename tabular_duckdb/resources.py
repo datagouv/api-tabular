@@ -215,7 +215,8 @@ async def summarize(resource: Resource) -> dict[str, dict[str, Any]]:
     """Per-column statistics, computed by DuckDB's SUMMARIZE."""
     try:
         columns, rows = await engine.query(f"SUMMARIZE SELECT * FROM {resource.source_sql}")
-    except duckdb.Error:
+    except (duckdb.Error, QueryException):
+        # statistics are a bonus: a file too big to summarize in time still gets its profile
         return {}
     stats: dict[str, dict[str, Any]] = {}
     for row in (dict(zip(columns, values)) for values in rows):

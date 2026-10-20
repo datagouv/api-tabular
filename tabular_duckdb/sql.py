@@ -26,7 +26,7 @@ import duckdb
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
-from tabular_duckdb.errors import QueryException
+from tabular_duckdb.errors import QueryException, query_timeout
 from tabular_duckdb.resources import Resource
 
 # the resource is always exposed under this table name
@@ -175,15 +175,6 @@ class SqlResult:
     execution_ms: int
 
 
-def query_timeout() -> QueryException:
-    return QueryException(
-        400,
-        None,
-        "Query timeout",
-        f"The query was interrupted after {settings.SQL_TIMEOUT} seconds",
-    )
-
-
 async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
     """Validate then run the query, within SQL_TIMEOUT once a connection is borrowed."""
     row_limit = max(1, settings.SQL_MAX_ROWS)
@@ -199,7 +190,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         try:
             await asyncio.to_thread(engine.run_with_timeout, conn, view_sql, settings.SQL_TIMEOUT)
         except duckdb.InterruptException as exc:
-            raise query_timeout() from exc
+            raise query_timeout(settings.SQL_TIMEOUT) from exc
         except duckdb.Error as exc:
             raise QueryException(
                 400,
@@ -213,7 +204,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
                 engine.run_with_timeout, conn, wrapped_sql, max(remaining, 0.001)
             )
         except duckdb.InterruptException as exc:
-            raise query_timeout() from exc
+            raise query_timeout(settings.SQL_TIMEOUT) from exc
         except duckdb.Error as exc:
             raise invalid_query(_safe_message(str(exc))) from exc
         execution_ms = round((asyncio.get_running_loop().time() - started) * 1000)

@@ -291,7 +291,7 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
 @get("/health/")
 async def health(request: Request) -> JSONResponse:
     try:
-        await engine.query("SELECT 1")
+        await engine.ping()
     except (duckdb.Error, QueryException) as exc:
         raise QueryException(
             503, None, "DB unavailable", f"DuckDB is not available: {exc}"
