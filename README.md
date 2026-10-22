@@ -358,6 +358,8 @@ This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/
 ```shell
 # Lint (including import sorting) and format code
 uv run ruff check --fix && uv run ruff format
+# Check the types
+uv run ty check
 ```
 
 ### 🔗 Pre-commit Hooks

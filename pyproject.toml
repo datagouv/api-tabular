@@ -28,6 +28,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
+    "ty>=0.0.90",
 ]
 
 [tool.hatch.version]

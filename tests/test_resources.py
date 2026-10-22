@@ -12,21 +12,24 @@ FAST_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000002"
 OTHER_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000003"
 
 
-@pytest.fixture
-def cache(monkeypatch):
+class SlowLoadCache(ResourceCache):
     """A cache whose loads of SLOW_RESOURCE_ID hang until `release` is set."""
-    cache = ResourceCache()
-    cache.release = asyncio.Event()
-    cache.loads = []
 
-    async def load(resource_id: str) -> Resource:
-        cache.loads.append(resource_id)
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = asyncio.Event()
+        self.loads: list[str] = []
+
+    async def _load(self, resource_id: str) -> Resource:
+        self.loads.append(resource_id)
         if resource_id == SLOW_RESOURCE_ID:
-            await cache.release.wait()
+            await self.release.wait()
         return Resource(resource_id=resource_id, created_at=None)
 
-    monkeypatch.setattr(cache, "_load", load)
-    return cache
+
+@pytest.fixture
+def cache() -> SlowLoadCache:
+    return SlowLoadCache()
 
 
 async def test_slow_load_does_not_block_other_resources(cache):

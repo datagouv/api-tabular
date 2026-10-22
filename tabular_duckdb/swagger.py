@@ -1,6 +1,11 @@
 """Per-resource OpenAPI spec: the filters and sorts available on each column of the resource."""
 
+from collections.abc import Mapping
+from typing import NotRequired, TypedDict
+
 import yaml
+
+from tabular_duckdb.resources import ColumnProfile
 
 TYPE_POSSIBILITIES = {
     "string": [
@@ -92,7 +97,15 @@ MAP_TYPES = {
     "float": "number",
 }
 
-OPERATORS_DESCRIPTIONS = {
+
+class OperatorDescription(TypedDict):
+    # templates filled with the column name
+    name: str
+    description: str
+    is_aggregator: NotRequired[bool]
+
+
+OPERATORS_DESCRIPTIONS: dict[str, OperatorDescription] = {
     "exact": {
         "name": "{}__exact",
         "description": "Exact match in column: {} ({}__exact=value)",
@@ -158,7 +171,7 @@ OPERATORS_DESCRIPTIONS = {
 }
 
 
-def swagger_parameters(resource_columns: dict) -> list:
+def swagger_parameters(resource_columns: Mapping[str, ColumnProfile]) -> list[dict]:
     parameters_list: list[dict] = [
         {
             "name": "page",
@@ -255,7 +268,7 @@ def swagger_parameters(resource_columns: dict) -> list:
     return parameters_list
 
 
-def swagger_component(resource_columns: dict) -> dict:
+def swagger_component(resource_columns: Mapping[str, ColumnProfile]) -> dict:
     resource_prop_dict = {}
     for key, value in resource_columns.items():
         type = MAP_TYPES.get(value["python_type"], "string")
@@ -324,7 +337,7 @@ def swagger_component(resource_columns: dict) -> dict:
     return component_dict
 
 
-def build_swagger_file(resource_columns: dict, rid: str) -> str:
+def build_swagger_file(resource_columns: Mapping[str, ColumnProfile], rid: str) -> str:
     parameters_list = swagger_parameters(resource_columns)
     component_dict = swagger_component(resource_columns)
     swagger_dict = {

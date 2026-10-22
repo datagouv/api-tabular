@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 import threading
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -200,7 +200,7 @@ class DuckDBEngine:
 
     async def stream(
         self, sql: str, params: Sequence[Any] | None = None
-    ) -> AsyncIterator[QueryResult]:
+    ) -> AsyncGenerator[QueryResult]:
         """Yield the result in chunks, keeping a cursor open across chunks.
 
         The first chunk is yielded even when empty, so that a CSV export without any row still

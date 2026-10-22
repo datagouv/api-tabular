@@ -1,7 +1,7 @@
 import asyncio
 import urllib.error
 import urllib.request
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -130,7 +130,7 @@ async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     if settings.SENTRY_DSN:
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,

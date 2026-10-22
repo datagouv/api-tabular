@@ -1,6 +1,7 @@
 import pytest
 
 from tabular_duckdb.query import PYTHON_TYPES, python_type
+from tabular_duckdb.resources import ColumnProfile
 from tabular_duckdb.swagger import TYPE_POSSIBILITIES, swagger_parameters
 
 GLOBAL_PARAMETERS = {"page", "page_size", "columns", "or"}
@@ -52,7 +53,9 @@ def test_every_column_type_has_swagger_operators(duckdb_type):
     ],
 )
 def test_swagger_parameters_per_type(python_type, operators, aggregators):
-    parameters = swagger_parameters({"col": {"python_type": python_type}})
+    parameters = swagger_parameters(
+        {"col": ColumnProfile(python_type=python_type, format=python_type)}
+    )
     assert {p["name"] for p in parameters} == GLOBAL_PARAMETERS | {
         f"col__{op}" for op in operators | aggregators
     }

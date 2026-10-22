@@ -94,7 +94,9 @@ class RecordingTransport(Transport):
 @pytest.fixture
 def sentry_events():
     sentry_sdk.init(dsn="https://key@sentry.invalid/1", transport=RecordingTransport)
-    yield sentry_sdk.get_client().transport.events
+    transport = sentry_sdk.get_client().transport
+    assert isinstance(transport, RecordingTransport)
+    yield transport.events
     sentry_sdk.init()
 
 
@@ -360,8 +362,10 @@ def test_resource_profile(client):
 def test_resource_profile_counts_rare_missing_values_across_row_groups(client, parquet_dir):
     path = f"{parquet_dir}/{RARE_NULL_RESOURCE_ID}.parquet"
     with duckdb.connect(":memory:") as conn:
-        row_groups = conn.execute(f"SELECT num_row_groups FROM parquet_file_metadata('{path}')")
-        assert row_groups.fetchone()[0] > 1
+        [(row_groups,)] = conn.execute(
+            f"SELECT num_row_groups FROM parquet_file_metadata('{path}')"
+        ).fetchall()
+    assert row_groups > 1
     response = client.get(f"/api/resources/{RARE_NULL_RESOURCE_ID}/profile/")
     profile = response.json()["profile"]
     assert profile["total_lines"] == RARE_NULL_TOTAL_LINES

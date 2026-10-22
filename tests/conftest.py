@@ -3,6 +3,7 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import pytest
@@ -173,7 +174,7 @@ class StorageHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def log_message(self, *args) -> None:
+    def log_message(self, format: str, *args: Any) -> None:
         pass
 
 
@@ -227,7 +228,7 @@ class ParquetFilesHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content[start : end + 1])
 
-    def log_message(self, *args) -> None:
+    def log_message(self, format: str, *args: Any) -> None:
         pass
 
 

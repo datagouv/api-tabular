@@ -105,7 +105,8 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
             raise invalid_query(f"Could not parse the query: {safe_message(str(exc))}") from exc
         if len(statements) != 1 or statements[0].type != duckdb.StatementType.SELECT:
             raise invalid_query("Only a single SELECT query is allowed")
-        tree = json.loads(cursor.execute("SELECT json_serialize_sql(?)", [user_sql]).fetchone()[0])
+        [(serialized,)] = cursor.execute("SELECT json_serialize_sql(?)", [user_sql]).fetchall()
+        tree = json.loads(serialized)
         forbidden = called_functions(tree) - ALLOWED_FUNCTIONS
         if forbidden:
             raise invalid_query(f"Functions not allowed: {', '.join(sorted(forbidden))}")

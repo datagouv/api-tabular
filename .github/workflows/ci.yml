@@ -25,6 +25,8 @@ jobs:
         run: |
           uv run ruff check --extend-select I .
           uv run ruff format --check .
+      - name: Type check
+        run: uv run ty check
 
   tests:
     runs-on: ubuntu-latest

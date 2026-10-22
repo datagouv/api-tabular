@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import aclosing
 
 from tabular_duckdb.config import settings
@@ -20,7 +20,7 @@ def check_output_size(total: int) -> None:
         )
 
 
-async def start_stream(sql: str, params: list) -> AsyncIterator[QueryResult]:
+async def start_stream(sql: str, params: list) -> AsyncGenerator[QueryResult]:
     """Run the query up to its first chunk, then yield all of them.
 
     A query failing once run must raise here, before the response status is sent: once the
@@ -29,7 +29,7 @@ async def start_stream(sql: str, params: list) -> AsyncIterator[QueryResult]:
     chunks = engine.stream(sql, params)
     first = await anext(chunks)
 
-    async def all_chunks() -> AsyncIterator[QueryResult]:
+    async def all_chunks() -> AsyncGenerator[QueryResult]:
         async with aclosing(chunks):
             yield first
             async for chunk in chunks:
