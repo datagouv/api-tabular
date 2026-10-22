@@ -5,12 +5,14 @@ import duckdb
 import pytest
 import sentry_sdk
 import yaml
+from fastapi.testclient import TestClient
 from sentry_sdk.transport import Transport
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
 from tabular_duckdb.errors import QueryException, query_timeout
-from tabular_duckdb.main import build_link_with_page
+from tabular_duckdb.main import app, build_link_with_page
+from tabular_duckdb.resources import resource_cache
 
 from .conftest import (
     CORRUPT_RESOURCE_ID,
@@ -101,6 +103,74 @@ def test_storage_error_is_reported_without_the_storage_location(
     assert storage not in error["detail"]
     assert [event["event_id"] for event in sentry_events] == [error["code"]]
     assert sentry_events[0]["tags"]["title"] == "Storage error"
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_health_when_the_storage_fails(client, storage, monkeypatch, status):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/{status}")
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Storage unavailable"
+
+
+def test_health_does_not_report_to_sentry(client, monkeypatch, sentry_events):
+    """It is polled every few seconds: an outage would otherwise flood Sentry."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", "http://127.0.0.1:1")
+    assert client.get("/health/").status_code == 503
+    assert sentry_events == []
+
+
+@pytest.fixture
+def restart_on(client, monkeypatch):
+    """Restart the engine on another storage: its sandbox only opens the prefix set at start."""
+    original = settings.PARQUET_BASE_URL
+
+    def restart(base_url: str) -> None:
+        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+        monkeypatch.setattr(resource_cache, "_entries", {})
+        client.portal.call(engine.stop)
+        client.portal.call(engine.start)
+
+    yield restart
+    settings.PARQUET_BASE_URL = original
+    client.portal.call(engine.stop)
+    client.portal.call(engine.start)
+
+
+def test_storage_failing_while_the_parquet_file_is_read(client, storage, restart_on, sentry_events):
+    """The HEAD succeeds, then the storage fails the reads of DuckDB: a 502, not the file's fault."""
+    restart_on(f"{storage}/200")
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
+    assert response.status_code == 502
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage error"
+    assert storage not in error["detail"]
+    assert [event["event_id"] for event in sentry_events] == [error["code"]]
+
+
+def test_resources_read_over_http(client, http_parquet_dir, restart_on):
+    """The production path: the parquet file read by DuckDB through ranged HTTP requests."""
+    restart_on(http_parquet_dir)
+    meta = client.get(f"/api/resources/{RESOURCE_ID}/")
+    assert meta.status_code == 200
+    assert meta.json()["created_at"] == "2024-01-01T12:00:00+00:00"
+    data = client.get(DATA_URL, params={"page_size": 1})
+    assert data.json()["data"] == [FIRST_ROW]
+    sql = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT count(*) AS n FROM resource"}
+    )
+    assert sql.json()["data"] == [{"n": TOTAL_LINES}]
+
+
+def test_cors_headers_on_a_server_error(monkeypatch):
+    async def broken(resource_id):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(resource_cache, "get", broken)
+    # outside of its context manager, so that the application started by `client` is reused
+    response = TestClient(app, raise_server_exceptions=False).get(f"/api/resources/{RESOURCE_ID}/")
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "*"
 
 
 def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
@@ -666,68 +736,38 @@ def test_sql_missing_query(client):
     assert client.get(f"/api/resources/{RESOURCE_ID}/sql/").status_code == 400
 
 
-@pytest.mark.parametrize(
-    "query",
-    [
-        "CREATE TABLE evil AS SELECT 1",
-        "DELETE FROM resource",
-        "COPY (SELECT 1) TO '/tmp/evil.csv'",
-        "SELECT * FROM read_csv('/etc/passwd')",
-        f"SELECT * FROM read_parquet('<base>/{RESOURCE_ID}.parquet')",
-        "SELECT * FROM duckdb_secrets()",
-        "SELECT 1; DROP VIEW resource",
-        "PRAGMA database_list",
-        "SET disabled_filesystems=''",
-        "SELECT * FROM other_table",
-    ],
-)
-def test_sql_rejects_dangerous_queries(client, parquet_dir, query):
-    # even its own parquet file cannot be reached through a table function
-    query = query.replace("<base>", parquet_dir)
-    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
-    assert response.status_code == 400
-    assert response.json()["errors"][0]["title"] == "Invalid SQL query"
+def test_sql_answer_is_capped_in_bytes(client, monkeypatch):
+    """The caller controls the size of each value: the row cap alone does not bound the answer."""
+    monkeypatch.setattr(settings, "SQL_MAX_BYTES", 10_000)
+    response = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/",
+        params={"q": "SELECT repeat('x', 1000) AS s FROM range(100)"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meta"]["truncated"] is True
+    assert 0 < len(body["data"]) < 100
+    assert sum(len(row["s"]) for row in body["data"]) <= 10_000
 
 
-def test_sql_busy_pool(client, monkeypatch):
-    """When every connection is held by slow queries, the next ones must not wait forever."""
+def test_sql_when_every_query_slot_is_taken(client, monkeypatch):
+    """When slow queries hold every slot, the next ones must not wait forever."""
     monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
-    pool = engine._sql_pool
-    held = [pool.get_nowait() for _ in range(pool.qsize())]
+    slots = settings.QUERY_WORKERS
+    for _ in range(slots):
+        client.portal.call(engine._slots.acquire)
     try:
         response = client.get(
             f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT 1 AS n FROM resource"}
         )
     finally:
-        for conn in held:
-            pool.put_nowait(conn)
+        for _ in range(slots):
+            client.portal.call(engine._slots.release)
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "Server busy"
 
 
-def test_sql_rejects_a_macro_reading_the_catalog(client, parquet_dir):
-    """`pg_get_viewdef` expands to a query on `duckdb_views()`, which holds the storage location."""
-    query = (
-        "SELECT pg_get_viewdef(range) AS d FROM range(0, 10000000) "
-        "WHERE pg_get_viewdef(range) LIKE '%read_parquet%'"
-    )
-    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
-    assert response.status_code == 400
-    assert parquet_dir not in response.text
-
-
-def test_sql_rejects_a_cte_referenced_before_its_declaration(client, parquet_dir):
-    """DuckDB would bind the name to its system view, which holds the storage location."""
-    query = (
-        "WITH x AS (SELECT sql FROM duckdb_views), duckdb_views AS (SELECT 1 AS sql) "
-        "SELECT * FROM x"
-    )
-    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
-    assert response.status_code == 400
-    assert parquet_dir not in response.text
-
-
-def test_sql_timeout_then_the_connection_is_reused(client, monkeypatch):
+def test_sql_timeout_then_the_next_query_runs(client, monkeypatch):
     monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
     response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/",
@@ -735,13 +775,10 @@ def test_sql_timeout_then_the_connection_is_reused(client, monkeypatch):
     )
     assert response.status_code == 400
     assert response.json()["errors"][0]["title"] == "Query timeout"
-    # every connection of the pool, the interrupted one included, still answers
-    for _ in range(settings.SQL_POOL_SIZE):
-        response = client.get(
-            f"/api/resources/{RESOURCE_ID}/sql/",
-            params={"q": "SELECT count(*) AS n FROM resource"},
-        )
-        assert response.json()["data"] == [{"n": TOTAL_LINES}]
+    response = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT count(*) AS n FROM resource"}
+    )
+    assert response.json()["data"] == [{"n": TOTAL_LINES}]
 
 
 def test_sql_still_works_after_a_rejected_query(client):

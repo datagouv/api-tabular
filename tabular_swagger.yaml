@@ -167,10 +167,8 @@ paths:
         For instance:
         `SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC`.
 
-        Only a single `SELECT` statement is accepted. Are rejected: any DDL/DML statement
-        (`CREATE`, `INSERT`, `DELETE`, `COPY`, `ATTACH`, `SET`, `PRAGMA`, `CALL`, `INSTALL`...),
-        multiple statements, any table function (`read_parquet`, `read_csv`, `read_text`, `glob`,
-        `duckdb_secrets`...) and any table other than `resource` (your own CTEs are allowed).
+        Only a single `SELECT` statement is accepted: any other statement (`CREATE`, `INSERT`,
+        `COPY`, `ATTACH`, `SET`, `PRAGMA`, `INSTALL`...) and multiple statements are rejected.
         Results are capped and the query is interrupted after a timeout.
       summary: Run a read-only SQL query on the resource
       operationId: getResourceSql

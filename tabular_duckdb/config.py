@@ -34,8 +34,7 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 50000
     STREAM_CHUNK_SIZE: int = 1000
 
-    # DuckDB, per instance: the /data/ connection and each connection of the SQL pool is its own
-    # instance, so the process can use (1 + SQL_POOL_SIZE) times these
+    # DuckDB, for the single instance shared by every query
     DUCKDB_THREADS: int = 4
     DUCKDB_MEMORY_LIMIT: str = "2GB"
     # caches the parquet footers and HTTP metadata: much faster on repeated queries, but a
@@ -48,9 +47,10 @@ class Settings(BaseSettings):
     RESOURCE_CACHE_TTL: int = 300
     PROFILE_STATS: bool = True
 
-    # read-only SQL endpoint
-    SQL_POOL_SIZE: PositiveInt = 4
+    # read-only SQL endpoint, whose queries share the QUERY_WORKERS threads
     SQL_MAX_ROWS: PositiveInt = 10000
+    # of JSON in the answer
+    SQL_MAX_BYTES: PositiveInt = 10_000_000
     SQL_TIMEOUT: int = 30
     SQL_MAX_LENGTH: int = 10000
 

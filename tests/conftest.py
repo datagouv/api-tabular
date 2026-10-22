@@ -2,6 +2,7 @@ import json
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -153,6 +154,61 @@ class StorageHandler(BaseHTTPRequestHandler):
 def storage():
     """Base URL of an HTTP storage answering the status written in the path."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), StorageHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}"
+    server.shutdown()
+    server.server_close()
+
+
+class ParquetFilesHandler(BaseHTTPRequestHandler):
+    """Serves the parquet files of `directory` like an object storage: HEAD, and ranged GETs."""
+
+    directory: Path
+
+    def _file(self) -> Path | None:
+        path = self.directory / self.path.strip("/")
+        return path if path.is_file() else None
+
+    def do_HEAD(self) -> None:
+        path = self._file()
+        if path is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(path.stat().st_size))
+        self.send_header("Last-Modified", LAST_MODIFIED)
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        path = self._file()
+        if path is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+        content = path.read_bytes()
+        start, end = 0, len(content) - 1
+        ranged = self.headers.get("Range", "").removeprefix("bytes=")
+        if ranged:
+            first, _, last = ranged.partition("-")
+            start, end = int(first), min(int(last), end) if last else end
+        self.send_response(206 if ranged else 200)
+        self.send_header("Content-Length", str(end - start + 1))
+        if ranged:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{len(content)}")
+        self.end_headers()
+        self.wfile.write(content[start : end + 1])
+
+    def log_message(self, *args) -> None:
+        pass
+
+
+@pytest.fixture(scope="session")
+def http_parquet_dir(parquet_dir):
+    """Base URL serving `parquet_dir` over HTTP, the way the bucket serves the parquet files."""
+    handler = type("Handler", (ParquetFilesHandler,), {"directory": Path(parquet_dir)})
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}"
     server.shutdown()

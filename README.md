@@ -76,7 +76,7 @@ Returns basic information about the resource and the available endpoints. `creat
 ```json
 {
   "created_at": "2026-10-19T16:23:08+00:00",
-  "url": null,
+  "url": "https://www.data.gouv.fr/api/1/datasets/r/{resource_id}",
   "links": [
     {"href": "http://localhost:8005/api/resources/{resource_id}/profile/", "type": "GET", "rel": "profile"},
     {"href": "http://localhost:8005/api/resources/{resource_id}/data/", "type": "GET", "rel": "data"},
@@ -284,17 +284,15 @@ curl -G "http://localhost:8005/api/resources/$RID/sql/" \
 }
 ```
 
-The endpoint is read-only, and enforced as such at several levels:
+The endpoint is read-only, and the protection comes from DuckDB itself rather than from an analysis of the query:
 
-- the query is first serialized by DuckDB's `json_serialize_sql()`, which only accepts `SELECT`: `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `COPY`, `EXPORT`, `ATTACH`, `INSTALL`, `LOAD`, `SET`, `PRAGMA`, `CALL`, `CREATE SECRET`... are rejected before anything runs;
-- exactly one statement is allowed, so nothing can hide behind a `;`;
-- no table function is allowed (`read_parquet`, `read_csv`, `read_text`, `glob`, `duckdb_secrets()`, `duckdb_settings()`...), so no arbitrary file can be read with the server's credentials. Only `generate_series`, `range`, `unnest` and `repeat` are allowed. Neither are the built-in macros querying the catalog in their body, such as `pg_get_viewdef`;
-- the only table that can be referenced is `resource` (plus your own CTEs). A bare `FROM 'https://.../file.parquet'` is parsed as a table name and rejected as well;
-- queries run on a dedicated pool of sandboxed DuckDB connections: `enable_external_access=false` with only `PARQUET_BASE_URL` in `allowed_directories`, so local files, other prefixes of the same bucket and other hosts are all unreachable, extension autoloading is off, and `lock_configuration=true` prevents a query from loosening its own sandbox. DuckDB does not resolve `..` in a URL before this check, which is why the two previous rules keep any path out of the queries;
-- results are capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit) and the query is interrupted after `SQL_TIMEOUT` seconds;
-- DuckDB error messages are filtered so that neither the storage path nor the credentials leak.
+- the process runs a single DuckDB instance, sandboxed with `enable_external_access=false` and only `PARQUET_BASE_URL` in `allowed_directories`: local files, other hosts, attached databases and extension installation are all out of reach, and `lock_configuration=true` prevents a query from loosening this;
+- its database is an empty file opened read-only, so that no query can change anything shared by the others;
+- every query runs on a connection of its own, where `resource` is a temporary view: whatever a query creates (temporary tables, macros...) disappears with its connection;
+- the query must be a single `SELECT` statement, its result is capped at `SQL_MAX_ROWS` rows and `SQL_MAX_BYTES` bytes of JSON (`meta.truncated` says whether a cap was hit), and it is interrupted after `SQL_TIMEOUT` seconds;
+- DuckDB error messages are filtered so that the credentials do not leak.
 
-The same sandbox is applied to the connection serving `/data/`, so the whole process can only ever read `<PARQUET_BASE_URL>/...`.
+A query can read any parquet file of the prefix, not only its resource: they are all public data. DuckDB does not resolve `..` in a URL before checking `allowed_directories`, so with a private bucket, a query can read whatever its credentials can read.
 
 ### Health Check
 
@@ -316,12 +314,12 @@ Configuration is handled through environment variables or a `.env` file (see [.e
 | `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
-| `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of each DuckDB instance: the process runs `1 + SQL_POOL_SIZE` of them, so up to 10 GB and 20 threads with the defaults |
+| `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of the DuckDB instance, shared by every query |
 | `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | data queries are interrupted after this many seconds, and at most this many run at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
-| `SQL_POOL_SIZE` | `4` | connections dedicated to the SQL endpoint |
 | `SQL_MAX_ROWS` | `10000` | row cap of the SQL endpoint |
+| `SQL_MAX_BYTES` | `10000000` | size cap of the SQL endpoint answers, in bytes of JSON |
 | `SQL_TIMEOUT` | `30` | timeout of the SQL endpoint, in seconds |
 | `SQL_MAX_LENGTH` | `10000` | maximum length of the `q` parameter |
 | `SENTRY_DSN` | empty | error reporting |
@@ -341,13 +339,14 @@ uv run pytest
 
 - **`tests/test_api.py`** - API endpoint tests, run in process against the local parquet files
 - **`tests/test_query.py`** - Query building tests, executed on DuckDB
-- **`tests/test_sql_security.py`** - Validation tests of the SQL endpoint
+- **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what the DuckDB sandbox prevents
 - **`tests/conftest.py`** - Test fixtures and configuration
 
 ## 🔀 Differences with the PostgREST version
 
 - No ingestion in PostgreSQL, no `tables_index` table: a `<resource_id>.parquet` file in the bucket is enough. Resource metadata is derived from the parquet file itself (schema, row count, statistics) and from the object's `Last-Modified` header (`created_at`).
-- `/api/resources/{rid}/` returns `"url": null` (the origin of the file is not tracked here).
+- `/api/resources/{rid}/` returns as `url` the permalink of the resource on data.gouv.fr (`DATAGOUV_URL`), which redirects to its source file, instead of the URL recorded at conversion time.
+- A resource deleted by its producer is no longer answered with a `410 Gone`: deletions are not tracked here, the data is served as long as its parquet file is in the bucket.
 - `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged.
 - Aggregations are allowed on every resource and every column: `/api/aggregation-exceptions/` always answers `{"allowed": true, "exceptions": []}`.
 - `page` and `page_size` must be positive integers, any other value answers a 400. The PostgREST version served the first page for `page=0` or a negative page, and the whole table, without any limit, for `page_size=0`.

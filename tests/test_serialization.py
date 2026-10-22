@@ -1,4 +1,31 @@
-from tabular_duckdb.serialization import as_csv_value, rows_to_json
+import pytest
+
+from tabular_duckdb.serialization import as_csv_value, jsonable, rows_to_json
+
+
+@pytest.mark.parametrize(
+    "expression, json_value, csv_value",
+    [
+        ("1.25::DECIMAL(10, 2)", 1.25, "1.25"),
+        (
+            "'b1a8c2e4-0f6d-4e51-9a3b-2c7d8e9f0a1b'::UUID",
+            "b1a8c2e4-0f6d-4e51-9a3b-2c7d8e9f0a1b",
+            "b1a8c2e4-0f6d-4e51-9a3b-2c7d8e9f0a1b",
+        ),
+        # not valid UTF-8: replaced rather than failing the whole response
+        ("'\\xAA'::BLOB", "�", "�"),
+        ("INTERVAL 1 DAY", "1 day, 0:00:00", "1 day, 0:00:00"),
+        ("{'a': 1}", {"a": 1}, '{"a": 1}'),
+        ("[1, 2]", [1, 2], "[1, 2]"),
+        ("TIME '12:30:00'", "12:30:00", "12:30:00"),
+        ("true", True, "true"),
+    ],
+)
+def test_duckdb_values_are_serialized(duckdb_connection, expression, json_value, csv_value):
+    """Any of them can come out of the SQL endpoint, whatever the parquet files hold."""
+    [(value,)] = duckdb_connection.execute(f"SELECT {expression}").fetchall()
+    assert jsonable(value) == json_value
+    assert as_csv_value(value) == csv_value
 
 
 def test_timestamp_with_time_zone_is_serialized(duckdb_connection):

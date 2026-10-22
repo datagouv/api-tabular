@@ -38,12 +38,16 @@ class Resource:
         return {ID_COLUMN: "BIGINT", **self.columns}
 
     @property
+    def url_literal(self) -> str:
+        """The URL of the parquet file, as a SQL string literal."""
+        return quote_literal(settings.object_url(self.resource_id))
+
+    @property
     def source_sql(self) -> str:
         """Subquery exposing the parquet file plus the __id column."""
-        object_url = quote_literal(settings.object_url(self.resource_id))
         return (
             f"(SELECT * EXCLUDE (file_row_number), file_row_number + 1 AS {ID_COLUMN} "
-            f"FROM read_parquet({object_url}, file_row_number = true))"
+            f"FROM read_parquet({self.url_literal}, file_row_number = true))"
         )
 
 
@@ -57,13 +61,13 @@ def head(url: str) -> dict[str, str]:
         # a bucket that does not grant listing answers 403 instead of 404 for a missing object
         if exc.code in (403, 404):
             raise HTTPException(404) from exc
-        raise handle_exception(
+        raise QueryException(
             502, "Storage error", f"The storage answered an unexpected HTTP {exc.code}"
         ) from exc
     except OSError as exc:
         # urllib only wraps the connection errors into URLError: a timeout or a disconnection
         # while waiting for the response surfaces as a bare TimeoutError or ConnectionError
-        raise handle_exception(
+        raise QueryException(
             503, "Storage unavailable", f"The storage is unreachable: {exc}"
         ) from exc
 
@@ -81,13 +85,23 @@ def _created_at(url: str) -> str | None:
         return None
 
 
-def read_error(exc: duckdb.Error) -> Exception:
-    """DuckDB cannot read the file: missing resource or genuinely unusable parquet."""
-    if isinstance(exc, (duckdb.HTTPException, duckdb.IOException)) and (
-        not settings.storage_over_http
-    ):
-        # no HEAD was possible on an s3:// URL, so an IO error most likely means "not found"
-        return HTTPException(404)
+def is_storage_failure(exc: duckdb.Error) -> bool:
+    return isinstance(exc, (duckdb.HTTPException, duckdb.IOException))
+
+
+def read_error(exc: duckdb.Error, resource_id: str | None = None) -> Exception:
+    """DuckDB cannot read the file: missing resource, failing storage, or unusable parquet."""
+    if is_storage_failure(exc):
+        if not settings.storage_over_http:
+            # no HEAD was possible on an s3:// URL, so an IO error most likely means "not found"
+            return HTTPException(404)
+        # the HEAD found the object: the storage failed while DuckDB was reading it
+        return handle_exception(
+            502,
+            "Storage error",
+            f"The storage failed while reading the parquet file: {safe_message(str(exc))}",
+            resource_id,
+        )
     return QueryException(
         400,
         "Invalid resource file",
@@ -107,9 +121,9 @@ class ResourceCache:
 
     def __init__(self) -> None:
         self._entries: dict[str, CacheEntry] = {}
-        # one lock per resource: concurrent requests on a resource load it once, without
-        # waiting on the (remote, possibly slow) loads of other resources
-        self._locks: dict[str, asyncio.Lock] = {}
+        # the loads in progress: concurrent requests on a resource share its load, and its
+        # failure, without waiting on the (remote, possibly slow) loads of other resources
+        self._loading: dict[str, asyncio.Task[Resource]] = {}
 
     async def get(self, resource_id: str) -> Resource:
         if not RESOURCE_ID_PATTERN.fullmatch(resource_id):
@@ -117,43 +131,44 @@ class ResourceCache:
         cached = self._entries.get(resource_id)
         if cached and cached.expires_at > time.monotonic():
             return cached.resource
-        lock = self._locks.setdefault(resource_id, asyncio.Lock())
-        try:
-            async with lock:
-                cached = self._entries.get(resource_id)
-                if cached and cached.expires_at > time.monotonic():
-                    return cached.resource
-                resource = await self._load(resource_id)
-                now = time.monotonic()
-                # an expired entry is only replaced when its resource is requested again: without
-                # this purge, every resource ever requested would stay in memory
-                self._entries = {
-                    key: entry for key, entry in self._entries.items() if entry.expires_at > now
-                }
-                self._entries[resource_id] = CacheEntry(
-                    expires_at=now + settings.RESOURCE_CACHE_TTL, resource=resource
-                )
-                return resource
-        finally:
-            # unknown resource ids must not pile up locks
-            if not lock.locked():
-                self._locks.pop(resource_id, None)
+        task = self._loading.get(resource_id)
+        if task is None:
+            task = asyncio.create_task(self._load_and_cache(resource_id))
+            self._loading[resource_id] = task
+            task.add_done_callback(lambda _: self._loading.pop(resource_id, None))
+        # a client going away must not cancel the load the others are waiting for
+        return await asyncio.shield(task)
+
+    async def _load_and_cache(self, resource_id: str) -> Resource:
+        resource = await self._load(resource_id)
+        now = time.monotonic()
+        # an expired entry is only replaced when its resource is requested again: without this
+        # purge, every resource ever requested would stay in memory
+        self._entries = {
+            key: entry for key, entry in self._entries.items() if entry.expires_at > now
+        }
+        self._entries[resource_id] = CacheEntry(
+            expires_at=now + settings.RESOURCE_CACHE_TTL, resource=resource
+        )
+        return resource
 
     async def _load(self, resource_id: str) -> Resource:
         object_url = settings.object_url(resource_id)
-        # over HTTP this also tells us whether the resource exists at all
-        created_at = await asyncio.to_thread(_created_at, object_url)
         try:
-            described = await engine.query(
-                f"DESCRIBE SELECT * FROM read_parquet({quote_literal(object_url)})"
-            )
+            # over HTTP this also tells us whether the resource exists at all
+            created_at = await asyncio.to_thread(_created_at, object_url)
+        except QueryException as exc:
+            # reported from here, not from `head()`: /health/ polls it every few seconds
+            raise handle_exception(exc.status, exc.title, exc.detail, resource_id) from exc
+        url_literal = quote_literal(object_url)
+        try:
+            described = await engine.query(f"DESCRIBE SELECT * FROM read_parquet({url_literal})")
             embedded = await engine.query_value(
-                f"SELECT value FROM parquet_kv_metadata({quote_literal(object_url)}) "
-                "WHERE decode(key) = ?",
+                f"SELECT value FROM parquet_kv_metadata({url_literal}) WHERE decode(key) = ?",
                 [INSPECTION_KEY],
             )
         except duckdb.Error as exc:
-            raise read_error(exc) from exc
+            raise read_error(exc, resource_id) from exc
         return Resource(
             resource_id=resource_id,
             created_at=created_at,
@@ -201,26 +216,17 @@ async def build_profile(resource: Resource) -> dict:
     for name, description in columns.items():
         formats.setdefault(description["format"], []).append(name)
 
-    with_stats = settings.PROFILE_STATS and bool(resource.columns)
-    # the footer has the row count and the NULLs of each column: counting them by scanning the
-    # file takes longer than QUERY_TIMEOUT on the biggest resources
-    object_url = quote_literal(settings.object_url(resource.resource_id))
-    missing_values: dict[str, int | None] = {}
+    # the footer has the row count: counting the rows by scanning the file takes longer than
+    # QUERY_TIMEOUT on the biggest resources
     try:
         total_lines = await engine.query_value(
-            f"SELECT num_rows FROM parquet_file_metadata({object_url})"
+            f"SELECT num_rows FROM parquet_file_metadata({resource.url_literal})"
         )
-        if with_stats:
-            # a writer that omits the null counts leaves them unknown (None)
-            null_counts = await engine.query(
-                "SELECT path_in_schema, sum(stats_null_count) "
-                f"FROM parquet_metadata({object_url}) GROUP BY ALL"
-            )
-            missing_values = dict(null_counts.rows)
     except duckdb.Error as exc:
-        raise read_error(exc) from exc
+        raise read_error(exc, resource.resource_id) from exc
 
-    profile = await summarize(resource, missing_values) if with_stats else {}
+    with_stats = settings.PROFILE_STATS and bool(resource.columns)
+    profile = await summarize(resource) if with_stats else {}
 
     return {
         "header": list(resource.columns.keys()),
@@ -239,14 +245,19 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-async def summarize(
-    resource: Resource, missing_values: dict[str, int | None]
-) -> dict[str, ColumnStats]:
+async def summarize(resource: Resource) -> dict[str, ColumnStats]:
     """Per-column statistics, computed by DuckDB's SUMMARIZE."""
-    source = f"read_parquet({quote_literal(settings.object_url(resource.resource_id))})"
-    # the footer only has null counts for the leaves of a nested column, not for its rows
-    nested = [name for name in resource.columns if name not in missing_values]
+    source = f"read_parquet({resource.url_literal})"
     try:
+        # the null counts of the footer, exact where SUMMARIZE only gives a rounded percentage;
+        # a writer that omits them leaves them unknown (None)
+        null_counts = await engine.query(
+            "SELECT path_in_schema, sum(stats_null_count) "
+            f"FROM parquet_metadata({resource.url_literal}) GROUP BY ALL"
+        )
+        missing_values: dict[str, int | None] = dict(null_counts.rows)
+        # the footer only has null counts for the leaves of a nested column, not for its rows
+        nested = [name for name in resource.columns if name not in missing_values]
         summary = await engine.query(f"SUMMARIZE SELECT * FROM {source}")
         if nested:
             counts_sql = ", ".join(f"count(*) - count({quote_ident(name)})" for name in nested)
@@ -264,7 +275,6 @@ async def summarize(
             mean=_as_float(row["avg"]),
             std=_as_float(row["std"]),
             nb_distinct=row["approx_unique"],
-            # SUMMARIZE only gives a rounded percentage of NULLs, which loses the rare ones
             nb_missing_values=missing_values.get(name),
         )
     return stats

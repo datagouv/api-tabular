@@ -1,5 +1,9 @@
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
+# the API runs arbitrary user SQL in DuckDB: not as root
+RUN groupadd --system datagouv && \
+    useradd --system --gid datagouv --create-home datagouv
+
 WORKDIR /app
 
 # install dependencies first, so that code changes don't invalidate the layer
@@ -13,7 +17,9 @@ RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} uv sync --frozen --no-dev
 
 COPY tabular_swagger.yaml ./
 
-# download the httpfs extension at build time: at runtime we only LOAD it
+USER datagouv
+
+# download the httpfs extension at build time, into the home of the user that will LOAD it
 RUN uv run --no-sync python -c "from tabular_duckdb.engine import install_extensions; install_extensions()"
 
 ENV PYTHONUNBUFFERED=1

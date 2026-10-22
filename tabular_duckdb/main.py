@@ -31,7 +31,9 @@ from tabular_duckdb.resources import (
     Resource,
     build_profile,
     head,
+    is_storage_failure,
     profile_columns,
+    read_error,
     resource_cache,
 )
 from tabular_duckdb.serialization import jsonable, rows_to_json
@@ -89,11 +91,17 @@ def parse_query(
         raise invalid_query_string(f"Malformed query: {exc}") from exc
 
 
+def database_error(exc: duckdb.Error, resource_id: str) -> Exception:
+    if is_storage_failure(exc):
+        return read_error(exc, resource_id)
+    return handle_exception(400, "Database error", safe_message(str(exc)), resource_id)
+
+
 async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
     try:
         return await engine.query(sql, params)
     except duckdb.Error as exc:
-        raise handle_exception(400, "Database error", safe_message(str(exc)), resource_id) from exc
+        raise database_error(exc, resource_id) from exc
 
 
 def check_storage() -> None:
@@ -105,8 +113,8 @@ def check_storage() -> None:
         # 403/404 on the base URL means the storage answered, which is what we check here
         return
     except QueryException as exc:
-        if exc.status == 503:
-            raise
+        # no answer, or an error of its own (a 5xx): the storage is down
+        raise QueryException(503, "Storage unavailable", exc.detail) from exc
 
 
 async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
@@ -132,7 +140,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await engine.stop()
 
 
-app = FastAPI(
+api = FastAPI(
     title="Tabular API (DuckDB)",
     version=__version__,
     lifespan=lifespan,
@@ -152,7 +160,8 @@ class CORSHeadersMiddleware:
     """The CORS headers on every response, and a 204 to every preflight.
 
     Unlike Starlette's CORSMiddleware, the headers do not depend on the request having an
-    Origin: the Nginx cache in front of the API serves a response to every origin.
+    Origin: the Nginx cache in front of the API serves a response to every origin. It wraps the
+    whole application rather than being added to it, where the 500 responses would escape it.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -173,20 +182,17 @@ class CORSHeadersMiddleware:
             await self.app(scope, receive, send_with_cors)
 
 
-app.add_middleware(CORSHeadersMiddleware)
-
-
 def get(path: str, **kwargs: Any) -> Callable:
     """GET route also answering HEAD, like every GET route of the PostgREST-based API."""
-    return app.api_route(path, methods=["GET", "HEAD"], **kwargs)
+    return api.api_route(path, methods=["GET", "HEAD"], **kwargs)
 
 
-@app.exception_handler(QueryException)
+@api.exception_handler(QueryException)
 async def query_exception_handler(request: Request, exc: QueryException) -> JSONResponse:
     return JSONResponse(status_code=exc.status, content=exc.body())
 
 
-@app.exception_handler(StarletteHTTPException)
+@api.exception_handler(StarletteHTTPException)
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException
 ) -> PlainTextResponse:
@@ -285,9 +291,10 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
     try:
         chunks = await start_stream(sql, params)
     except duckdb.Error as exc:
-        raise handle_exception(400, "Database error", safe_message(str(exc)), rid) from exc
-    mime = "application/json" if format == "json" else "text/csv"
-    streamer = stream_json if format == "json" else stream_csv
+        raise database_error(exc, rid) from exc
+    streamer, mime = (
+        (stream_json, "application/json") if format == "json" else (stream_csv, "text/csv")
+    )
     return StreamingResponse(
         streamer(chunks),
         media_type=mime,
@@ -311,7 +318,7 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
     result = await run_user_sql(resource, q)
     return JSONResponse(
         {
-            "data": rows_to_json(result.columns, result.rows),
+            "data": result.rows,
             "meta": {
                 "table": RESOURCE_TABLE,
                 "rows": len(result.rows),
@@ -359,9 +366,8 @@ async def documentation() -> Response:
     return get_swagger_ui_html(openapi_url=OPENAPI_PATH, title="Tabular API (DuckDB)")
 
 
-def run() -> None:
-    uvicorn.run("tabular_duckdb.main:app", host="0.0.0.0", port=8005)
+app = CORSHeadersMiddleware(api)
 
 
 if __name__ == "__main__":
-    run()
+    uvicorn.run("tabular_duckdb.main:app", host="0.0.0.0", port=8005)

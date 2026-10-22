@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 from starlette.exceptions import HTTPException
@@ -45,6 +46,26 @@ async def test_concurrent_requests_load_a_resource_once(cache):
     cache.release.set()
     assert await first is await second
     assert cache.loads == [SLOW_RESOURCE_ID]
+
+
+async def test_concurrent_requests_share_a_failing_load(monkeypatch):
+    """Each one would otherwise wait for its own failure, one after the other."""
+    cache = ResourceCache()
+    loads = []
+
+    async def failing_load(resource_id: str) -> Resource:
+        loads.append(resource_id)
+        await asyncio.sleep(0.2)
+        raise QueryException(503, "Storage unavailable", "down")
+
+    monkeypatch.setattr(cache, "_load", failing_load)
+    started = time.monotonic()
+    results = await asyncio.gather(
+        *(cache.get(FAST_RESOURCE_ID) for _ in range(3)), return_exceptions=True
+    )
+    assert all(isinstance(result, QueryException) for result in results)
+    assert loads == [FAST_RESOURCE_ID]
+    assert time.monotonic() - started < 0.4
 
 
 @pytest.mark.parametrize("ttl, loads", [(0, 2), (300, 1)])

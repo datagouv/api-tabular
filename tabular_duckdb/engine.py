@@ -1,10 +1,11 @@
 import asyncio
-import logging
+import tempfile
 import threading
 from collections.abc import AsyncIterator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TypeVar
 
 import duckdb
@@ -13,11 +14,6 @@ from tabular_duckdb.config import settings
 from tabular_duckdb.errors import query_timeout, server_busy
 
 T = TypeVar("T")
-
-log = logging.getLogger(__name__)
-
-# httpfs provides the s3:// filesystem used to read the parquet files
-EXTENSIONS = ("httpfs",)
 
 # where httpfs looks for the system CA bundle to verify HTTPS certificates: it reads it from disk
 # on every TLS connection, so the sandbox must allow it (missing paths are ignored)
@@ -62,47 +58,65 @@ def interruptible(conn: duckdb.DuckDBPyConnection, call: Callable[[], T], timeou
 
 
 def install_extensions() -> None:
-    """Download the extensions once, so that runtime only has to LOAD them."""
+    """Download httpfs once, so that runtime only has to LOAD it."""
     with duckdb.connect(":memory:") as conn:
-        for extension in EXTENSIONS:
-            conn.execute(f"INSTALL {extension}")
+        conn.execute("INSTALL httpfs")
 
 
 class DuckDBEngine:
-    """Owns the DuckDB connections: one for the API queries, a locked-down pool for user SQL.
+    """Owns the single DuckDB instance of the process.
+
+    The instance is sandboxed, then its configuration is locked, and its database is an empty
+    file opened read-only: no statement can change anything shared. Every query runs on its own
+    connection (`cursor()`), whose temporary objects (views, tables, macros) disappear when it is
+    closed, while the HTTP connections and the caches of the instance are shared by all.
 
     Everything is set by `start()`, which the application lifespan runs before serving any
     request."""
 
-    _conn: duckdb.DuckDBPyConnection
-    _sql_pool: asyncio.Queue[duckdb.DuckDBPyConnection]
-    # the data queries get their own threads: when they saturate, the default executor
-    # stays free for /health/, which must keep answering
+    _db: duckdb.DuckDBPyConnection
+    _directory: tempfile.TemporaryDirectory
+    # the queries get their own threads: when they saturate, the default executor stays free
+    # for /health/, which must keep answering
     _executor: ThreadPoolExecutor
     _slots: asyncio.Semaphore
 
     # --- lifecycle -----------------------------------------------------------------
 
-    def _new_connection(self, metadata_cache: bool = False) -> duckdb.DuckDBPyConnection:
+    def _open(self) -> duckdb.DuckDBPyConnection:
+        # an in-memory database cannot be opened read-only, an empty file can
+        path = Path(self._directory.name) / "empty.duckdb"
+        duckdb.connect(str(path)).close()
         # persistent secrets would make httpfs read ~/.duckdb/stored_secrets, which the
         # sandbox below forbids
-        conn = duckdb.connect(":memory:", config={"allow_persistent_secrets": False})
-        conn.execute(f"SET threads={int(settings.DUCKDB_THREADS)}")
-        conn.execute(f"SET memory_limit={quote_literal(settings.DUCKDB_MEMORY_LIMIT)}")
-        for extension in EXTENSIONS:
-            try:
-                conn.execute(f"LOAD {extension}")
-            except duckdb.Error:
-                conn.execute(f"INSTALL {extension}")
-                conn.execute(f"LOAD {extension}")
+        db = duckdb.connect(str(path), read_only=True, config={"allow_persistent_secrets": False})
+        # GLOBAL everywhere: a plain SET of some options (http_timeout...) only applies to this
+        # connection, while every query runs on a cursor of its own
+        db.execute(f"SET GLOBAL threads={int(settings.DUCKDB_THREADS)}")
+        db.execute(f"SET GLOBAL memory_limit={quote_literal(settings.DUCKDB_MEMORY_LIMIT)}")
+        # httpfs reads the parquet files over HTTP(S) and S3; the other extensions in use (parquet,
+        # icu, json) are built into DuckDB
+        try:
+            db.execute("LOAD httpfs")
+        except duckdb.Error:
+            db.execute("INSTALL httpfs")
+            db.execute("LOAD httpfs")
+        db.execute("SET GLOBAL autoinstall_known_extensions=false")
+        db.execute("SET GLOBAL autoload_known_extensions=false")
+        db.execute("SET GLOBAL max_expression_depth=500")
         # reuse connections across the many range requests a parquet scan needs
-        conn.execute("SET httpfs_connection_caching=true")
-        if metadata_cache:
-            conn.execute("SET enable_http_metadata_cache=true")
-            conn.execute("SET parquet_metadata_cache=true")
+        db.execute("SET GLOBAL httpfs_connection_caching=true")
+        # interrupting a query does not cut an HTTP request blocked on the network: httpfs must
+        # give up by itself within QUERY_TIMEOUT, its two attempts included (by default it
+        # waits 30 s, four times, holding a query thread for two minutes)
+        db.execute("SET GLOBAL http_retries=1")
+        db.execute(f"SET GLOBAL http_timeout={max(1, settings.QUERY_TIMEOUT // 2)}")
+        if settings.DUCKDB_METADATA_CACHE:
+            db.execute("SET GLOBAL enable_http_metadata_cache=true")
+            db.execute("SET GLOBAL parquet_metadata_cache=true")
         if settings.S3_ACCESS_KEY and settings.S3_SECRET_KEY:
             # only needed for a private bucket, public files are read over plain HTTPS
-            conn.execute(
+            db.execute(
                 f"""
                 CREATE OR REPLACE SECRET tabular_s3 (
                     TYPE s3,
@@ -115,69 +129,60 @@ class DuckDBEngine:
                 )
                 """
             )
-        return conn
+        self._sandbox(db)
+        return db
 
     @staticmethod
-    def _sandbox(conn: duckdb.DuckDBPyConnection) -> None:
+    def _sandbox(db: duckdb.DuckDBPyConnection) -> None:
         """Cut off every external access except the parquet prefix, then lock the config.
 
         `allowed_directories` keeps the resource prefix readable while
-        `enable_external_access=false` denies everything else: local files, other prefixes of the
-        same bucket, other hosts and extension installation. `lock_configuration` then prevents
-        any statement from loosening this. The CA bundles in `allowed_paths` are public
-        certificates, and user SQL cannot read files anyway.
+        `enable_external_access=false` denies everything else: local files, other hosts,
+        attaching databases and installing extensions. `lock_configuration` then prevents any
+        statement from loosening this. The CA bundles in `allowed_paths` are public certificates.
 
-        DuckDB resolves `..` in a local path before checking it, but not in a URL:
-        `<prefix>/../x.parquet` passes the check and reaches another prefix of the bucket. No path
-        built by the API can hold one, as the resource id must be a UUID and user SQL cannot name
-        a file at all.
+        DuckDB does not resolve `..` in a URL before this check: user SQL can read any object of
+        the bucket, not only those under the prefix. With the public bucket, that is what anyone
+        can already download; with a private one, it is whatever its credentials can read.
         """
         prefix = settings.PARQUET_BASE_URL.rstrip("/")
-        conn.execute(f"SET allowed_directories=[{quote_literal(prefix)}]")
-        conn.execute(f"SET allowed_paths=[{', '.join(map(quote_literal, CA_BUNDLES))}]")
-        conn.execute("SET enable_external_access=false")
-        conn.execute("SET lock_configuration=true")
-
-    def _new_main_connection(self) -> duckdb.DuckDBPyConnection:
-        """Connection used by the data endpoints, sandboxed on the parquet prefix as well."""
-        conn = self._new_connection(metadata_cache=settings.DUCKDB_METADATA_CACHE)
-        self._sandbox(conn)
-        return conn
-
-    def _new_sql_connection(self) -> duckdb.DuckDBPyConnection:
-        """Connection dedicated to the user-provided SQL endpoint.
-
-        Metadata caching is never enabled here: these connections cannot be reconfigured, so
-        they would keep serving stale parquet footers after a file is replaced.
-        """
-        conn = self._new_connection(metadata_cache=False)
-        conn.execute("SET autoinstall_known_extensions=false")
-        conn.execute("SET autoload_known_extensions=false")
-        conn.execute("SET max_expression_depth=500")
-        self._sandbox(conn)
-        return conn
+        db.execute(f"SET GLOBAL allowed_directories=[{quote_literal(prefix)}]")
+        db.execute(f"SET GLOBAL allowed_paths=[{', '.join(map(quote_literal, CA_BUNDLES))}]")
+        db.execute("SET GLOBAL enable_external_access=false")
+        db.execute("SET GLOBAL lock_configuration=true")
 
     async def start(self) -> None:
-        self._conn = await asyncio.to_thread(self._new_main_connection)
+        self._directory = tempfile.TemporaryDirectory(prefix="tabular-duckdb-")
+        self._db = await asyncio.to_thread(self._open)
         self._executor = ThreadPoolExecutor(
             max_workers=settings.QUERY_WORKERS, thread_name_prefix="duckdb"
         )
         self._slots = asyncio.Semaphore(settings.QUERY_WORKERS)
-        self._sql_pool = asyncio.Queue()
-        for _ in range(settings.SQL_POOL_SIZE):
-            self._sql_pool.put_nowait(await asyncio.to_thread(self._new_sql_connection))
 
     async def stop(self) -> None:
-        while not self._sql_pool.empty():
-            self._sql_pool.get_nowait().close()
         self._executor.shutdown(wait=False, cancel_futures=True)
-        self._conn.close()
+        self._db.close()
+        self._directory.cleanup()
 
     # --- queries -------------------------------------------------------------------
 
-    async def _run(self, cursor: duckdb.DuckDBPyConnection, call: Callable[[], T]) -> T:
-        """Run a blocking call on the data threads, interrupted after QUERY_TIMEOUT."""
-        timeout = settings.QUERY_TIMEOUT
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
+        """A connection of its own, closed afterwards with everything it created."""
+        cursor = self._db.cursor()
+        try:
+            yield cursor
+        finally:
+            cursor.close()
+
+    async def run(
+        self,
+        cursor: duckdb.DuckDBPyConnection,
+        call: Callable[[], T],
+        timeout: float | None = None,
+    ) -> T:
+        """Run a blocking call on the query threads, interrupted after `timeout` seconds."""
+        timeout = timeout or settings.QUERY_TIMEOUT
         try:
             await asyncio.wait_for(self._slots.acquire(), timeout)
         except TimeoutError:
@@ -199,12 +204,8 @@ class DuckDBEngine:
             self._slots.release()
 
     async def query(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
-        """Run a query on a dedicated cursor."""
-        cursor = self._conn.cursor()
-        try:
-            return await self._run(cursor, lambda: fetch(cursor, sql, params))
-        finally:
-            cursor.close()
+        async with self.connection() as cursor:
+            return await self.run(cursor, lambda: fetch(cursor, sql, params))
 
     async def query_value(self, sql: str, params: Sequence[Any] | None = None) -> Any:
         rows = (await self.query(sql, params)).rows
@@ -218,62 +219,31 @@ class DuckDBEngine:
         The first chunk is yielded even when empty, so that a CSV export without any row still
         gets its header. The timeout applies to each chunk, not to the whole download, whose
         pace is the client's."""
-        cursor = self._conn.cursor()
+        async with self.connection() as cursor:
 
-        async def fetch() -> list[tuple]:
-            return await self._run(cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE))
+            async def fetch_chunk() -> list[tuple]:
+                return await self.run(cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE))
 
-        try:
-            await self._run(cursor, lambda: cursor.execute(sql, list(params or [])))
+            await self.run(cursor, lambda: cursor.execute(sql, list(params or [])))
             columns = column_names(cursor)
-            rows = await fetch()
+            rows = await fetch_chunk()
             yield QueryResult(columns, rows)
             while rows:
-                rows = await fetch()
+                rows = await fetch_chunk()
                 if rows:
                     yield QueryResult(columns, rows)
-        finally:
-            cursor.close()
 
     async def ping(self) -> None:
-        """Liveness check, run on the default executor so that busy data threads don't fail it."""
+        """Liveness check, run on the default executor so that busy query threads don't fail it."""
 
         def run() -> None:
-            cursor = self._conn.cursor()
+            cursor = self._db.cursor()
             try:
                 cursor.execute("SELECT 1").fetchall()
             finally:
                 cursor.close()
 
         await asyncio.to_thread(run)
-
-    # --- user SQL ------------------------------------------------------------------
-
-    @asynccontextmanager
-    async def sql_connection(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
-        """Borrow a locked-down connection from the pool for the /sql/ endpoint."""
-        try:
-            # a few slow queries can hold every connection, the others must not queue forever
-            conn = await asyncio.wait_for(self._sql_pool.get(), settings.SQL_TIMEOUT)
-        except TimeoutError:
-            raise server_busy(settings.SQL_TIMEOUT) from None
-        try:
-            yield conn
-        finally:
-            self._sql_pool.put_nowait(await asyncio.to_thread(self._recycle, conn))
-
-    def _recycle(self, conn: duckdb.DuckDBPyConnection) -> duckdb.DuckDBPyConnection:
-        """Make sure a connection is still usable before putting it back in the pool."""
-        try:
-            conn.execute("SELECT 1").fetchall()
-            return conn
-        except duckdb.Error:
-            log.warning("recycling a broken SQL connection")
-            try:
-                conn.close()
-            except duckdb.Error:
-                pass
-            return self._new_sql_connection()
 
 
 engine = DuckDBEngine()

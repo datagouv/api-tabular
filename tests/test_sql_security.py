@@ -1,4 +1,4 @@
-"""The SQL endpoint: validation of the queries, then the sandbox of the connections running them."""
+"""The SQL endpoint: what a query is refused, and what the DuckDB instance prevents it from doing."""
 
 import socket
 from pathlib import Path
@@ -8,14 +8,15 @@ import pytest
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import DuckDBEngine
-from tabular_duckdb.errors import QueryException
-from tabular_duckdb.sql import validate_sql
 
-from .conftest import RESOURCE_ID
+from .conftest import RESOURCE_ID, TOTAL_LINES
 
-WRITE_STATEMENTS = [
+SQL_URL = f"/api/resources/{RESOURCE_ID}/sql/"
+
+NOT_A_SELECT = [
     "CREATE TABLE evil AS SELECT 1",
     "CREATE OR REPLACE VIEW resource AS SELECT 1",
+    "CREATE TEMP MACRO lower(x) AS 'pwned'",
     "INSERT INTO resource VALUES (1)",
     "DELETE FROM resource",
     "UPDATE resource SET x = 1",
@@ -31,147 +32,123 @@ WRITE_STATEMENTS = [
     "CREATE SECRET leak (TYPE s3, KEY_ID 'a', SECRET 'b')",
 ]
 
-FILE_ACCESS_STATEMENTS = [
-    "SELECT * FROM read_parquet('s3://hydra/other.parquet')",
-    "SELECT * FROM read_csv('/etc/passwd')",
-    "SELECT * FROM read_text('/etc/passwd')",
-    "SELECT * FROM read_blob('/etc/passwd')",
-    "SELECT * FROM glob('/**')",
-    "SELECT * FROM 's3://other-bucket/private.parquet'",
-    'SELECT * FROM "s3://other-bucket/private.parquet"',
-    "SELECT * FROM parquet_metadata('s3://hydra/other.parquet')",
-]
-
-CATALOG_STATEMENTS = [
-    "SELECT * FROM duckdb_secrets()",
-    "SELECT * FROM duckdb_settings()",
-    "SELECT * FROM duckdb_extensions()",
-    "SELECT current_setting('s3_secret_access_key')",
-    "SELECT * FROM other_table",
-    "SELECT * FROM resource JOIN other_table ON true",
-    "SELECT (SELECT count(*) FROM other_table) FROM resource",
-    # a CTE name must not unlock a qualified table, nor a table outside of the CTE's scope
-    "WITH duckdb_views AS (SELECT 1) SELECT sql FROM system.main.duckdb_views",
-    "SELECT * FROM (WITH duckdb_databases AS (SELECT 1) SELECT 1), duckdb_databases",
-    # in its body, a CTE only sees the CTEs declared before it: DuckDB binds the other names,
-    # its own included, to the catalog
-    "WITH x AS (SELECT sql FROM duckdb_views), duckdb_views AS (SELECT 1 AS sql) SELECT * FROM x",
-    "WITH duckdb_views AS (SELECT sql FROM duckdb_views) SELECT * FROM duckdb_views",
-    # built-in macros whose body queries the catalog only show as a function call in the tree
-    "SELECT pg_get_viewdef(range) FROM range(0, 100)",
-    "SELECT pg_get_constraintdef(range) FROM range(0, 100)",
-    "SELECT format_type(range, 0) FROM range(0, 100)",
-    "SELECT get_block_size('memory')",
-]
-
 MULTI_STATEMENTS = [
     "SELECT 1; SELECT 2",
     "SELECT * FROM resource; DROP VIEW resource",
-    "SELECT * FROM resource; COPY (SELECT 1) TO '/tmp/evil.csv'",
+    "SELECT 1) LIMIT 1; SELECT * FROM (SELECT 1",
+]
+
+OUTSIDE_THE_SANDBOX = [
+    "SELECT * FROM read_csv('/etc/passwd')",
+    "SELECT * FROM read_text('/etc/passwd')",
+    "SELECT * FROM read_blob('/proc/self/environ')",
+    "SELECT * FROM glob('/**')",
+    "SELECT * FROM read_parquet('s3://other-bucket/private.parquet')",
+    "SELECT * FROM 'https://example.com/private.parquet'",
 ]
 
 ALLOWED_STATEMENTS = [
     "SELECT count(*) AS n FROM resource",
-    'SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC',
-    "WITH per_dep AS (SELECT 1 AS n) SELECT sum(n) FROM per_dep",
+    "SELECT decompte, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC",
     "WITH a AS (SELECT * FROM resource) SELECT count(*) FROM a",
-    "WITH a AS (SELECT 1 AS n), b AS (SELECT n FROM a) SELECT n FROM b",
-    "WITH a AS (SELECT 1 AS n) SELECT * FROM (SELECT n FROM a)",
     "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r",
     "SELECT __id FROM resource WHERE __id < 10 ORDER BY __id",
     "SELECT unnest([1, 2, 3]) AS x",
-    "SELECT * FROM generate_series(1, 5)",
     "FROM resource SELECT count(*)",
-    "SELECT r.__id FROM resource r LIMIT 1",
-    # identifiers are case insensitive in DuckDB
-    "SELECT count(*) FROM Resource",
-    "SELECT count(*) FROM MAIN.resource",
-    "SELECT count(*) FROM TEMP.main.resource",
+    "SELECT count(*) FROM resource;",
+    "SELECT count(*) FROM resource -- a trailing comment",
 ]
 
 
-@pytest.mark.parametrize(
-    "statement",
-    WRITE_STATEMENTS + FILE_ACCESS_STATEMENTS + CATALOG_STATEMENTS + MULTI_STATEMENTS,
-)
-def test_rejected_statements(duckdb_connection, statement):
-    """Every query here must be rejected before DuckDB executes anything."""
-    with pytest.raises(QueryException) as raised:
-        validate_sql(duckdb_connection, statement)
-    assert raised.value.status == 400
+@pytest.mark.parametrize("statement", NOT_A_SELECT + MULTI_STATEMENTS)
+def test_only_a_single_select_is_accepted(client, statement):
+    response = client.get(SQL_URL, params={"q": statement})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Invalid SQL query"
+
+
+@pytest.mark.parametrize("statement", OUTSIDE_THE_SANDBOX)
+def test_nothing_outside_the_parquet_prefix_can_be_read(client, statement):
+    response = client.get(SQL_URL, params={"q": statement})
+    assert response.status_code == 400
+    assert "Permission Error" in response.json()["errors"][0]["detail"]
 
 
 @pytest.mark.parametrize("statement", ALLOWED_STATEMENTS)
-def test_allowed_statements(duckdb_connection, statement):
-    validate_sql(duckdb_connection, statement)
+def test_allowed_statements(client, statement):
+    assert client.get(SQL_URL, params={"q": statement}).status_code == 200
 
 
-def test_empty_query_is_rejected(duckdb_connection):
-    with pytest.raises(QueryException):
-        validate_sql(duckdb_connection, "   ")
+def test_empty_query_is_rejected(client):
+    assert client.get(SQL_URL, params={"q": "   "}).status_code == 400
 
 
-def test_too_long_query_is_rejected(duckdb_connection, monkeypatch):
-    monkeypatch.setattr("tabular_duckdb.sql.settings.SQL_MAX_LENGTH", 20)
-    with pytest.raises(QueryException, match="characters"):
-        validate_sql(duckdb_connection, "SELECT " + ", ".join(["1"] * 50) + " FROM resource")
+def test_too_long_query_is_rejected(client, monkeypatch):
+    monkeypatch.setattr(settings, "SQL_MAX_LENGTH", 20)
+    response = client.get(SQL_URL, params={"q": "SELECT count(*) AS n FROM resource"})
+    assert response.status_code == 400
+    assert "characters" in response.json()["errors"][0]["detail"]
 
 
-def test_trailing_semicolon_is_accepted(duckdb_connection):
-    assert validate_sql(duckdb_connection, "SELECT count(*) FROM resource;") == (
-        'SELECT count_star() FROM "resource"'
-    )
-
-
-def test_executed_sql_is_rebuilt_from_the_validated_tree(duckdb_connection):
-    """What runs is DuckDB's own rendering of the tree, so trailing comments cannot survive."""
-    assert (
-        validate_sql(duckdb_connection, "SELECT 1 AS a -- ; DROP VIEW resource") == "SELECT 1 AS a"
-    )
-    assert (
-        validate_sql(duckdb_connection, 'SELECT "Code du département" FROM resource')
-        == 'SELECT "Code du département" FROM "resource"'
-    )
-
-
-def test_nothing_is_executed_during_validation(duckdb_connection):
-    """Validation must not create anything, even for a rejected write statement."""
-    with pytest.raises(QueryException):
-        validate_sql(duckdb_connection, "CREATE TABLE side_effect AS SELECT 1")
-    tables = duckdb_connection.execute(
-        "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'side_effect'"
-    ).fetchone()
-    assert tables[0] == 0
+# --- the DuckDB instance -------------------------------------------------------------
 
 
 @pytest.fixture
-def sandboxed_connection(parquet_dir, monkeypatch):
-    """A connection of the SQL endpoint pool, whose only readable prefix is `parquet_dir`."""
+async def instance(parquet_dir, monkeypatch):
+    """The engine, whose single readable prefix is `parquet_dir`."""
     monkeypatch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
-    connection = DuckDBEngine()._new_sql_connection()
-    yield connection
-    connection.close()
+    engine = DuckDBEngine()
+    await engine.start()
+    yield engine
+    await engine.stop()
 
 
-def test_sandbox_reads_the_parquet_prefix(sandboxed_connection, parquet_dir):
-    count = sandboxed_connection.execute(
-        f"SELECT count(*) FROM read_parquet('{parquet_dir}/{RESOURCE_ID}.parquet')"
-    ).fetchone()
-    assert count[0] > 0
+async def execute(engine: DuckDBEngine, sql: str) -> list[tuple]:
+    """Run any statement on a connection of its own, like a request of the SQL endpoint."""
+    async with engine.connection() as cursor:
+        return await engine.run(cursor, lambda: cursor.execute(sql).fetchall())
+
+
+async def test_what_a_connection_creates_disappears_with_it(instance):
+    """Statements run on throwaway connections: none can tamper with the next query."""
+    await execute(instance, "CREATE TEMP MACRO lower(x) AS 'pwned'")
+    await execute(instance, "CREATE TEMP TABLE leftover AS SELECT 1")
+    assert await execute(instance, "SELECT lower('A')") == [("a",)]
+    with pytest.raises(duckdb.CatalogException):
+        await execute(instance, "SELECT * FROM leftover")
 
 
 @pytest.mark.parametrize(
     "statement",
     [
-        "SELECT * FROM read_text('/etc/passwd')",
-        "SET enable_external_access=true",
-        "SET allowed_directories=['/']",
+        "CREATE TABLE shared AS SELECT 1",
+        "CREATE MACRO lower(x) AS 'pwned'",
+        "ATTACH ':memory:' AS writable",
     ],
 )
-def test_sandbox_denies_anything_else(sandboxed_connection, statement):
-    """Even a statement that went through the validation could not escape the sandbox."""
+async def test_nothing_shared_can_be_changed(instance, statement):
     with pytest.raises(duckdb.Error):
-        sandboxed_connection.execute(statement)
+        await execute(instance, statement)
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "SET enable_external_access=true",
+        "SET allowed_directories=['/']",
+        "SET lock_configuration=false",
+    ],
+)
+async def test_the_sandbox_cannot_be_loosened(instance, statement):
+    with pytest.raises(duckdb.Error):
+        await execute(instance, statement)
+
+
+async def test_the_parquet_prefix_is_readable(instance, parquet_dir):
+    rows = await execute(
+        instance, f"SELECT count(*) FROM read_parquet('{parquet_dir}/{RESOURCE_ID}.parquet')"
+    )
+    assert rows == [(TOTAL_LINES,)]
 
 
 @pytest.mark.parametrize(
@@ -183,38 +160,33 @@ def test_sandbox_denies_anything_else(sandboxed_connection, statement):
         "{prefix}/../outside.parquet",
     ],
 )
-def test_sandbox_denies_files_outside_the_prefix(
-    sandboxed_connection, parquet_dir, tmp_path, outside
-):
+async def test_local_files_outside_the_prefix_are_denied(instance, parquet_dir, tmp_path, outside):
     path = Path(outside.format(tmp=tmp_path, prefix=parquet_dir))
     path.parent.mkdir(exist_ok=True)
     with duckdb.connect(":memory:") as conn:
         conn.execute(f"COPY (SELECT 1 AS a) TO '{path}' (FORMAT parquet)")
-    with pytest.raises(duckdb.Error):
-        sandboxed_connection.execute(f"SELECT * FROM read_parquet('{path}')")
+    with pytest.raises(duckdb.PermissionException):
+        await execute(instance, f"SELECT * FROM read_parquet('{path}')")
 
 
 @pytest.fixture
-def remote_prefix():
-    """An HTTP prefix where nothing listens: a read the sandbox lets through fails to connect."""
+async def remote_instance(monkeypatch):
+    """The engine reading an HTTP prefix where nothing listens: a read let through fails to
+    connect, a read denied by the sandbox fails before."""
     with socket.create_server(("127.0.0.1", 0)) as server:
         port = server.getsockname()[1]
-    return f"http://127.0.0.1:{port}/parquet"
+    prefix = f"http://127.0.0.1:{port}/parquet"
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", prefix)
+    engine = DuckDBEngine()
+    await engine.start()
+    yield engine, prefix
+    await engine.stop()
 
 
-@pytest.fixture
-def remote_sandboxed_connection(remote_prefix, monkeypatch):
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", remote_prefix)
-    connection = DuckDBEngine()._new_sql_connection()
-    yield connection
-    connection.close()
-
-
-def test_remote_sandbox_lets_the_prefix_through(remote_sandboxed_connection, remote_prefix):
+async def test_the_remote_prefix_is_let_through(remote_instance):
+    engine, prefix = remote_instance
     with pytest.raises(duckdb.IOException):
-        remote_sandboxed_connection.execute(
-            f"SELECT * FROM read_parquet('{remote_prefix}/x.parquet')"
-        )
+        await execute(engine, f"SELECT * FROM read_parquet('{prefix}/x.parquet')")
 
 
 @pytest.mark.parametrize(
@@ -226,9 +198,8 @@ def test_remote_sandbox_lets_the_prefix_through(remote_sandboxed_connection, rem
         "http://other-host/parquet/x.parquet",
     ],
 )
-def test_remote_sandbox_denies_other_prefixes_and_hosts(
-    remote_sandboxed_connection, remote_prefix, outside
-):
-    url = outside.format(prefix=remote_prefix, host=remote_prefix.removesuffix("/parquet"))
+async def test_other_remote_prefixes_and_hosts_are_denied(remote_instance, outside):
+    engine, prefix = remote_instance
+    url = outside.format(prefix=prefix, host=prefix.removesuffix("/parquet"))
     with pytest.raises(duckdb.PermissionException):
-        remote_sandboxed_connection.execute(f"SELECT * FROM read_parquet('{url}')")
+        await execute(engine, f"SELECT * FROM read_parquet('{url}')")

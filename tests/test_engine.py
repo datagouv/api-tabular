@@ -1,5 +1,6 @@
 import asyncio
 import socket
+import time
 
 import duckdb
 import pytest
@@ -16,7 +17,6 @@ async def single_worker_engine(parquet_dir, monkeypatch):
     monkeypatch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
     monkeypatch.setattr(settings, "QUERY_WORKERS", 1)
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 60)
-    monkeypatch.setattr(settings, "SQL_POOL_SIZE", 1)
     engine = DuckDBEngine()
     await engine.start()
     yield engine
@@ -34,11 +34,45 @@ async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
     assert result.rows == [(42,)]
 
 
-async def test_a_broken_sql_connection_is_replaced(single_worker_engine):
-    async with single_worker_engine.sql_connection() as conn:
-        conn.close()
-    async with single_worker_engine.sql_connection() as conn:
-        assert conn.execute("SELECT 42").fetchall() == [(42,)]
+async def test_the_settings_apply_to_the_connection_of_every_query(single_worker_engine):
+    """They are set on the instance, while each query runs on a connection of its own."""
+    names = [
+        "http_timeout",
+        "http_retries",
+        "autoload_known_extensions",
+        "max_expression_depth",
+        "enable_external_access",
+        "lock_configuration",
+    ]
+    async with single_worker_engine.connection() as cursor:
+        values = cursor.execute(
+            "SELECT " + ", ".join(f"current_setting('{name}')" for name in names)
+        ).fetchone()
+    assert dict(zip(names, values)) == {
+        "http_timeout": settings.QUERY_TIMEOUT // 2,
+        "http_retries": 1,
+        "autoload_known_extensions": False,
+        "max_expression_depth": 500,
+        "enable_external_access": False,
+        "lock_configuration": True,
+    }
+
+
+async def test_a_storage_that_never_answers_does_not_hold_a_thread(silent_storage, monkeypatch):
+    """Interrupting DuckDB does not cut a blocked HTTP read: httpfs must give up by itself."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    engine = DuckDBEngine()
+    await engine.start()
+    started = time.monotonic()
+    try:
+        with pytest.raises(duckdb.Error):
+            await asyncio.wait_for(
+                engine.query(f"SELECT * FROM read_parquet('{silent_storage}/x.parquet')"), 15
+            )
+    finally:
+        await engine.stop()
+    assert time.monotonic() - started < 5
 
 
 async def test_the_sandbox_lets_httpfs_verify_https_certificates(monkeypatch):
