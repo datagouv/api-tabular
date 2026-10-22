@@ -9,7 +9,7 @@ description = "Tabular API over Parquet resources, served by DuckDB"
 authors = [
     {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
 readme = "README.md"
 dependencies = [

@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 
 # the API runs arbitrary user SQL in DuckDB: not as root
 RUN groupadd --system datagouv && \
