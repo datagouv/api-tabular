@@ -165,6 +165,16 @@ class ColumnStats(TypedDict):
     nb_missing_values: int | None
 
 
+class Profile(TypedDict):
+    """The profile derived from the parquet file, a subset of the csv-detective inspection."""
+
+    header: list[str]
+    total_lines: int
+    columns: dict[str, ColumnProfile]
+    formats: dict[str, list[str]]
+    profile: dict[str, ColumnStats]
+
+
 def profile_columns(resource: Resource) -> dict[str, ColumnProfile]:
     if resource.inspection:
         return resource.inspection["columns"]
@@ -175,8 +185,8 @@ def profile_columns(resource: Resource) -> dict[str, ColumnProfile]:
     }
 
 
-async def build_profile(resource: Resource) -> dict:
-    """The csv-detective inspection, or a profile derived from the parquet file without it."""
+async def build_profile(resource: Resource) -> Profile | dict[str, Any]:
+    """The csv-detective inspection, served as is, or a profile derived from the parquet file."""
     if resource.inspection:
         return resource.inspection
     columns = profile_columns(resource)
@@ -196,13 +206,13 @@ async def build_profile(resource: Resource) -> dict:
     with_stats = settings.PROFILE_STATS and bool(resource.columns)
     profile = await summarize(resource) if with_stats else {}
 
-    return {
-        "header": list(resource.columns.keys()),
-        "total_lines": total_lines,
-        "columns": columns,
-        "formats": formats,
-        "profile": profile,
-    }
+    return Profile(
+        header=list(resource.columns.keys()),
+        total_lines=total_lines,
+        columns=columns,
+        formats=formats,
+        profile=profile,
+    )
 
 
 def _as_float(value: Any) -> float | None:
