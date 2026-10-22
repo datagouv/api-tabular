@@ -13,7 +13,6 @@ ID_COLUMN = "__id"
 GROUP_BY = "groupby"
 AGGREGATE_FUNCTIONS = ("count", "avg", "min", "max", "sum")
 
-TEXT_TYPES = ("VARCHAR", "CHAR", "TEXT", "STRING")
 # PostgreSQL ordered text with the linguistic collation of the database, DuckDB orders bytes
 # (`É` after `Z`): text is sorted and compared with ICU's French rules instead, where accents
 # and case only break ties. Unlike glibc, ICU counts spaces and hyphens ("Anne Marie" comes
@@ -121,7 +120,8 @@ def split_column_operator(argument: str) -> tuple[str, str]:
 
 
 def is_text(duckdb_type: str) -> bool:
-    return duckdb_type.upper() in TEXT_TYPES
+    # the types come from DESCRIBE, which renders CHAR, TEXT, STRING and VARCHAR(n) as VARCHAR
+    return duckdb_type.upper() == "VARCHAR"
 
 
 def collated(quoted_column: str) -> str:
