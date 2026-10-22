@@ -109,7 +109,7 @@ def test_too_long_query_is_rejected(duckdb_connection, monkeypatch):
 
 def test_trailing_semicolon_is_accepted(duckdb_connection):
     assert validate_sql(duckdb_connection, "SELECT count(*) FROM resource;") == (
-        "SELECT count_star() FROM resource"
+        'SELECT count_star() FROM "resource"'
     )
 
 
@@ -120,7 +120,7 @@ def test_executed_sql_is_rebuilt_from_the_validated_tree(duckdb_connection):
     )
     assert (
         validate_sql(duckdb_connection, 'SELECT "Code du département" FROM resource')
-        == 'SELECT "Code du département" FROM resource'
+        == 'SELECT "Code du département" FROM "resource"'
     )
 
 

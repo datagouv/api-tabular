@@ -76,7 +76,7 @@ def _collect(
                 continue
             name = str(entry["key"]).lower()
             body = entry.get("value") or {}
-            body_type = (body.get("query") or {}).get("node", {}).get("type")
+            body_type = (body.get("query_node") or {}).get("type")
             # in the body of a CTE, DuckDB binds the CTEs declared after it, and its own name
             # unless it is recursive, to the catalog: `WITH x AS (SELECT * FROM duckdb_views),
             # duckdb_views AS (...)` reads the system view
