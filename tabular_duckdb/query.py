@@ -162,7 +162,7 @@ def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
             raise ValueError(value)
         if normalized.startswith("DECIMAL"):
             return Decimal(value), False
-        if normalized in ("FLOAT", "REAL", "DOUBLE"):
+        if kind == "float":
             return float(value), False
         if kind == "int":
             return int(value), False
