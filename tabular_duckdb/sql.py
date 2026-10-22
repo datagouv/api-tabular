@@ -2,7 +2,8 @@
 
 The query runs on a connection of its own of the DuckDB instance, which is sandboxed and
 read-only (see `DuckDBEngine`): it cannot read outside the parquet prefix, change the
-configuration nor anything shared, and whatever it creates disappears with its connection. On
+configuration nor its catalog, and whatever it creates disappears with its connection. Secrets,
+shared by the whole instance, are only out of reach because a query must be a SELECT. On
 top of that, the query must be a single SELECT calling only ALLOWED_FUNCTIONS, its result is
 capped at SQL_MAX_ROWS rows, and it is interrupted after SQL_TIMEOUT seconds.
 """

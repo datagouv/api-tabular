@@ -67,7 +67,9 @@ class DuckDBEngine:
     """Owns the single DuckDB instance of the process.
 
     The instance is sandboxed, then its configuration is locked, and its database is an empty
-    file opened read-only: no statement can change anything shared. Every query runs on its own
+    file opened read-only, so that no statement can change its catalog. Secrets are the
+    exception: they belong to the instance, and `CREATE SECRET` on one connection is seen by all;
+    only the single SELECT rule of /sql/ keeps users from running one. Every query runs on its own
     connection (`cursor()`), whose temporary objects (views, tables, macros) disappear when it is
     closed, while the HTTP connections and the caches of the instance are shared by all.
 
