@@ -98,13 +98,10 @@ class DuckDBEngine:
         # connection, while every query runs on a cursor of its own
         db.execute(f"SET GLOBAL threads={int(settings.DUCKDB_THREADS)}")
         db.execute(f"SET GLOBAL memory_limit={quote_literal(settings.DUCKDB_MEMORY_LIMIT)}")
-        # httpfs reads the parquet files over HTTP(S) and S3; the other extensions in use (parquet,
-        # icu, json) are built into DuckDB
-        try:
-            db.execute("LOAD httpfs")
-        except duckdb.Error:
-            db.execute("INSTALL httpfs")
-            db.execute("LOAD httpfs")
+        # httpfs reads the parquet files over HTTP(S); the other extensions in use (parquet, icu,
+        # json) are built into DuckDB. INSTALL does nothing when the image already installed it
+        db.execute("INSTALL httpfs")
+        db.execute("LOAD httpfs")
         db.execute("SET GLOBAL autoinstall_known_extensions=false")
         db.execute("SET GLOBAL autoload_known_extensions=false")
         db.execute("SET GLOBAL max_expression_depth=500")
