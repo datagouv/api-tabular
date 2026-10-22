@@ -32,7 +32,9 @@ class Resource:
     @property
     def query_columns(self) -> dict[str, str]:
         """Columns available in queries, including the synthetic row id."""
-        return {ID_COLUMN: "BIGINT", **self.columns}
+        # a column of the file named __id gives way to the row id (see source_sql)
+        columns = {name: kind for name, kind in self.columns.items() if name.lower() != ID_COLUMN}
+        return {ID_COLUMN: "BIGINT", **columns}
 
     @property
     def url_literal(self) -> str:
@@ -41,11 +43,15 @@ class Resource:
 
     @property
     def source_sql(self) -> str:
-        """Subquery exposing the parquet file plus the __id column."""
-        return (
-            f"(SELECT * EXCLUDE (file_row_number), file_row_number + 1 AS {ID_COLUMN} "
-            f"FROM read_parquet({self.url_literal}, file_row_number = true))"
-        )
+        """Subquery exposing the parquet file plus the __id column.
+
+        `file_row_number` is a virtual column of the parquet reader, left out of `*`. A column of
+        the file named `__id` gives way to the row id, which it would otherwise hide.
+        """
+        row_id = f"file_row_number + 1 AS {ID_COLUMN}"
+        has_id_column = any(name.lower() == ID_COLUMN for name in self.columns)
+        selected = f"* REPLACE ({row_id})" if has_id_column else f"*, {row_id}"
+        return f"(SELECT {selected} FROM read_parquet({self.url_literal}))"
 
 
 def is_storage_failure(exc: duckdb.Error) -> bool:
@@ -137,10 +143,19 @@ class ResourceCache:
             )
         except duckdb.Error as exc:
             raise read_error(exc, resource_id) from exc
+        columns = {row[0]: row[1] for row in described.rows}
+        for name in columns:
+            if name.lower() == "file_row_number":
+                # it would hide the virtual column the row ids are read from (see source_sql)
+                raise QueryException(
+                    400,
+                    "Invalid resource file",
+                    f"The parquet file has a column named `{name}`, which the API cannot serve",
+                )
         return Resource(
             resource_id=resource_id,
             created_at=last_modified.isoformat() if last_modified else None,
-            columns={row[0]: row[1] for row in described.rows},
+            columns=columns,
             inspection=json.loads(embedded) if embedded is not None else None,
         )
 

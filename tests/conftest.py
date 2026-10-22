@@ -94,6 +94,12 @@ FROM range({RARE_NULL_TOTAL_LINES}) AS t(i)
 # not a parquet file, whose DuckDB error message holds the path of the file
 CORRUPT_RESOURCE_ID = "aaaaaaaa-dead-bbbb-beef-cccccccccccc"
 
+# files with a column of the name the API uses for the row id, or reads the row numbers from
+ID_COLUMN_RESOURCE_ID = "aaaaaaaa-1d1d-bbbb-1d1d-cccccccccccc"
+ID_COLUMN_RESOURCE_SQL = "SELECT 'own-' || i AS __id, i AS value FROM range(3) AS t(i)"
+ROW_NUMBER_COLUMN_RESOURCE_ID = "aaaaaaaa-4040-bbbb-4040-cccccccccccc"
+ROW_NUMBER_COLUMN_RESOURCE_SQL = "SELECT i AS File_Row_Number FROM range(3) AS t(i)"
+
 
 @pytest.fixture(scope="session")
 def parquet_dir(tmp_path_factory) -> str:
@@ -114,6 +120,13 @@ def parquet_dir(tmp_path_factory) -> str:
         conn.execute(
             f"COPY ({RARE_NULL_RESOURCE_SQL}) TO '{directory}/{RARE_NULL_RESOURCE_ID}.parquet' "
             f"(FORMAT parquet, ROW_GROUP_SIZE {RARE_NULL_ROW_GROUP_SIZE})"
+        )
+        conn.execute(
+            f"COPY ({ID_COLUMN_RESOURCE_SQL}) TO '{directory}/{ID_COLUMN_RESOURCE_ID}.parquet'"
+        )
+        conn.execute(
+            f"COPY ({ROW_NUMBER_COLUMN_RESOURCE_SQL}) "
+            f"TO '{directory}/{ROW_NUMBER_COLUMN_RESOURCE_ID}.parquet'"
         )
     (directory / f"{CORRUPT_RESOURCE_ID}.parquet").write_bytes(b"not a parquet")
     return str(directory)

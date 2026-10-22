@@ -20,11 +20,13 @@ from .conftest import (
     CORRUPT_RESOURCE_ID,
     FLOATS_RESOURCE_ID,
     HEADER,
+    ID_COLUMN_RESOURCE_ID,
     INSPECTED_RESOURCE_ID,
     INSPECTION,
     RARE_NULL_RESOURCE_ID,
     RARE_NULL_TOTAL_LINES,
     RESOURCE_ID,
+    ROW_NUMBER_COLUMN_RESOURCE_ID,
     TOTAL_LINES,
     UNKNOWN_RESOURCE_ID,
 )
@@ -550,6 +552,27 @@ def test_resource_data_contains_wildcard(client):
 def test_resource_data_value_not_castable(client):
     response = client.get(DATA_URL, params={"decompte__greater": "12.5"})
     assert response.status_code == 400
+
+
+def test_a_column_named_like_the_row_id_is_replaced_by_it(client):
+    """`__id` stays the row number of the API, instead of the file's column hiding it."""
+    response = client.get(f"/api/resources/{ID_COLUMN_RESOURCE_ID}/data/")
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {"__id": 1, "value": 0},
+        {"__id": 2, "value": 1},
+        {"__id": 3, "value": 2},
+    ]
+
+
+def test_a_column_named_like_the_row_numbers_is_refused_once(client, sentry_events):
+    """DuckDB cannot number the rows of such a file: a clear error, not a failure per query."""
+    response = client.get(f"/api/resources/{ROW_NUMBER_COLUMN_RESOURCE_ID}/data/")
+    assert response.status_code == 400
+    error = response.json()["errors"][0]
+    assert error["title"] == "Invalid resource file"
+    assert "File_Row_Number" in error["detail"]
+    assert sentry_events == []
 
 
 def test_resource_data_database_error(client):
