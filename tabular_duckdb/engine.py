@@ -104,13 +104,15 @@ class DuckDBEngine:
         db.execute("SET GLOBAL autoinstall_known_extensions=false")
         db.execute("SET GLOBAL autoload_known_extensions=false")
         db.execute("SET GLOBAL max_expression_depth=500")
+        # the dates of the files (`created_at`), whatever the time zone of the server
+        db.execute("SET GLOBAL TimeZone='UTC'")
         # reuse connections across the many range requests a parquet scan needs
         db.execute("SET GLOBAL httpfs_connection_caching=true")
         # interrupting a query does not cut an HTTP request blocked on the network: httpfs must
-        # give up by itself within QUERY_TIMEOUT, its two attempts included (by default it
-        # waits 30 s, four times, holding a query thread for two minutes)
-        db.execute("SET GLOBAL http_retries=1")
-        db.execute(f"SET GLOBAL http_timeout={max(1, settings.QUERY_TIMEOUT // 2)}")
+        # give up by itself within QUERY_TIMEOUT. Without retries: even with http_retries=1, a
+        # 503 is retried seven times with a doubling backoff, holding a query thread for 30 s
+        db.execute("SET GLOBAL http_retries=0")
+        db.execute(f"SET GLOBAL http_timeout={settings.QUERY_TIMEOUT}")
         if settings.DUCKDB_METADATA_CACHE:
             db.execute("SET GLOBAL enable_http_metadata_cache=true")
             db.execute("SET GLOBAL parquet_metadata_cache=true")

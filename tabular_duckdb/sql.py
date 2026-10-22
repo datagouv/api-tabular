@@ -128,6 +128,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         try:
             rows = await engine.run(cursor, view_then_query, settings.SQL_TIMEOUT)
         except duckdb.Error as exc:
+            # a missing file named by the query itself is the client's error, not a 404
             if is_storage_failure(exc):
                 raise read_error(exc, resource.resource_id) from exc
             raise invalid_query(safe_message(str(exc))) from exc

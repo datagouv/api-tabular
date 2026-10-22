@@ -2,10 +2,7 @@ import asyncio
 import json
 import re
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
-from email.utils import parsedate_to_datetime
 from typing import Any, NotRequired, TypedDict
 
 import duckdb
@@ -51,46 +48,25 @@ class Resource:
         )
 
 
-def head(url: str) -> dict[str, str]:
-    """HTTP HEAD on the object, used both to check existence and to read its date."""
-    request = urllib.request.Request(url, method="HEAD")
-    try:
-        with urllib.request.urlopen(request, timeout=settings.HTTP_TIMEOUT) as response:
-            return dict(response.headers)
-    except urllib.error.HTTPError as exc:
-        # a bucket that does not grant listing answers 403 instead of 404 for a missing object
-        if exc.code in (403, 404):
-            raise HTTPException(404) from exc
-        raise QueryException(
-            502, "Storage error", f"The storage answered an unexpected HTTP {exc.code}"
-        ) from exc
-    except OSError as exc:
-        # urllib only wraps the connection errors into URLError: a timeout or a disconnection
-        # while waiting for the response surfaces as a bare TimeoutError or ConnectionError
-        raise QueryException(
-            503, "Storage unavailable", f"The storage is unreachable: {exc}"
-        ) from exc
-
-
-def _created_at(url: str) -> str | None:
-    """Last modification date of the object."""
-    last_modified = head(url).get("Last-Modified")
-    if not last_modified:
-        return None
-    try:
-        return parsedate_to_datetime(last_modified).isoformat()
-    except (TypeError, ValueError):
-        return None
-
-
 def is_storage_failure(exc: duckdb.Error) -> bool:
-    return isinstance(exc, (duckdb.HTTPException, duckdb.IOException))
+    """The storage failed to serve a file, as opposed to a missing file or a client error."""
+    if isinstance(exc, duckdb.HTTPException):
+        # the HTTP status of the answer, set on the instance by DuckDB
+        return getattr(exc, "status_code", 500) >= 500
+    return isinstance(exc, duckdb.IOException)
+
+
+def is_missing_file(exc: duckdb.Error) -> bool:
+    # a bucket that does not grant listing answers 403 instead of 404 for a missing object
+    return isinstance(exc, duckdb.HTTPException) and getattr(exc, "status_code", None) in (403, 404)
 
 
 def read_error(exc: duckdb.Error, resource_id: str | None = None) -> Exception:
     """DuckDB cannot read the file: missing resource, failing storage, or unusable parquet."""
+    if is_missing_file(exc):
+        # also a parquet file deleted while its resource was still in the cache
+        return HTTPException(404)
     if is_storage_failure(exc):
-        # the HEAD found the object: the storage failed while DuckDB was reading it
         return handle_exception(
             502,
             "Storage error",
@@ -148,15 +124,12 @@ class ResourceCache:
         return resource
 
     async def _load(self, resource_id: str) -> Resource:
-        object_url = settings.object_url(resource_id)
+        url_literal = quote_literal(settings.object_url(resource_id))
         try:
-            # over HTTP this also tells us whether the resource exists at all
-            created_at = await asyncio.to_thread(_created_at, object_url)
-        except QueryException as exc:
-            # reported from here, not from `head()`: /health/ polls it every few seconds
-            raise handle_exception(exc.status, exc.title, exc.detail, resource_id) from exc
-        url_literal = quote_literal(object_url)
-        try:
+            # a single HEAD, which reads no content: whether the file exists, and its date
+            last_modified = await engine.query_value(
+                f"SELECT last_modified FROM read_blob({url_literal})"
+            )
             described = await engine.query(f"DESCRIBE SELECT * FROM read_parquet({url_literal})")
             embedded = await engine.query_value(
                 f"SELECT value FROM parquet_kv_metadata({url_literal}) WHERE decode(key) = ?",
@@ -166,7 +139,7 @@ class ResourceCache:
             raise read_error(exc, resource_id) from exc
         return Resource(
             resource_id=resource_id,
-            created_at=created_at,
+            created_at=last_modified.isoformat() if last_modified else None,
             columns={row[0]: row[1] for row in described.rows},
             inspection=json.loads(embedded) if embedded is not None else None,
         )

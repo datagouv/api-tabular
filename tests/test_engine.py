@@ -49,8 +49,8 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
             "SELECT " + ", ".join(f"current_setting('{name}')" for name in names)
         ).fetchone()
     assert dict(zip(names, values)) == {
-        "http_timeout": settings.QUERY_TIMEOUT // 2,
-        "http_retries": 1,
+        "http_timeout": settings.QUERY_TIMEOUT,
+        "http_retries": 0,
         "autoload_known_extensions": False,
         "max_expression_depth": 500,
         "enable_external_access": False,
@@ -70,6 +70,20 @@ async def test_a_storage_that_never_answers_does_not_hold_a_thread(silent_storag
             await asyncio.wait_for(
                 engine.query(f"SELECT * FROM read_parquet('{silent_storage}/x.parquet')"), 15
             )
+    finally:
+        await engine.stop()
+    assert time.monotonic() - started < 5
+
+
+async def test_a_storage_failing_the_reads_fails_the_query_at_once(storage, monkeypatch):
+    """httpfs would retry the 503 seven times, with a backoff doubling up to 30 s."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/200")
+    engine = DuckDBEngine()
+    await engine.start()
+    started = time.monotonic()
+    try:
+        with pytest.raises(duckdb.HTTPException):
+            await engine.query(f"DESCRIBE SELECT * FROM read_parquet('{storage}/200/x.parquet')")
     finally:
         await engine.stop()
     assert time.monotonic() - started < 5

@@ -137,13 +137,26 @@ LAST_MODIFIED = "Mon, 01 Jan 2024 12:00:00 GMT"
 
 
 class StorageHandler(BaseHTTPRequestHandler):
-    """Answers a HEAD on `/<status>/...` with that status, and a Last-Modified date on 200."""
+    """Answers `/<status>/...` with that status, and a Last-Modified date to a HEAD on 200.
+
+    A GET gets the same status, like an object storage, which httpfs falls back to on a 403 HEAD,
+    except under `/200/`, where it fails: an object that exists but whose reads fail.
+    """
+
+    def _status(self) -> int:
+        return int(self.path.strip("/").split("/")[0])
 
     def do_HEAD(self) -> None:
-        status = int(self.path.strip("/").split("/")[0])
+        status = self._status()
         self.send_response(status)
         if status == 200:
             self.send_header("Last-Modified", LAST_MODIFIED)
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        status = self._status()
+        self.send_response(503 if status == 200 else status)
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def log_message(self, *args) -> None:

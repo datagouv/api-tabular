@@ -2,11 +2,10 @@ import asyncio
 import time
 
 import pytest
-from starlette.exceptions import HTTPException
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.errors import QueryException
-from tabular_duckdb.resources import Resource, ResourceCache, _created_at, head
+from tabular_duckdb.resources import Resource, ResourceCache
 
 SLOW_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 FAST_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000002"
@@ -82,38 +81,3 @@ async def test_expired_resources_do_not_pile_up(cache, monkeypatch):
     await cache.get(FAST_RESOURCE_ID)
     await cache.get(OTHER_RESOURCE_ID)
     assert list(cache._entries) == [OTHER_RESOURCE_ID]
-
-
-@pytest.mark.parametrize("status", [403, 404])
-def test_head_of_a_missing_object_is_a_404(storage, status):
-    """A bucket that does not grant listing answers 403 for a missing object."""
-    with pytest.raises(HTTPException) as raised:
-        head(f"{storage}/{status}/x.parquet")
-    assert raised.value.status_code == 404
-
-
-def test_head_with_an_unexpected_status(storage):
-    with pytest.raises(QueryException) as raised:
-        head(f"{storage}/500/x.parquet")
-    assert raised.value.status == 502
-    assert raised.value.title == "Storage error"
-
-
-def test_head_of_an_unreachable_storage():
-    with pytest.raises(QueryException) as raised:
-        head("http://127.0.0.1:1/x.parquet")
-    assert raised.value.status == 503
-    assert raised.value.title == "Storage unavailable"
-
-
-def test_head_of_a_storage_that_never_answers(silent_storage, monkeypatch):
-    monkeypatch.setattr(settings, "HTTP_TIMEOUT", 1)
-    with pytest.raises(QueryException) as raised:
-        head(f"{silent_storage}/x.parquet")
-    assert raised.value.status == 503
-    assert raised.value.title == "Storage unavailable"
-
-
-def test_created_at_is_the_last_modification_of_the_object(storage, monkeypatch):
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/200")
-    assert _created_at(settings.object_url(FAST_RESOURCE_ID)) == "2024-01-01T12:00:00+00:00"

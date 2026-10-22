@@ -1,4 +1,6 @@
 import asyncio
+import urllib.error
+import urllib.request
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -30,7 +32,7 @@ from tabular_duckdb.query import ParsedQuery, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
-    head,
+    is_missing_file,
     is_storage_failure,
     profile_columns,
     read_error,
@@ -92,7 +94,7 @@ def parse_query(
 
 
 def database_error(exc: duckdb.Error, resource_id: str) -> Exception:
-    if is_storage_failure(exc):
+    if is_missing_file(exc) or is_storage_failure(exc):
         return read_error(exc, resource_id)
     return handle_exception(400, "Database error", safe_message(str(exc)), resource_id)
 
@@ -105,14 +107,21 @@ async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
 
 
 def check_storage() -> None:
+    """The storage is up when it answers on the prefix, even a 403 (the bucket denies listing)."""
+    request = urllib.request.Request(settings.PARQUET_BASE_URL, method="HEAD")
     try:
-        head(settings.PARQUET_BASE_URL)
-    except StarletteHTTPException:
-        # 403/404 on the base URL means the storage answered, which is what we check here
-        return
-    except QueryException as exc:
-        # no answer, or an error of its own (a 5xx): the storage is down
-        raise QueryException(503, "Storage unavailable", exc.detail) from exc
+        urllib.request.urlopen(request, timeout=settings.HTTP_TIMEOUT).close()
+    except urllib.error.HTTPError as exc:
+        if exc.code >= 500:
+            raise QueryException(
+                503, "Storage unavailable", f"The storage answered HTTP {exc.code}"
+            ) from exc
+    except OSError as exc:
+        # urllib only wraps the connection errors into URLError: a timeout or a disconnection
+        # while waiting for the response surfaces as a bare TimeoutError or ConnectionError
+        raise QueryException(
+            503, "Storage unavailable", f"The storage is unreachable: {exc}"
+        ) from exc
 
 
 async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:

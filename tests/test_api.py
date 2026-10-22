@@ -1,5 +1,7 @@
 import csv
 import io
+import shutil
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -28,6 +30,8 @@ from .conftest import (
 )
 
 DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
+# its parquet file is deleted by a test, which writes it first
+DELETED_RESOURCE_ID = "aaaaaaaa-3333-bbbb-4444-cccccccccccc"
 FIRST_ROW = {
     "__id": 1,
     "id": "id-1",
@@ -92,10 +96,27 @@ def sentry_events():
     sentry_sdk.init()
 
 
+@pytest.fixture
+def restart_on(client, monkeypatch):
+    """Restart the engine on another storage: its sandbox only opens the prefix set at start."""
+    original = settings.PARQUET_BASE_URL
+
+    def restart(base_url: str) -> None:
+        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+        monkeypatch.setattr(resource_cache, "_entries", {})
+        client.portal.call(engine.stop)
+        client.portal.call(engine.start)
+
+    yield restart
+    settings.PARQUET_BASE_URL = original
+    client.portal.call(engine.stop)
+    client.portal.call(engine.start)
+
+
 def test_storage_error_is_reported_without_the_storage_location(
-    client, storage, monkeypatch, sentry_events
+    client, storage, restart_on, sentry_events
 ):
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/500")
+    restart_on(f"{storage}/500")
     response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert response.status_code == 502
     error = response.json()["errors"][0]
@@ -120,21 +141,29 @@ def test_health_does_not_report_to_sentry(client, monkeypatch, sentry_events):
     assert sentry_events == []
 
 
-@pytest.fixture
-def restart_on(client, monkeypatch):
-    """Restart the engine on another storage: its sandbox only opens the prefix set at start."""
-    original = settings.PARQUET_BASE_URL
+@pytest.mark.parametrize("status", [403, 404])
+def test_missing_parquet_file(client, storage, restart_on, sentry_events, status):
+    """A bucket that does not grant listing answers 403 for a missing object."""
+    restart_on(f"{storage}/{status}")
+    assert client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/").status_code == 404
+    assert sentry_events == []
 
-    def restart(base_url: str) -> None:
-        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
-        monkeypatch.setattr(resource_cache, "_entries", {})
-        client.portal.call(engine.stop)
-        client.portal.call(engine.start)
 
-    yield restart
-    settings.PARQUET_BASE_URL = original
-    client.portal.call(engine.stop)
-    client.portal.call(engine.start)
+def test_parquet_file_deleted_while_its_resource_is_cached(client, parquet_dir):
+    path = Path(parquet_dir) / f"{DELETED_RESOURCE_ID}.parquet"
+    shutil.copy(Path(parquet_dir) / f"{RESOURCE_ID}.parquet", path)
+    assert client.get(f"/api/resources/{DELETED_RESOURCE_ID}/data/").status_code == 200
+    path.unlink()
+    assert client.get(f"/api/resources/{DELETED_RESOURCE_ID}/data/").status_code == 404
+
+
+def test_sql_on_a_missing_file_is_the_client_error(client, http_parquet_dir, sentry_events):
+    """The query names the file itself: neither a storage failure nor a 404 of the resource."""
+    query = f"SELECT count(*) AS n FROM '{http_parquet_dir}/{UNKNOWN_RESOURCE_ID}.parquet'"
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Invalid SQL query"
+    assert sentry_events == []
 
 
 def test_storage_failing_while_the_parquet_file_is_read(client, storage, restart_on, sentry_events):
