@@ -1,7 +1,10 @@
+from dataclasses import dataclass
 from datetime import date
 
+import duckdb
 import pytest
 
+from tabular_duckdb.engine import fetch
 from tabular_duckdb.query import build_query
 from tabular_duckdb.resources import Resource
 
@@ -30,29 +33,38 @@ def expected_ids(predicate) -> list[int]:
     return [r["__id"] for r in ROWS if predicate(r)]
 
 
+@dataclass(frozen=True)
+class Table:
+    """A table of the test connection, queried with the columns DESCRIBE gives, like the API."""
+
+    conn: duckdb.DuckDBPyConnection
+    name: str
+
+    @property
+    def columns(self) -> dict[str, str]:
+        described = self.conn.execute(f"DESCRIBE {self.name}").fetchall()
+        return {name: kind for name, kind, *_ in described}
+
+
+def run(
+    table: Table, query_string: list[str], page_size: int | None = None, offset: int = 0
+) -> list[dict]:
+    parsed = build_query(query_string, table.columns, page_size=page_size, offset=offset)
+    result = fetch(table.conn, *parsed.data_sql(table.name))
+    return [dict(zip(result.columns, values)) for values in result.rows]
+
+
+def ids(table: Table, query_string: list[str], **kwargs) -> list[int]:
+    return [r["__id"] for r in run(table, query_string, **kwargs)]
+
+
 @pytest.fixture
-def source(duckdb_connection, parquet_dir, monkeypatch):
+def source(duckdb_connection, parquet_dir, monkeypatch) -> Table:
     """The test resource, exposed exactly like the API does (`__id` included)."""
     monkeypatch.setattr("tabular_duckdb.resources.settings.PARQUET_BASE_URL", parquet_dir)
     resource = Resource(resource_id=RESOURCE_ID, created_at=None)
     duckdb_connection.execute(f"CREATE VIEW source AS SELECT * FROM {resource.source_sql}")
-    columns = {
-        name: kind for name, kind, *_ in duckdb_connection.execute("DESCRIBE source").fetchall()
-    }
-    return duckdb_connection, columns
-
-
-def run(source, query_string: list[str], page_size: int | None = None, offset: int = 0) -> list:
-    conn, columns = source
-    parsed = build_query(query_string, columns, page_size=page_size, offset=offset)
-    sql, params = parsed.data_sql("source")
-    cursor = conn.execute(sql, params)
-    names = [description[0] for description in cursor.description]
-    return [dict(zip(names, values)) for values in cursor.fetchall()]
-
-
-def ids(source, query_string: list[str], **kwargs) -> list[int]:
-    return [r["__id"] for r in run(source, query_string, **kwargs)]
+    return Table(duckdb_connection, "source")
 
 
 def test_query_limit(source):
@@ -109,7 +121,7 @@ def test_query_sort_nulls_placement(source, value, nulls_first):
 
 def test_query_sort_ties_are_ordered_by_id(source):
     """Rows with equal sort values must come in a stable order, or pagination skips rows."""
-    conn, columns = source
+    conn, columns = source.conn, source.columns
     # stored in the reverse order of __id, so that only an explicit tiebreak gives __id order
     conn.execute("CREATE TABLE reversed AS SELECT * FROM source ORDER BY __id DESC")
     paginated_ids = []
@@ -156,20 +168,12 @@ def names(duckdb_connection):
         + ") AS t(__id, name)",
         shuffled,
     )
-    return duckdb_connection, {"__id": "BIGINT", "name": "VARCHAR"}
-
-
-def run_on_names(names, query_string: list[str]) -> list[dict]:
-    conn, columns = names
-    sql, params = build_query(query_string, columns).data_sql("names")
-    cursor = conn.execute(sql, params)
-    labels = [description[0] for description in cursor.description]
-    return [dict(zip(labels, values)) for values in cursor.fetchall()]
+    return Table(duckdb_connection, "names")
 
 
 @pytest.mark.parametrize("direction", ["asc", "desc"])
 def test_query_text_sort_follows_the_french_order(names, direction):
-    rows = run_on_names(names, [f"name__sort={direction}"])
+    rows = run(names, [f"name__sort={direction}"])
     expected = FRENCH_ORDER if direction == "asc" else FRENCH_ORDER[::-1]
     # NULL is the largest value, like in PostgreSQL
     assert [r["name"] for r in rows] == (
@@ -189,19 +193,19 @@ def test_query_text_sort_follows_the_french_order(names, direction):
     ],
 )
 def test_query_text_comparisons_follow_the_french_order(names, argument, expected):
-    rows = run_on_names(names, [argument, "name__sort=asc"])
+    rows = run(names, [argument, "name__sort=asc"])
     assert [r["name"] for r in rows] == expected
 
 
 def test_query_text_min_and_max_follow_the_french_order(names):
-    assert run_on_names(names, ["name__min", "name__max"]) == [
+    assert run(names, ["name__min", "name__max"]) == [
         {"name__min": FRENCH_ORDER[0], "name__max": FRENCH_ORDER[-1]}
     ]
 
 
 def test_query_text_equality_stays_exact(names):
-    assert [r["name"] for r in run_on_names(names, ["name__exact=anne"])] == ["anne"]
-    assert [r["name"] for r in run_on_names(names, ["name__in=Anne,Elm"])] == ["Elm", "Anne"]
+    assert [r["name"] for r in run(names, ["name__exact=anne"])] == ["anne"]
+    assert [r["name"] for r in run(names, ["name__in=Anne,Elm"])] == ["Elm", "Anne"]
 
 
 def test_query_in_list_keeps_the_commas_of_quoted_values():
@@ -228,16 +232,7 @@ def typed(duckdb_connection):
         ) AS t(__id, ts, tstz, montant, uid, heure)
         """
     )
-    columns = {
-        name: kind for name, kind, *_ in duckdb_connection.execute("DESCRIBE typed").fetchall()
-    }
-    return duckdb_connection, columns
-
-
-def typed_ids(typed, argument: str) -> list[int]:
-    conn, columns = typed
-    sql, params = build_query([argument], columns).data_sql("typed")
-    return [r[0] for r in conn.execute(sql, params).fetchall()]
+    return Table(duckdb_connection, "typed")
 
 
 @pytest.mark.parametrize(
@@ -255,7 +250,7 @@ def typed_ids(typed, argument: str) -> list[int]:
     ],
 )
 def test_query_filters_on_typed_columns(typed, argument, expected):
-    assert typed_ids(typed, argument) == expected
+    assert ids(typed, [argument]) == expected
 
 
 @pytest.mark.parametrize(
@@ -270,7 +265,7 @@ def test_query_filters_on_typed_columns(typed, argument, expected):
 )
 def test_query_value_not_castable_to_a_typed_column(typed, argument):
     with pytest.raises(ValueError, match="invalid value"):
-        typed_ids(typed, argument)
+        ids(typed, [argument])
 
 
 @pytest.mark.parametrize(
@@ -341,7 +336,7 @@ def test_query_column_name_is_url_decoded(source):
 
 
 def test_query_count_sql(source):
-    conn, columns = source
+    conn, columns = source.conn, source.columns
     sql, params = build_query(["decompte__greater=3"], columns).count_sql("source")
     assert conn.execute(sql, params).fetchone()[0] == len(
         expected_ids(lambda r: r["decompte"] >= 3)
@@ -431,7 +426,7 @@ def test_query_sort_on_a_grouped_column(source):
 
 
 def test_query_groups_are_paginated_in_a_stable_order(source):
-    conn, columns = source
+    conn, columns = source.conn, source.columns
     conn.execute("CREATE TABLE reversed AS SELECT * FROM source ORDER BY __id DESC")
     groups = []
     for offset in range(0, 7, 3):
@@ -442,7 +437,7 @@ def test_query_groups_are_paginated_in_a_stable_order(source):
 
 
 def test_query_count_sql_of_an_aggregation_counts_the_groups(source):
-    conn, columns = source
+    conn, columns = source.conn, source.columns
     parsed = build_query(["decompte__groupby", "id__count", "decompte__less=2"], columns)
     sql, params = parsed.count_sql("source")
     assert conn.execute(sql, params).fetchone()[0] == 3
