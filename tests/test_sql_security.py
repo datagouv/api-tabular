@@ -1,6 +1,5 @@
 """The SQL endpoint: what a query is refused, and what the DuckDB instance prevents it from doing."""
 
-import socket
 from pathlib import Path
 
 import duckdb
@@ -117,13 +116,9 @@ def test_too_long_query_is_rejected(client, monkeypatch):
 
 
 @pytest.fixture
-async def instance(parquet_dir, monkeypatch):
+async def instance(parquet_dir, engine_on):
     """The engine, whose single readable prefix is `parquet_dir`."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
-    engine = DuckDBEngine()
-    await engine.start()
-    yield engine
-    await engine.stop()
+    return await engine_on(parquet_dir)
 
 
 async def execute(engine: DuckDBEngine, sql: str) -> list[tuple]:
@@ -193,17 +188,11 @@ async def test_local_files_outside_the_prefix_are_denied(instance, parquet_dir, 
 
 
 @pytest.fixture
-async def remote_instance(monkeypatch):
+async def remote_instance(closed_port, engine_on):
     """The engine reading an HTTP prefix where nothing listens: a read let through fails to
     connect, a read denied by the sandbox fails before."""
-    with socket.create_server(("127.0.0.1", 0)) as server:
-        port = server.getsockname()[1]
-    prefix = f"http://127.0.0.1:{port}/parquet"
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", prefix)
-    engine = DuckDBEngine()
-    await engine.start()
-    yield engine, prefix
-    await engine.stop()
+    prefix = f"http://127.0.0.1:{closed_port}/parquet"
+    return await engine_on(prefix), prefix
 
 
 async def test_the_remote_prefix_is_let_through(remote_instance):

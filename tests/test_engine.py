@@ -1,26 +1,20 @@
 import asyncio
-import socket
 import time
 
 import duckdb
 import pytest
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import DuckDBEngine
 
 SLOW_QUERY = "SELECT sum(hash(range)) FROM range(10000000000)"
 
 
 @pytest.fixture
-async def single_worker_engine(parquet_dir, monkeypatch):
+async def single_worker_engine(parquet_dir, engine_on, monkeypatch):
     """An engine with a single data thread: a query only runs once the previous one freed it."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
     monkeypatch.setattr(settings, "QUERY_WORKERS", 1)
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 60)
-    engine = DuckDBEngine()
-    await engine.start()
-    yield engine
-    await engine.stop()
+    return await engine_on(parquet_dir)
 
 
 async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
@@ -58,48 +52,33 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
     }
 
 
-async def test_a_storage_that_never_answers_does_not_hold_a_thread(silent_storage, monkeypatch):
+async def test_a_storage_that_never_answers_does_not_hold_a_thread(
+    silent_storage, engine_on, monkeypatch
+):
     """Interrupting DuckDB does not cut a blocked HTTP read: httpfs must give up by itself."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
-    engine = DuckDBEngine()
-    await engine.start()
+    engine = await engine_on(silent_storage)
     started = time.monotonic()
-    try:
-        with pytest.raises(duckdb.Error):
-            await asyncio.wait_for(
-                engine.query(f"SELECT * FROM read_parquet('{silent_storage}/x.parquet')"), 15
-            )
-    finally:
-        await engine.stop()
+    with pytest.raises(duckdb.Error):
+        await asyncio.wait_for(
+            engine.query(f"SELECT * FROM read_parquet('{silent_storage}/x.parquet')"), 15
+        )
     assert time.monotonic() - started < 5
 
 
-async def test_a_storage_failing_the_reads_fails_the_query_at_once(storage, monkeypatch):
+async def test_a_storage_failing_the_reads_fails_the_query_at_once(storage, engine_on):
     """httpfs would retry the 503 seven times, with a backoff doubling up to 30 s."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/200")
-    engine = DuckDBEngine()
-    await engine.start()
+    engine = await engine_on(f"{storage}/200")
     started = time.monotonic()
-    try:
-        with pytest.raises(duckdb.HTTPException):
-            await engine.query(f"DESCRIBE SELECT * FROM read_parquet('{storage}/200/x.parquet')")
-    finally:
-        await engine.stop()
+    with pytest.raises(duckdb.HTTPException):
+        await engine.query(f"DESCRIBE SELECT * FROM read_parquet('{storage}/200/x.parquet')")
     assert time.monotonic() - started < 5
 
 
-async def test_the_sandbox_lets_httpfs_verify_https_certificates(monkeypatch):
+async def test_the_sandbox_lets_httpfs_verify_https_certificates(closed_port, engine_on):
     """httpfs reads the system CA bundle from disk, which the sandbox must keep reachable."""
-    with socket.create_server(("127.0.0.1", 0)) as server:
-        port = server.getsockname()[1]
-    base_url = f"https://127.0.0.1:{port}/parquet"
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
-    engine = DuckDBEngine()
-    await engine.start()
-    try:
-        # nothing listens on the port: the read fails on the connection, not on the sandbox
-        with pytest.raises(duckdb.IOException, match="HTTP HEAD"):
-            await engine.query(f"SELECT * FROM '{base_url}/resource.parquet'")
-    finally:
-        await engine.stop()
+    base_url = f"https://127.0.0.1:{closed_port}/parquet"
+    engine = await engine_on(base_url)
+    # nothing listens on the port: the read fails on the connection, not on the sandbox
+    with pytest.raises(duckdb.IOException, match="HTTP HEAD"):
+        await engine.query(f"SELECT * FROM '{base_url}/resource.parquet'")

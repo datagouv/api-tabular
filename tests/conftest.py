@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tabular_duckdb.config import settings
+from tabular_duckdb.engine import DuckDBEngine
 from tabular_duckdb.main import app
 
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
@@ -226,6 +227,32 @@ def http_parquet_dir(parquet_dir):
     yield f"http://127.0.0.1:{server.server_port}"
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def closed_port() -> int:
+    """A local port where nothing listens: a request let through fails to connect."""
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        return server.getsockname()[1]
+
+
+@pytest.fixture
+async def engine_on(monkeypatch):
+    """Start an engine of its own on a storage: its sandbox only opens the prefix set at start.
+
+    The settings patched before the call (QUERY_WORKERS, QUERY_TIMEOUT...) apply to it too."""
+    engines: list[DuckDBEngine] = []
+
+    async def start(base_url: str) -> DuckDBEngine:
+        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+        engine = DuckDBEngine()
+        await engine.start()
+        engines.append(engine)
+        return engine
+
+    yield start
+    for engine in engines:
+        await engine.stop()
 
 
 @pytest.fixture
