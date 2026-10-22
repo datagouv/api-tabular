@@ -183,6 +183,9 @@ class DuckDBEngine:
             # before the caller closes it
             cursor.interrupt()
             await asyncio.wait([future])
+            # the interrupted query failed in its thread: read that failure, which asyncio
+            # would otherwise log as an error, and Sentry report, for every client going away
+            future.exception()
             raise
         finally:
             self._slots.release()

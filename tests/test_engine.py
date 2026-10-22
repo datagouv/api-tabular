@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import time
 
 import duckdb
@@ -26,6 +27,20 @@ async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
         await asyncio.wait_for(slow, 5)
     result = await asyncio.wait_for(single_worker_engine.query("SELECT 42 AS n"), 5)
     assert result.rows == [(42,)]
+
+
+async def test_a_cancelled_query_logs_no_error(single_worker_engine, caplog):
+    """The interrupted query fails in its thread: an unread failure is logged as an error by
+    asyncio, which Sentry reports, for every client going away."""
+    slow = asyncio.create_task(single_worker_engine.query(SLOW_QUERY))
+    await asyncio.sleep(0.5)
+    slow.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(slow, 5)
+    del slow
+    gc.collect()
+    await asyncio.sleep(0)
+    assert "never retrieved" not in caplog.text
 
 
 async def test_the_settings_apply_to_the_connection_of_every_query(single_worker_engine):
