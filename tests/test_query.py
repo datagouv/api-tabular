@@ -506,6 +506,29 @@ def test_query_or_group_with_encoded_structure(source):
     ) == expected_ids(lambda r: r[NAME] == "Élu 3" or r["decompte"] == 6)
 
 
+@pytest.fixture
+def dotted(duckdb_connection) -> Table:
+    """A column whose name holds a dot, the separator of the terms of an `or=(...)` group."""
+    duckdb_connection.execute(
+        'CREATE TABLE dotted AS SELECT * FROM (VALUES (1, 1.5), (2, NULL), (3, 2.0)) t(__id, "a.b")'
+    )
+    duckdb_connection.execute('ALTER TABLE dotted ALTER "a.b" TYPE DECIMAL(2, 1)')
+    return Table(duckdb_connection, "dotted")
+
+
+@pytest.mark.parametrize(
+    "query_string, expected",
+    [
+        (['or=("a.b"__exact."1.5","a.b"__isnull)'], [1, 2]),
+        (['or=("a.b"__greater.2,__id__exact.1)'], [1, 3]),
+    ],
+)
+def test_query_or_group_on_a_column_name_with_a_dot(dotted, query_string, expected):
+    """Only the quotes tell the dot of the name from the dots separating column, operator and
+    value."""
+    assert ids(dotted, query_string) == expected
+
+
 def test_query_or_group_with_encoded_column_name_on_isnull(source):
     """A column name still encoded (`+`, `%xx`) must be decoded, isnull terms included."""
     assert ids(
