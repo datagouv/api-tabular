@@ -299,6 +299,8 @@ def test_query_value_not_castable_to_a_typed_column(typed, argument):
         ("is_true__exact=true", lambda r: r["is_true"]),
         ("birth__exact=1980-01-01", lambda r: r["birth"] == date(1980, 1, 1)),
         ("birth__strictly_less=1955-06-01", lambda r: r["birth"] < date(1955, 6, 1)),
+        # contains on a non-text column, which the swagger offers for dates
+        ("birth__contains=198", lambda r: "198" in r["birth"].isoformat()),
     ],
 )
 def test_query_filters(source, argument, predicate):

@@ -6,7 +6,7 @@ from tabular_duckdb.config import settings
 class QueryException(Exception):
     """Error rendered with the same body as the PostgREST-based API."""
 
-    def __init__(self, status: int, error_code: str | None, title: str, detail: str) -> None:
+    def __init__(self, status: int, title: str, detail: str, error_code: str | None = None) -> None:
         super().__init__(detail)
         self.status = status
         self.error_code = error_code
@@ -31,19 +31,18 @@ def safe_message(message: str) -> str:
 
 
 def invalid_query_string(detail: str) -> QueryException:
-    return QueryException(400, None, "Invalid query string", detail)
+    return QueryException(400, "Invalid query string", detail)
 
 
 def query_timeout(seconds: float) -> QueryException:
     return QueryException(
-        400, None, "Query timeout", f"The query was interrupted after {seconds} seconds"
+        400, "Query timeout", f"The query was interrupted after {seconds} seconds"
     )
 
 
 def server_busy(seconds: float) -> QueryException:
     return QueryException(
         503,
-        None,
         "Server busy",
         f"No query slot got available within {seconds} seconds, retry later",
     )
@@ -61,4 +60,4 @@ def handle_exception(
                 tags["resource_id"] = resource_id
             scope.set_tags(tags)
             event_id = sentry_sdk.capture_exception(Exception(detail))
-    return QueryException(status, event_id, title, detail)
+    return QueryException(status, title, detail, event_id)

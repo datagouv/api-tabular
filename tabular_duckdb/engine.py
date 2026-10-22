@@ -44,6 +44,23 @@ def column_names(cursor: duckdb.DuckDBPyConnection) -> list[str]:
     return [description[0] for description in cursor.description or []]
 
 
+def fetch(
+    conn: duckdb.DuckDBPyConnection, sql: str, params: Sequence[Any] | None = None
+) -> QueryResult:
+    conn.execute(sql, list(params or []))
+    return QueryResult(column_names(conn), conn.fetchall())
+
+
+def interruptible(conn: duckdb.DuckDBPyConnection, call: Callable[[], T], timeout: float) -> T:
+    """Blocking call, interrupted with a `duckdb.InterruptException` after `timeout` seconds."""
+    watchdog = threading.Timer(timeout, conn.interrupt)
+    watchdog.start()
+    try:
+        return call()
+    finally:
+        watchdog.cancel()
+
+
 def install_extensions() -> None:
     """Download the extensions once, so that runtime only has to LOAD them."""
     with duckdb.connect(":memory:") as conn:
@@ -109,6 +126,11 @@ class DuckDBEngine:
         same bucket, other hosts and extension installation. `lock_configuration` then prevents
         any statement from loosening this. The CA bundles in `allowed_paths` are public
         certificates, and user SQL cannot read files anyway.
+
+        DuckDB resolves `..` in a local path before checking it, but not in a URL:
+        `<prefix>/../x.parquet` passes the check and reaches another prefix of the bucket. No path
+        built by the API can hold one, as the resource id must be a UUID and user SQL cannot name
+        a file at all.
         """
         prefix = settings.PARQUET_BASE_URL.rstrip("/")
         conn.execute(f"SET allowed_directories=[{quote_literal(prefix)}]")
@@ -161,10 +183,12 @@ class DuckDBEngine:
         except TimeoutError:
             raise server_busy(timeout) from None
         future = asyncio.get_running_loop().run_in_executor(
-            self._executor, self._interruptible, cursor, call, timeout
+            self._executor, interruptible, cursor, call, timeout
         )
         try:
             return await asyncio.shield(future)
+        except duckdb.InterruptException as exc:
+            raise query_timeout(timeout) from exc
         except asyncio.CancelledError:
             # the client went away: stop the query, and let the thread release the cursor
             # before the caller closes it
@@ -174,29 +198,11 @@ class DuckDBEngine:
         finally:
             self._slots.release()
 
-    @staticmethod
-    def _interruptible(
-        cursor: duckdb.DuckDBPyConnection, call: Callable[[], T], timeout: float
-    ) -> T:
-        watchdog = threading.Timer(timeout, cursor.interrupt)
-        watchdog.start()
-        try:
-            return call()
-        except duckdb.InterruptException as exc:
-            raise query_timeout(timeout) from exc
-        finally:
-            watchdog.cancel()
-
     async def query(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
         """Run a query on a dedicated cursor."""
         cursor = self._conn.cursor()
-
-        def run() -> QueryResult:
-            cursor.execute(sql, list(params or []))
-            return QueryResult(column_names(cursor), cursor.fetchall())
-
         try:
-            return await self._run(cursor, run)
+            return await self._run(cursor, lambda: fetch(cursor, sql, params))
         finally:
             cursor.close()
 
@@ -268,17 +274,6 @@ class DuckDBEngine:
             except duckdb.Error:
                 pass
             return self._new_sql_connection()
-
-    @staticmethod
-    def run_with_timeout(conn: duckdb.DuckDBPyConnection, sql: str, timeout: float) -> QueryResult:
-        """Blocking execution interrupted after `timeout` seconds (run in a thread)."""
-        watchdog = threading.Timer(timeout, conn.interrupt)
-        watchdog.start()
-        try:
-            cursor = conn.execute(sql)
-            return QueryResult(column_names(cursor), cursor.fetchall())
-        finally:
-            watchdog.cancel()
 
 
 engine = DuckDBEngine()

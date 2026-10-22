@@ -34,6 +34,13 @@ async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
     assert result.rows == [(42,)]
 
 
+async def test_a_broken_sql_connection_is_replaced(single_worker_engine):
+    async with single_worker_engine.sql_connection() as conn:
+        conn.close()
+    async with single_worker_engine.sql_connection() as conn:
+        assert conn.execute("SELECT 42").fetchall() == [(42,)]
+
+
 async def test_the_sandbox_lets_httpfs_verify_https_certificates(monkeypatch):
     """httpfs reads the system CA bundle from disk, which the sandbox must keep reachable."""
     with socket.create_server(("127.0.0.1", 0)) as server:

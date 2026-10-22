@@ -288,9 +288,9 @@ The endpoint is read-only, and enforced as such at several levels:
 
 - the query is first serialized by DuckDB's `json_serialize_sql()`, which only accepts `SELECT`: `CREATE`, `INSERT`, `UPDATE`, `DELETE`, `COPY`, `EXPORT`, `ATTACH`, `INSTALL`, `LOAD`, `SET`, `PRAGMA`, `CALL`, `CREATE SECRET`... are rejected before anything runs;
 - exactly one statement is allowed, so nothing can hide behind a `;`;
-- no table function is allowed (`read_parquet`, `read_csv`, `read_text`, `glob`, `duckdb_secrets()`, `duckdb_settings()`...), so no arbitrary file can be read with the server's credentials. Only `generate_series`, `range`, `unnest` and `repeat` are allowed;
+- no table function is allowed (`read_parquet`, `read_csv`, `read_text`, `glob`, `duckdb_secrets()`, `duckdb_settings()`...), so no arbitrary file can be read with the server's credentials. Only `generate_series`, `range`, `unnest` and `repeat` are allowed. Neither are the built-in macros querying the catalog in their body, such as `pg_get_viewdef`;
 - the only table that can be referenced is `resource` (plus your own CTEs). A bare `FROM 'https://.../file.parquet'` is parsed as a table name and rejected as well;
-- queries run on a dedicated pool of sandboxed DuckDB connections: `enable_external_access=false` with only `PARQUET_BASE_URL` in `allowed_directories`, so local files, other prefixes of the same bucket and other hosts are all unreachable, extension autoloading is off, and `lock_configuration=true` prevents a query from loosening its own sandbox;
+- queries run on a dedicated pool of sandboxed DuckDB connections: `enable_external_access=false` with only `PARQUET_BASE_URL` in `allowed_directories`, so local files, other prefixes of the same bucket and other hosts are all unreachable, extension autoloading is off, and `lock_configuration=true` prevents a query from loosening its own sandbox. DuckDB does not resolve `..` in a URL before this check, which is why the two previous rules keep any path out of the queries;
 - results are capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit) and the query is interrupted after `SQL_TIMEOUT` seconds;
 - DuckDB error messages are filtered so that neither the storage path nor the credentials leak.
 
@@ -312,10 +312,11 @@ Configuration is handled through environment variables or a `.env` file (see [.e
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | empty | only for a private bucket, creates a DuckDB S3 secret |
 | `S3_ENDPOINT` / `S3_REGION` / `S3_URL_STYLE` / `S3_USE_SSL` | empty / `us-east-1` / `vhost` / `true` | that secret's settings |
 | `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
+| `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
 | `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
-| `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | DuckDB limits |
+| `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of each DuckDB instance: the process runs `1 + SQL_POOL_SIZE` of them, so up to 10 GB and 20 threads with the defaults |
 | `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | data queries are interrupted after this many seconds, and at most this many run at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |

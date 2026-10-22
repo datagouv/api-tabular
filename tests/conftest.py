@@ -79,11 +79,14 @@ SELECT * FROM (
 ) AS t(value)
 """
 
-# a single NULL among many rows: SUMMARIZE rounds its percentage of NULLs down to 0
+# two NULLs among many rows, SUMMARIZE rounds their percentage down to 0; written in row groups
+# of RARE_NULL_ROW_GROUP_SIZE rows so that the two NULLs land in different row groups
 RARE_NULL_RESOURCE_ID = "aaaaaaaa-9999-bbbb-0000-cccccccccccc"
 RARE_NULL_TOTAL_LINES = 30001
+RARE_NULL_ROW_GROUP_SIZE = 10000
 RARE_NULL_RESOURCE_SQL = f"""
-SELECT CASE WHEN i = 0 THEN NULL ELSE i END AS value FROM range({RARE_NULL_TOTAL_LINES}) AS t(i)
+SELECT CASE WHEN i IN (0, 25000) THEN NULL ELSE i END AS value
+FROM range({RARE_NULL_TOTAL_LINES}) AS t(i)
 """
 
 # not a parquet file, whose DuckDB error message holds the path of the file
@@ -108,7 +111,7 @@ def parquet_dir(tmp_path_factory) -> str:
         )
         conn.execute(
             f"COPY ({RARE_NULL_RESOURCE_SQL}) TO '{directory}/{RARE_NULL_RESOURCE_ID}.parquet' "
-            "(FORMAT parquet)"
+            f"(FORMAT parquet, ROW_GROUP_SIZE {RARE_NULL_ROW_GROUP_SIZE})"
         )
     (directory / f"{CORRUPT_RESOURCE_ID}.parquet").write_bytes(b"not a parquet")
     return str(directory)

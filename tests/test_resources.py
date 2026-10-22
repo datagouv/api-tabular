@@ -9,6 +9,7 @@ from tabular_duckdb.resources import Resource, ResourceCache, _created_at, head
 
 SLOW_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 FAST_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000002"
+OTHER_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000003"
 
 
 @pytest.fixture
@@ -44,6 +45,22 @@ async def test_concurrent_requests_load_a_resource_once(cache):
     cache.release.set()
     assert await first is await second
     assert cache.loads == [SLOW_RESOURCE_ID]
+
+
+@pytest.mark.parametrize("ttl, loads", [(0, 2), (300, 1)])
+async def test_cached_resource_expires_after_the_ttl(cache, monkeypatch, ttl, loads):
+    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL", ttl)
+    await cache.get(FAST_RESOURCE_ID)
+    await cache.get(FAST_RESOURCE_ID)
+    assert cache.loads == [FAST_RESOURCE_ID] * loads
+
+
+async def test_expired_resources_do_not_pile_up(cache, monkeypatch):
+    """Every resource ever requested would otherwise stay in memory, inspection included."""
+    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL", 0)
+    await cache.get(FAST_RESOURCE_ID)
+    await cache.get(OTHER_RESOURCE_ID)
+    assert list(cache._entries) == [OTHER_RESOURCE_ID]
 
 
 @pytest.mark.parametrize("status", [403, 404])

@@ -11,10 +11,11 @@ import sentry_sdk
 import uvicorn
 import yaml
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from tabular_duckdb import __version__
 from tabular_duckdb.config import settings
@@ -29,13 +30,13 @@ from tabular_duckdb.query import ParsedQuery, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
-    get_resource,
     head,
     profile_columns,
+    resource_cache,
 )
 from tabular_duckdb.serialization import jsonable, rows_to_json
 from tabular_duckdb.sql import RESOURCE_TABLE, run_user_sql
-from tabular_duckdb.streaming import check_output_size, stream_csv, stream_json
+from tabular_duckdb.streaming import check_output_size, start_stream, stream_csv, stream_json
 from tabular_duckdb.swagger import build_swagger_file
 
 SWAGGER_FILE = Path(__file__).resolve().parent.parent / "tabular_swagger.yaml"
@@ -96,7 +97,6 @@ async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
 
 
 def check_storage() -> None:
-    """The storage is considered up as soon as it answers, even with a 403 on the base URL."""
     if not settings.storage_over_http:
         return
     try:
@@ -140,12 +140,40 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "HEAD", "OPTIONS"],
-    allow_headers=["*"],
-)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Expose-Headers": "*",
+}
+
+
+class CORSHeadersMiddleware:
+    """The CORS headers on every response, and a 204 to every preflight.
+
+    Unlike Starlette's CORSMiddleware, the headers do not depend on the request having an
+    Origin: the Nginx cache in front of the API serves a response to every origin.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+        elif scope["method"] == "OPTIONS":
+            await Response(status_code=204, headers=CORS_HEADERS)(scope, receive, send)
+        else:
+
+            async def send_with_cors(message: Message) -> None:
+                if message["type"] == "http.response.start":
+                    MutableHeaders(scope=message).update(CORS_HEADERS)
+                await send(message)
+
+            await self.app(scope, receive, send_with_cors)
+
+
+app.add_middleware(CORSHeadersMiddleware)
 
 
 def get(path: str, **kwargs: Any) -> Callable:
@@ -172,11 +200,12 @@ async def http_exception_handler(
 
 @get("/api/resources/{rid}/", name="meta")
 async def resource_meta(rid: str) -> JSONResponse:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     return JSONResponse(
         {
             "created_at": resource.created_at,
-            "url": None,
+            # redirects to the current URL of the source file
+            "url": f"{settings.DATAGOUV_URL.rstrip('/')}/api/1/datasets/r/{rid}",
             "links": [
                 {"href": resource_url(rid, "profile/"), "type": "GET", "rel": "profile"},
                 {"href": resource_url(rid, "data/"), "type": "GET", "rel": "data"},
@@ -189,7 +218,7 @@ async def resource_meta(rid: str) -> JSONResponse:
 
 @get("/api/resources/{rid}/profile/", name="profile")
 async def resource_profile(rid: str) -> JSONResponse:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     profile = await build_profile(resource)
     # no database index in this architecture, the whole parquet file is scanned
     return JSONResponse(jsonable({"profile": profile, "indexes": None}))
@@ -197,14 +226,14 @@ async def resource_profile(rid: str) -> JSONResponse:
 
 @get("/api/resources/{rid}/swagger/", name="swagger")
 async def resource_swagger(rid: str) -> Response:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     swagger = build_swagger_file(profile_columns(resource), rid)
     return PlainTextResponse(swagger)
 
 
 @get("/api/resources/{rid}/data/", name="data")
 async def resource_data(request: Request, rid: str) -> JSONResponse:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     query_string = query_arguments(request)
     page = int_argument(request, "page", 1)
     page_size = int_argument(request, "page_size", settings.PAGE_SIZE_DEFAULT)
@@ -248,15 +277,19 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
 
 
 async def stream_resource_data(request: Request, rid: str, format: str) -> StreamingResponse:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     parsed = parse_query(query_arguments(request), resource.query_columns)
     check_output_size(await run_count(parsed, resource, rid))
 
     sql, params = parsed.data_sql(resource.source_sql)
+    try:
+        chunks = await start_stream(sql, params)
+    except duckdb.Error as exc:
+        raise handle_exception(400, "Database error", safe_message(str(exc)), rid) from exc
     mime = "application/json" if format == "json" else "text/csv"
     streamer = stream_json if format == "json" else stream_csv
     return StreamingResponse(
-        streamer(sql, params),
+        streamer(chunks),
         media_type=mime,
         headers={"Content-Disposition": f'attachment; filename="{rid}.{format}"'},
     )
@@ -274,7 +307,7 @@ async def resource_data_json(request: Request, rid: str) -> StreamingResponse:
 
 @get("/api/resources/{rid}/sql/", name="sql")
 async def resource_sql(rid: str, q: str = "") -> JSONResponse:
-    resource = await get_resource(rid)
+    resource = await resource_cache.get(rid)
     result = await run_user_sql(resource, q)
     return JSONResponse(
         {
@@ -295,9 +328,7 @@ async def health(request: Request) -> JSONResponse:
     try:
         await engine.ping()
     except duckdb.Error as exc:
-        raise QueryException(
-            503, None, "DB unavailable", f"DuckDB is not available: {exc}"
-        ) from exc
+        raise QueryException(503, "DB unavailable", f"DuckDB is not available: {exc}") from exc
     await asyncio.to_thread(check_storage)
     return JSONResponse(
         {

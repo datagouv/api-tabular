@@ -1,5 +1,6 @@
 """The SQL endpoint: validation of the queries, then the sandbox of the connections running them."""
 
+import socket
 from pathlib import Path
 
 import duckdb
@@ -56,6 +57,11 @@ CATALOG_STATEMENTS = [
     # its own included, to the catalog
     "WITH x AS (SELECT sql FROM duckdb_views), duckdb_views AS (SELECT 1 AS sql) SELECT * FROM x",
     "WITH duckdb_views AS (SELECT sql FROM duckdb_views) SELECT * FROM duckdb_views",
+    # built-in macros whose body queries the catalog only show as a function call in the tree
+    "SELECT pg_get_viewdef(range) FROM range(0, 100)",
+    "SELECT pg_get_constraintdef(range) FROM range(0, 100)",
+    "SELECT format_type(range, 0) FROM range(0, 100)",
+    "SELECT get_block_size('memory')",
 ]
 
 MULTI_STATEMENTS = [
@@ -77,6 +83,10 @@ ALLOWED_STATEMENTS = [
     "SELECT * FROM generate_series(1, 5)",
     "FROM resource SELECT count(*)",
     "SELECT r.__id FROM resource r LIMIT 1",
+    # identifiers are case insensitive in DuckDB
+    "SELECT count(*) FROM Resource",
+    "SELECT count(*) FROM MAIN.resource",
+    "SELECT count(*) FROM TEMP.main.resource",
 ]
 
 
@@ -182,3 +192,43 @@ def test_sandbox_denies_files_outside_the_prefix(
         conn.execute(f"COPY (SELECT 1 AS a) TO '{path}' (FORMAT parquet)")
     with pytest.raises(duckdb.Error):
         sandboxed_connection.execute(f"SELECT * FROM read_parquet('{path}')")
+
+
+@pytest.fixture
+def remote_prefix():
+    """An HTTP prefix where nothing listens: a read the sandbox lets through fails to connect."""
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        port = server.getsockname()[1]
+    return f"http://127.0.0.1:{port}/parquet"
+
+
+@pytest.fixture
+def remote_sandboxed_connection(remote_prefix, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", remote_prefix)
+    connection = DuckDBEngine()._new_sql_connection()
+    yield connection
+    connection.close()
+
+
+def test_remote_sandbox_lets_the_prefix_through(remote_sandboxed_connection, remote_prefix):
+    with pytest.raises(duckdb.IOException):
+        remote_sandboxed_connection.execute(
+            f"SELECT * FROM read_parquet('{remote_prefix}/x.parquet')"
+        )
+
+
+@pytest.mark.parametrize(
+    "outside",
+    [
+        "{prefix}_private/x.parquet",
+        "{prefix}-other/x.parquet",
+        "{host}/other/x.parquet",
+        "http://other-host/parquet/x.parquet",
+    ],
+)
+def test_remote_sandbox_denies_other_prefixes_and_hosts(
+    remote_sandboxed_connection, remote_prefix, outside
+):
+    url = outside.format(prefix=remote_prefix, host=remote_prefix.removesuffix("/parquet"))
+    with pytest.raises(duckdb.PermissionException):
+        remote_sandboxed_connection.execute(f"SELECT * FROM read_parquet('{url}')")

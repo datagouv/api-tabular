@@ -6,7 +6,8 @@ Defence in depth, in order:
    ATTACH, SET, INSTALL, CREATE, INSERT, DELETE...) is rejected before any execution.
 2. exactly one statement, so nothing can hide behind a `;`.
 3. no table function at all in the tree, which rules out `read_parquet`, `read_csv`, `read_text`,
-   `glob`, `duckdb_secrets()`... hence any read of an arbitrary path with our S3 credentials.
+   `glob`, `duckdb_secrets()`... hence any read of an arbitrary path with our S3 credentials. The
+   built-in macros querying the catalog in their body (`pg_get_viewdef`...) are denied as well.
 4. the only base table allowed is the resource view (a bare s3:// path in a FROM clause is parsed
    as a base table named after the path, so it is rejected here too). CTEs are allowed, where
    DuckDB binds them to the CTE and not to a table of the catalog.
@@ -26,7 +27,7 @@ from typing import Any
 import duckdb
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine
+from tabular_duckdb.engine import engine, fetch, interruptible
 from tabular_duckdb.errors import QueryException, query_timeout, safe_message
 from tabular_duckdb.resources import Resource, read_error
 
@@ -36,14 +37,30 @@ RESOURCE_TABLE = "resource"
 # table functions that cannot reach the filesystem nor the catalog
 ALLOWED_TABLE_FUNCTIONS = frozenset({"generate_series", "range", "unnest", "repeat"})
 
-# scalar functions that could leak configuration or read files
-DENIED_FUNCTIONS = frozenset({"current_setting", "getvariable", "read_text", "read_blob"})
+
+def _catalog_macros() -> frozenset[str]:
+    """Built-in scalar macros whose body queries a table, e.g. `pg_get_viewdef` on
+    `duckdb_views()`: the tree only shows them as a function call, not as a table function."""
+    with duckdb.connect(":memory:") as conn:
+        rows = conn.execute(
+            r"""
+            SELECT function_name FROM duckdb_functions()
+            WHERE function_type = 'macro' AND regexp_matches(macro_definition, '(?i)\bfrom\b')
+            """
+        ).fetchall()
+    return frozenset(name for (name,) in rows)
+
+
+# scalar functions that could leak configuration, the catalog, or read files
+DENIED_FUNCTIONS = (
+    frozenset({"current_setting", "getvariable", "read_text", "read_blob"}) | _catalog_macros()
+)
 
 ALLOWED_SCHEMAS = frozenset({"", "main", "temp"})
 
 
 def invalid_query(detail: str) -> QueryException:
-    return QueryException(400, None, "Invalid SQL query", detail)
+    return QueryException(400, "Invalid SQL query", detail)
 
 
 @dataclass(frozen=True)
@@ -156,10 +173,12 @@ def validate_sql(conn: duckdb.DuckDBPyConnection, user_sql: str) -> str:
     for reference in tables:
         if reference.is_cte:
             continue
+        # identifiers are case insensitive in DuckDB
         if (
-            reference.table != RESOURCE_TABLE
-            or reference.schema not in ALLOWED_SCHEMAS
-            or reference.catalog not in ("", "memory")
+            reference.table.lower() != RESOURCE_TABLE
+            or reference.schema.lower() not in ALLOWED_SCHEMAS
+            # the resource is a temporary view, it lives in the `temp` catalog
+            or reference.catalog.lower() not in ("", "temp")
         ):
             raise invalid_query(
                 f"Unknown table `{reference.table}`: only the `{RESOURCE_TABLE}` table "
@@ -201,7 +220,9 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         started = asyncio.get_running_loop().time()
         # the view reads the remote parquet footer: it shares the timeout of the query
         try:
-            await asyncio.to_thread(engine.run_with_timeout, conn, view_sql, settings.SQL_TIMEOUT)
+            await asyncio.to_thread(
+                interruptible, conn, lambda: conn.execute(view_sql), settings.SQL_TIMEOUT
+            )
         except duckdb.InterruptException as exc:
             raise query_timeout(settings.SQL_TIMEOUT) from exc
         except duckdb.Error as exc:
@@ -209,7 +230,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         remaining = settings.SQL_TIMEOUT - (asyncio.get_running_loop().time() - started)
         try:
             result = await asyncio.to_thread(
-                engine.run_with_timeout, conn, wrapped_sql, max(remaining, 0.001)
+                interruptible, conn, lambda: fetch(conn, wrapped_sql), max(remaining, 0.001)
             )
         except duckdb.InterruptException as exc:
             raise query_timeout(settings.SQL_TIMEOUT) from exc

@@ -6,18 +6,18 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 import duckdb
 from starlette.exceptions import HTTPException
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine, quote_literal
-from tabular_duckdb.errors import QueryException, safe_message
-from tabular_duckdb.query import ID_COLUMN, python_type
+from tabular_duckdb.errors import QueryException, handle_exception, safe_message
+from tabular_duckdb.query import ID_COLUMN, python_type, quote_ident
 
 RESOURCE_ID_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 
 # key-value metadata where hydra embeds the csv-detective inspection of the source file
@@ -57,14 +57,14 @@ def head(url: str) -> dict[str, str]:
         # a bucket that does not grant listing answers 403 instead of 404 for a missing object
         if exc.code in (403, 404):
             raise HTTPException(404) from exc
-        raise QueryException(
-            502, None, "Storage error", f"Unexpected HTTP {exc.code} for {url}"
+        raise handle_exception(
+            502, "Storage error", f"The storage answered an unexpected HTTP {exc.code}"
         ) from exc
     except OSError as exc:
         # urllib only wraps the connection errors into URLError: a timeout or a disconnection
         # while waiting for the response surfaces as a bare TimeoutError or ConnectionError
-        raise QueryException(
-            503, None, "Storage unavailable", f"{url} is unreachable: {exc}"
+        raise handle_exception(
+            503, "Storage unavailable", f"The storage is unreachable: {exc}"
         ) from exc
 
 
@@ -90,7 +90,6 @@ def read_error(exc: duckdb.Error) -> Exception:
         return HTTPException(404)
     return QueryException(
         400,
-        None,
         "Invalid resource file",
         f"Could not read the parquet file: {safe_message(str(exc))}",
     )
@@ -113,7 +112,7 @@ class ResourceCache:
         self._locks: dict[str, asyncio.Lock] = {}
 
     async def get(self, resource_id: str) -> Resource:
-        if not RESOURCE_ID_PATTERN.match(resource_id):
+        if not RESOURCE_ID_PATTERN.fullmatch(resource_id):
             raise HTTPException(404)
         cached = self._entries.get(resource_id)
         if cached and cached.expires_at > time.monotonic():
@@ -125,9 +124,14 @@ class ResourceCache:
                 if cached and cached.expires_at > time.monotonic():
                     return cached.resource
                 resource = await self._load(resource_id)
+                now = time.monotonic()
+                # an expired entry is only replaced when its resource is requested again: without
+                # this purge, every resource ever requested would stay in memory
+                self._entries = {
+                    key: entry for key, entry in self._entries.items() if entry.expires_at > now
+                }
                 self._entries[resource_id] = CacheEntry(
-                    expires_at=time.monotonic() + settings.RESOURCE_CACHE_TTL,
-                    resource=resource,
+                    expires_at=now + settings.RESOURCE_CACHE_TTL, resource=resource
                 )
                 return resource
         finally:
@@ -161,16 +165,29 @@ class ResourceCache:
 resource_cache = ResourceCache()
 
 
-async def get_resource(resource_id: str) -> Resource:
-    return await resource_cache.get(resource_id)
+class ColumnProfile(TypedDict):
+    python_type: str
+    format: str
+    # only in the csv-detective inspection
+    score: NotRequired[float]
 
 
-def profile_columns(resource: Resource) -> dict[str, dict[str, Any]]:
+class ColumnStats(TypedDict):
+    # rendered as strings by SUMMARIZE, whatever the column type
+    min: str | None
+    max: str | None
+    mean: float | None
+    std: float | None
+    nb_distinct: int | None
+    nb_missing_values: int | None
+
+
+def profile_columns(resource: Resource) -> dict[str, ColumnProfile]:
     if resource.inspection:
         return resource.inspection["columns"]
     # without the inspection, the types are guessed from the parquet schema
     return {
-        name: {"python_type": python_type(duckdb_type), "format": python_type(duckdb_type)}
+        name: ColumnProfile(python_type=python_type(duckdb_type), format=python_type(duckdb_type))
         for name, duckdb_type in resource.columns.items()
     }
 
@@ -224,25 +241,30 @@ def _as_float(value: Any) -> float | None:
 
 async def summarize(
     resource: Resource, missing_values: dict[str, int | None]
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, ColumnStats]:
     """Per-column statistics, computed by DuckDB's SUMMARIZE."""
+    source = f"read_parquet({quote_literal(settings.object_url(resource.resource_id))})"
+    # the footer only has null counts for the leaves of a nested column, not for its rows
+    nested = [name for name in resource.columns if name not in missing_values]
     try:
-        summary = await engine.query(f"SUMMARIZE SELECT * FROM {resource.source_sql}")
+        summary = await engine.query(f"SUMMARIZE SELECT * FROM {source}")
+        if nested:
+            counts_sql = ", ".join(f"count(*) - count({quote_ident(name)})" for name in nested)
+            counts = await engine.query(f"SELECT {counts_sql} FROM {source}")
+            missing_values = {**missing_values, **dict(zip(nested, counts.rows[0]))}
     except (duckdb.Error, QueryException):
         # statistics are a bonus: a file too big to summarize in time still gets its profile
         return {}
-    stats: dict[str, dict[str, Any]] = {}
+    stats: dict[str, ColumnStats] = {}
     for row in (dict(zip(summary.columns, values)) for values in summary.rows):
-        name = row.get("column_name")
-        if name in (None, ID_COLUMN):
-            continue
-        stats[name] = {
-            "min": row.get("min"),
-            "max": row.get("max"),
-            "mean": _as_float(row.get("avg")),
-            "std": _as_float(row.get("std")),
-            "nb_distinct": row.get("approx_unique"),
+        name = row["column_name"]
+        stats[name] = ColumnStats(
+            min=row["min"],
+            max=row["max"],
+            mean=_as_float(row["avg"]),
+            std=_as_float(row["std"]),
+            nb_distinct=row["approx_unique"],
             # SUMMARIZE only gives a rounded percentage of NULLs, which loses the rare ones
-            "nb_missing_values": missing_values.get(name),
-        }
+            nb_missing_values=missing_values.get(name),
+        )
     return stats

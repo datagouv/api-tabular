@@ -3,7 +3,9 @@ import io
 
 import duckdb
 import pytest
+import sentry_sdk
 import yaml
+from sentry_sdk.transport import Transport
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
@@ -64,7 +66,41 @@ def test_health_when_the_storage_is_unreachable(client, monkeypatch):
     monkeypatch.setattr(settings, "PARQUET_BASE_URL", "http://127.0.0.1:1")
     response = client.get("/health/")
     assert response.status_code == 503
-    assert response.json()["errors"][0]["title"] == "Storage unavailable"
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage unavailable"
+    assert "127.0.0.1" not in error["detail"]
+
+
+class RecordingTransport(Transport):
+    """Keeps the events instead of sending them to Sentry."""
+
+    def __init__(self, options=None):
+        super().__init__(options)
+        self.events = []
+
+    def capture_envelope(self, envelope):
+        if event := envelope.get_event():
+            self.events.append(event)
+
+
+@pytest.fixture
+def sentry_events():
+    sentry_sdk.init(dsn="https://key@sentry.invalid/1", transport=RecordingTransport)
+    yield sentry_sdk.get_client().transport.events
+    sentry_sdk.init()
+
+
+def test_storage_error_is_reported_without_the_storage_location(
+    client, storage, monkeypatch, sentry_events
+):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/500")
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
+    assert response.status_code == 502
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage error"
+    assert storage not in error["detail"]
+    assert [event["event_id"] for event in sentry_events] == [error["code"]]
+    assert sentry_events[0]["tags"]["title"] == "Storage error"
 
 
 def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
@@ -105,7 +141,7 @@ def test_resource_meta(client, base_url):
     assert response.json() == {
         # local files have no Last-Modified header to report
         "created_at": None,
-        "url": None,
+        "url": f"https://www.data.gouv.fr/api/1/datasets/r/{RESOURCE_ID}",
         "links": [
             {
                 "href": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
@@ -144,6 +180,28 @@ def test_malformed_resource_id(client):
     response = client.get("/api/resources/not-an-uuid/data/")
     assert response.status_code == 404
     assert response.text == "404: Not Found"
+
+
+def test_resource_id_with_a_trailing_newline(client, storage, monkeypatch):
+    """`$` would match before the newline, which then breaks the HEAD on the storage."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/200")
+    response = client.get(f"/api/resources/{RESOURCE_ID}%0A/data/")
+    assert response.status_code == 404
+
+
+def test_cors_headers_without_origin(client):
+    """The same headers whatever the origin, as the Nginx cache serves a response to them all."""
+    response = client.get(DATA_URL)
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["access-control-expose-headers"] == "*"
+
+
+@pytest.mark.parametrize("headers", [{}, {"Origin": "https://www.data.gouv.fr"}])
+def test_cors_preflight(client, headers):
+    response = client.options(DATA_URL, headers=headers)
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["access-control-allow-methods"] == "GET, OPTIONS"
 
 
 @pytest.mark.parametrize("suffix", ["", "data/", "sql/?q=SELECT 1 AS n FROM resource"])
@@ -189,13 +247,19 @@ def test_resource_profile(client):
     assert profile["profile"]["decompte"]["max"] == "6"
     assert profile["profile"]["Nom de l'élu"]["nb_missing_values"] == TOTAL_LINES // 5
     assert profile["profile"]["decompte"]["nb_missing_values"] == 0
+    # a nested column, which the parquet footer only describes through its leaves
+    assert profile["profile"]["liste"]["nb_missing_values"] == 0
 
 
-def test_resource_profile_counts_a_rare_missing_value(client):
+def test_resource_profile_counts_rare_missing_values_across_row_groups(client, parquet_dir):
+    path = f"{parquet_dir}/{RARE_NULL_RESOURCE_ID}.parquet"
+    with duckdb.connect(":memory:") as conn:
+        row_groups = conn.execute(f"SELECT num_row_groups FROM parquet_file_metadata('{path}')")
+        assert row_groups.fetchone()[0] > 1
     response = client.get(f"/api/resources/{RARE_NULL_RESOURCE_ID}/profile/")
     profile = response.json()["profile"]
     assert profile["total_lines"] == RARE_NULL_TOTAL_LINES
-    assert profile["profile"]["value"]["nb_missing_values"] == 1
+    assert profile["profile"]["value"]["nb_missing_values"] == 2
 
 
 def test_resource_profile_without_statistics(client, monkeypatch):
@@ -537,6 +601,14 @@ def test_resource_data_non_finite_floats_in_json(client, suffix):
 
 
 @pytest.mark.parametrize("output", ["csv", "json"])
+def test_resource_data_download_failing_once_run(client, output):
+    """The count passes, the query fails: the error must come before a 200 is sent."""
+    response = client.get(f"{DATA_URL}{output}/?decompte__sum&id__sort=asc")
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Database error"
+
+
+@pytest.mark.parametrize("output", ["csv", "json"])
 def test_resource_data_download_too_long(client, monkeypatch, output):
     monkeypatch.setattr(settings, "BATCH_SIZE", 5)
     response = client.get(f"{DATA_URL}{output}/")
@@ -580,6 +652,16 @@ def test_sql_cte(client):
     assert response.json()["data"] == [{"groups": 7, "total": TOTAL_LINES}]
 
 
+@pytest.mark.parametrize("table", ["Resource", "RESOURCE", "MAIN.resource", "TEMP.main.resource"])
+def test_sql_table_name_is_case_insensitive(client, table):
+    """Like every identifier in DuckDB."""
+    response = client.get(
+        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": f"SELECT count(*) AS n FROM {table}"}
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] == [{"n": TOTAL_LINES}]
+
+
 def test_sql_missing_query(client):
     assert client.get(f"/api/resources/{RESOURCE_ID}/sql/").status_code == 400
 
@@ -621,6 +703,17 @@ def test_sql_busy_pool(client, monkeypatch):
             pool.put_nowait(conn)
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "Server busy"
+
+
+def test_sql_rejects_a_macro_reading_the_catalog(client, parquet_dir):
+    """`pg_get_viewdef` expands to a query on `duckdb_views()`, which holds the storage location."""
+    query = (
+        "SELECT pg_get_viewdef(range) AS d FROM range(0, 10000000) "
+        "WHERE pg_get_viewdef(range) LIKE '%read_parquet%'"
+    )
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 400
+    assert parquet_dir not in response.text
 
 
 def test_sql_rejects_a_cte_referenced_before_its_declaration(client, parquet_dir):

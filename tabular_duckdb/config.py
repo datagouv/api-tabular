@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     S3_URL_STYLE: str = "vhost"
     S3_USE_SSL: bool = True
 
+    # the data.gouv.fr instance whose resources are served, for the permalink to their file
+    DATAGOUV_URL: str = "https://www.data.gouv.fr"
+
     # public URLs built in the responses
     SERVER_NAME: str = "localhost:8005"
     SCHEME: str = "http"
@@ -31,7 +34,8 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 50000
     STREAM_CHUNK_SIZE: int = 1000
 
-    # DuckDB
+    # DuckDB, per instance: the /data/ connection and each connection of the SQL pool is its own
+    # instance, so the process can use (1 + SQL_POOL_SIZE) times these
     DUCKDB_THREADS: int = 4
     DUCKDB_MEMORY_LIMIT: str = "2GB"
     # caches the parquet footers and HTTP metadata: much faster on repeated queries, but a
