@@ -3,7 +3,6 @@ import tempfile
 import threading
 from collections.abc import AsyncIterator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -159,14 +158,9 @@ class DuckDBEngine:
 
     # --- queries -------------------------------------------------------------------
 
-    @asynccontextmanager
-    async def connection(self) -> AsyncIterator[duckdb.DuckDBPyConnection]:
-        """A connection of its own, closed afterwards with everything it created."""
-        cursor = self._db.cursor()
-        try:
-            yield cursor
-        finally:
-            cursor.close()
+    def cursor(self) -> duckdb.DuckDBPyConnection:
+        """A connection of its own: in a `with`, closed afterwards with everything it created."""
+        return self._db.cursor()
 
     async def run(
         self,
@@ -197,7 +191,7 @@ class DuckDBEngine:
             self._slots.release()
 
     async def query(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
-        async with self.connection() as cursor:
+        with self.cursor() as cursor:
             return await self.run(cursor, lambda: fetch(cursor, sql, params))
 
     async def query_value(self, sql: str, params: Sequence[Any] | None = None) -> Any:
@@ -217,7 +211,7 @@ class DuckDBEngine:
         except TimeoutError:
             raise server_busy(settings.QUERY_TIMEOUT) from None
         try:
-            async with self.connection() as cursor:
+            with self.cursor() as cursor:
 
                 async def fetch_chunk() -> list[tuple]:
                     return await self.run(
@@ -239,11 +233,8 @@ class DuckDBEngine:
         """Liveness check, run on the default executor so that busy query threads don't fail it."""
 
         def run() -> None:
-            cursor = self._db.cursor()
-            try:
+            with self.cursor() as cursor:
                 cursor.execute("SELECT 1").fetchall()
-            finally:
-                cursor.close()
 
         await asyncio.to_thread(run)
 

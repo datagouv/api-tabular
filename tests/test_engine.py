@@ -44,7 +44,7 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
         "enable_external_access",
         "lock_configuration",
     ]
-    async with single_worker_engine.connection() as cursor:
+    with single_worker_engine.cursor() as cursor:
         values = cursor.execute(
             "SELECT " + ", ".join(f"current_setting('{name}')" for name in names)
         ).fetchone()

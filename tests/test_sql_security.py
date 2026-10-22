@@ -128,7 +128,7 @@ async def instance(parquet_dir, monkeypatch):
 
 async def execute(engine: DuckDBEngine, sql: str) -> list[tuple]:
     """Run any statement on a connection of its own, like a request of the SQL endpoint."""
-    async with engine.connection() as cursor:
+    with engine.cursor() as cursor:
         return await engine.run(cursor, lambda: cursor.execute(sql).fetchall())
 
 

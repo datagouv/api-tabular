@@ -98,7 +98,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
     row_limit = settings.SQL_MAX_ROWS
     view_sql = f"CREATE TEMP VIEW {RESOURCE_TABLE} AS SELECT * FROM {resource.source_sql}"
 
-    async with engine.connection() as cursor:
+    with engine.cursor() as cursor:
         try:
             statements = cursor.extract_statements(user_sql)
         except duckdb.Error as exc:
