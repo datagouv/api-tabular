@@ -148,8 +148,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 api = FastAPI(
-    title="Tabular API (DuckDB)",
-    version=__version__,
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
@@ -211,7 +209,7 @@ async def http_exception_handler(
     )
 
 
-@get("/api/resources/{rid}/", name="meta")
+@get("/api/resources/{rid}/")
 async def resource_meta(rid: str) -> JSONResponse:
     resource = await resource_cache.get(rid)
     return JSONResponse(
@@ -229,7 +227,7 @@ async def resource_meta(rid: str) -> JSONResponse:
     )
 
 
-@get("/api/resources/{rid}/profile/", name="profile")
+@get("/api/resources/{rid}/profile/")
 async def resource_profile(rid: str) -> JSONResponse:
     resource = await resource_cache.get(rid)
     profile = await build_profile(resource)
@@ -237,14 +235,14 @@ async def resource_profile(rid: str) -> JSONResponse:
     return JSONResponse(jsonable({"profile": profile, "indexes": None}))
 
 
-@get("/api/resources/{rid}/swagger/", name="swagger")
+@get("/api/resources/{rid}/swagger/")
 async def resource_swagger(rid: str) -> Response:
     resource = await resource_cache.get(rid)
     swagger = build_swagger_file(profile_columns(resource), rid)
     return PlainTextResponse(swagger)
 
 
-@get("/api/resources/{rid}/data/", name="data")
+@get("/api/resources/{rid}/data/")
 async def resource_data(request: Request, rid: str) -> JSONResponse:
     resource = await resource_cache.get(rid)
     query_string = query_arguments(request)
@@ -266,7 +264,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
         meta["total"] = await run_count(parsed, resource, rid)
         has_next = page_size + offset < meta["total"]
 
-    path = f"/api/resources/{rid}/data/"
+    path = request.url.path
     return JSONResponse(
         {
             "data": rows_to_json(result.columns, result.rows),
@@ -309,17 +307,17 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
     )
 
 
-@get("/api/resources/{rid}/data/csv/", name="csv")
+@get("/api/resources/{rid}/data/csv/")
 async def resource_data_csv(request: Request, rid: str) -> StreamingResponse:
     return await stream_resource_data(request, rid, format="csv")
 
 
-@get("/api/resources/{rid}/data/json/", name="json")
+@get("/api/resources/{rid}/data/json/")
 async def resource_data_json(request: Request, rid: str) -> StreamingResponse:
     return await stream_resource_data(request, rid, format="json")
 
 
-@get("/api/resources/{rid}/sql/", name="sql")
+@get("/api/resources/{rid}/sql/")
 async def resource_sql(rid: str, q: str = "") -> JSONResponse:
     resource = await resource_cache.get(rid)
     result = await run_user_sql(resource, q)
@@ -363,12 +361,12 @@ async def aggregation_exceptions() -> JSONResponse:
 OPENAPI_PATH = f"{settings.DOC_PATH}/swagger.json"
 
 
-@get(OPENAPI_PATH, include_in_schema=False)
+@get(OPENAPI_PATH)
 async def openapi_document(request: Request) -> JSONResponse:
     return JSONResponse(request.app.state.openapi_document)
 
 
-@get(settings.DOC_PATH, include_in_schema=False)
+@get(settings.DOC_PATH)
 async def documentation() -> Response:
     return get_swagger_ui_html(openapi_url=OPENAPI_PATH, title="Tabular API (DuckDB)")
 
