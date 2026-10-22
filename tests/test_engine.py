@@ -1,5 +1,7 @@
 import asyncio
+import socket
 
+import duckdb
 import pytest
 
 from tabular_duckdb.config import settings
@@ -30,3 +32,19 @@ async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
         await asyncio.wait_for(slow, 5)
     result = await asyncio.wait_for(single_worker_engine.query("SELECT 42 AS n"), 5)
     assert result.rows == [(42,)]
+
+
+async def test_the_sandbox_lets_httpfs_verify_https_certificates(monkeypatch):
+    """httpfs reads the system CA bundle from disk, which the sandbox must keep reachable."""
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        port = server.getsockname()[1]
+    base_url = f"https://127.0.0.1:{port}/parquet"
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+    engine = DuckDBEngine()
+    await engine.start()
+    try:
+        # nothing listens on the port: the read fails on the connection, not on the sandbox
+        with pytest.raises(duckdb.IOException, match="HTTP HEAD"):
+            await engine.query(f"SELECT * FROM '{base_url}/resource.parquet'")
+    finally:
+        await engine.stop()

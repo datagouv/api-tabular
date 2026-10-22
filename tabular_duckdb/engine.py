@@ -19,6 +19,16 @@ log = logging.getLogger(__name__)
 # httpfs provides the s3:// filesystem used to read the parquet files
 EXTENSIONS = ("httpfs",)
 
+# where httpfs looks for the system CA bundle to verify HTTPS certificates: it reads it from disk
+# on every TLS connection, so the sandbox must allow it (missing paths are ignored)
+CA_BUNDLES = (
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/ca-bundle.pem",
+    "/etc/ssl/cert.pem",
+)
+
 
 def quote_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
@@ -97,10 +107,12 @@ class DuckDBEngine:
         `allowed_directories` keeps the resource prefix readable while
         `enable_external_access=false` denies everything else: local files, other prefixes of the
         same bucket, other hosts and extension installation. `lock_configuration` then prevents
-        any statement from loosening this.
+        any statement from loosening this. The CA bundles in `allowed_paths` are public
+        certificates, and user SQL cannot read files anyway.
         """
         prefix = settings.PARQUET_BASE_URL.rstrip("/")
         conn.execute(f"SET allowed_directories=[{quote_literal(prefix)}]")
+        conn.execute(f"SET allowed_paths=[{', '.join(map(quote_literal, CA_BUNDLES))}]")
         conn.execute("SET enable_external_access=false")
         conn.execute("SET lock_configuration=true")
 
