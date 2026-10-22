@@ -27,6 +27,7 @@ from .conftest import (
     RARE_NULL_TOTAL_LINES,
     RESOURCE_ID,
     ROW_NUMBER_COLUMN_RESOURCE_ID,
+    SLOW_QUERY,
     TOTAL_LINES,
     UNKNOWN_RESOURCE_ID,
 )
@@ -70,8 +71,8 @@ def test_health_when_the_storage_denies_the_base_url(client, storage, monkeypatc
     assert client.get("/health/").status_code == 200
 
 
-def test_health_when_the_storage_is_unreachable(client, monkeypatch):
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", "http://127.0.0.1:1")
+def test_health_when_the_storage_is_unreachable(client, closed_port, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"http://127.0.0.1:{closed_port}")
     response = client.get("/health/")
     assert response.status_code == 503
     error = response.json()["errors"][0]
@@ -138,9 +139,9 @@ def test_health_when_the_storage_fails(client, storage, monkeypatch, status):
     assert response.json()["errors"][0]["title"] == "Storage unavailable"
 
 
-def test_health_does_not_report_to_sentry(client, monkeypatch, sentry_events):
+def test_health_does_not_report_to_sentry(client, closed_port, monkeypatch, sentry_events):
     """It is polled every few seconds: an outage would otherwise flood Sentry."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", "http://127.0.0.1:1")
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"http://127.0.0.1:{closed_port}")
     assert client.get("/health/").status_code == 503
     assert sentry_events == []
 
@@ -203,7 +204,7 @@ def test_health_when_the_storage_never_answers(client, silent_storage, monkeypat
 def test_query_timeout(client, monkeypatch):
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
     with pytest.raises(QueryException) as raised:
-        client.portal.call(engine.query, "SELECT sum(hash(range)) FROM range(10000000000)")
+        client.portal.call(engine.query, SLOW_QUERY)
     assert raised.value.status == 400
     assert raised.value.title == "Query timeout"
 

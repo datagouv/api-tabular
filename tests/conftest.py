@@ -1,6 +1,8 @@
 import json
 import socket
 import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,9 @@ from fastapi.testclient import TestClient
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import DuckDBEngine
 from tabular_duckdb.main import app
+
+# keeps a query thread busy until it is interrupted
+SLOW_QUERY = "SELECT sum(hash(range)) FROM range(10000000000)"
 
 RESOURCE_ID = "aaaaaaaa-1111-bbbb-2222-cccccccccccc"
 UNKNOWN_RESOURCE_ID = "00000000-0000-0000-0000-000000000000"
@@ -178,14 +183,23 @@ class StorageHandler(BaseHTTPRequestHandler):
         pass
 
 
+@contextmanager
+def serve(handler: type[BaseHTTPRequestHandler]) -> Generator[str]:
+    """Run an HTTP server in a thread, and give its base URL."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 @pytest.fixture(scope="session")
 def storage():
     """Base URL of an HTTP storage answering the status written in the path."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), StorageHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_port}"
-    server.shutdown()
-    server.server_close()
+    with serve(StorageHandler) as base_url:
+        yield base_url
 
 
 class ParquetFilesHandler(BaseHTTPRequestHandler):
@@ -236,11 +250,8 @@ class ParquetFilesHandler(BaseHTTPRequestHandler):
 def http_parquet_dir(parquet_dir):
     """Base URL serving `parquet_dir` over HTTP, the way the bucket serves the parquet files."""
     handler = type("Handler", (ParquetFilesHandler,), {"directory": Path(parquet_dir)})
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{server.server_port}"
-    server.shutdown()
-    server.server_close()
+    with serve(handler) as base_url:
+        yield base_url
 
 
 @pytest.fixture

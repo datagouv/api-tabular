@@ -7,7 +7,7 @@ import pytest
 
 from tabular_duckdb.config import settings
 
-SLOW_QUERY = "SELECT sum(hash(range)) FROM range(10000000000)"
+from .conftest import SLOW_QUERY
 
 
 @pytest.fixture
