@@ -1,41 +1,47 @@
 [build-system]
-requires = ["setuptools>=68", "wheel", "setuptools_scm"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "udata-hydra-csvapi"
 dynamic = ["version"]
-description = "API for CSV converted by udata-hydra"
+description = "Tabular API over Parquet resources, served by DuckDB"
 authors = [
     {name = "data.gouv.fr", email = "opendatateam@data.gouv.fr"},
 ]
-dependencies = [
-    "aiohttp>=3.14.1,<4.0.0",
-    "aiohttp-swagger>=1.0.16,<2.0.0",
-    "gunicorn<24.0.0,>=23.0.0",
-    "sentry-sdk>=2.49.0,<3.0.0",
-]
-requires-python = "<3.15,>=3.11"
+requires-python = ">=3.11,<3.15"
 license = "MIT"
 readme = "README.md"
+dependencies = [
+    "duckdb>=2.0",
+    "fastapi>=0.115",
+    "pydantic-settings>=2.5",
+    "pytz>=2026.5",
+    "pyyaml>=6.0",
+    "sentry-sdk>=2.20",
+    "uvicorn[standard]>=0.32",
+]
 
 [dependency-groups]
 dev = [
-    "aiohttp-devtools<2.0.0,>=1.0.post0",
-    "pytest<8.0.0,>=7.2.1",
-    "pytest-asyncio<1.0.0,>=0.20.3",
-    "pytest-mock<4.0.0,>=3.10.0",
-    "ruff<1.0.0,>=0.6.5",
-    "ty>=0.0.17",
+    "httpx>=0.27",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "ty>=0.0.90",
 ]
 
+[tool.hatch.version]
+source = "vcs"
+raw-options = { version_scheme = "guess-next-dev", local_scheme = "no-local-version" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["tabular_duckdb"]
+
 [tool.ruff]
-lint = { extend-select = ["I"], ignore = ["F401"] } # ["I"] is to also sort imports with an isort rule # TODO: remove ignore F401 later
 line-length = 100
+lint = { extend-select = ["I"] }
 
-[tool.setuptools.packages.find]
-include = ["api_tabular*"]
-
-[tool.setuptools_scm]
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

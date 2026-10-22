@@ -5,7 +5,14 @@
 [![CircleCI](https://circleci.com/gh/datagouv/api-tabular.svg?style=svg)](https://app.circleci.com/pipelines/github/datagouv/api-tabular)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). This service provides a REST API to access PostgreSQL database tables containing CSV data, offering HTTP querying capabilities, pagination, and data streaming for CSV or tabular resources.
+An API service that provides RESTful access to CSV or tabular data converted by [Hydra](https://github.com/datagouv/hydra). Hydra converts each tabular resource to a `<resource_id>.parquet` file in object storage; this service reads those files directly with an embedded [DuckDB](https://duckdb.org/), and offers HTTP querying capabilities, pagination, and data streaming on top of them.
+
+```
+client --> FastAPI (query string -> SQL) --> DuckDB (embedded, httpfs)
+                                               --> <PARQUET_BASE_URL>/<resource_id>.parquet
+```
+
+Any parquet file of the bucket is queryable as is, with no ingestion and no index table: the resource id in the URL is turned into an object URL. `PARQUET_BASE_URL` defaults to the public OVH bucket `https://hydra.s3.rbx.io.cloud.ovh.net/parquet`, which is read over plain HTTPS with no credentials.
 
 This service is mainly used, developed and maintained by [data.gouv.fr](https://data.gouv.fr) - the France Open Data platform.
 The production API is deployed on data.gouv.fr infrastructure at [`https://tabular-api.data.gouv.fr/api`](https://tabular-api.data.gouv.fr/api). See the [product documentation](https://www.data.gouv.fr/dataservices/api-tabulaire-data-gouv-fr-beta/) (in French) for usage details and the [technical documentation](https://tabular-api.data.gouv.fr/api/doc) for API reference.
@@ -14,130 +21,47 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 ### 📋 Requirements
 
-- **Python** >= 3.11, < 3.15
+- **Python** >= 3.11, < 3.14
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
-- **Docker & Docker Compose**
+- **Docker & Docker Compose** (optional)
 
-### Docker Compose profiles
+### 🐳 Run with Docker
 
-| Profile  | Use when | Services started |
-|----------|----------|------------------|
-| **test** | Run locally with the test database (PostgreSQL + PostgREST + optional Tabular API + Metrics API in Docker) | `postgres-test`, `postgrest-test`, `tabular-api`, `metrics-api` |
-| **hydra** | Use a real Hydra CSV database; PostgREST only in Docker, run the API with uv on the host | `postgrest` |
+```shell
+docker compose up -d --build
+```
 
-**Run everything locally in Docker:** `docker compose --profile test up -d` → Tabular API at http://localhost:8005, Metrics API at http://localhost:8006, PostgREST at http://localhost:8080.
+A single container starts: the FastAPI app with DuckDB embedded, on http://localhost:8005.
+Documentation: http://localhost:8005/api/doc
 
-### 🧪 Run with a test database
+```shell
+RID=3b6b2281-b9d9-4959-ae9d-c2c166dff118
+curl "http://localhost:8005/api/resources/$RID/data/?page_size=5"
+```
 
-1. **Start the stack**
+### 💻 Run without Docker
 
-   With the **test** profile, you can either run the full stack in Docker (recommended for a quick local run) or only the infrastructure and run the API with uv (for development with hot reload).
+```shell
+uv sync
+uv run uvicorn tabular_duckdb.main:app --port 8005 --reload
+```
 
-   **Option A – All in Docker (easiest for running locally):**
-   ```shell
-   docker compose --profile test up -d
-   ```
-   This starts the test PostgreSQL, PostgREST, Tabular API (port 8005), and Metrics API (port 8006). You can use the APIs at http://localhost:8005 and http://localhost:8006.
+Configuration comes from environment variables or a `.env` file, see [.env.example](.env.example) and the [⚙️ Configuration](#️-configuration) section; the defaults point at the public OVH bucket. Another storage only needs `PARQUET_BASE_URL`, an HTTP(S) prefix readable without credentials.
 
-   **Option B – Only infrastructure in Docker, API with uv (for development):**
-   ```shell
-   docker compose --profile test up -d postgres-test postgrest-test
-   ```
-   PostgREST is available at http://localhost:8080. Then start the API proxy on the host:
-   ```shell
-   uv sync
-   uv run adev runserver -p8005 api_tabular/tabular/app.py    # Tabular API (dev server)
-   uv run adev runserver -p8006 api_tabular/metrics/app.py   # Metrics API (dev server)
-   ```
-
-   **Note:** For production (on the host), use gunicorn with aiohttp worker:
-   ```shell
-   # Tabular API (port 8005)
-   uv run gunicorn api_tabular.tabular.app:app_factory \
-     --bind 0.0.0.0:8005 \
-     --worker-class aiohttp.GunicornWebWorker \
-     --workers 4 \
-     --access-logfile -
-
-   # Metrics API (port 8006)
-   uv run gunicorn api_tabular.metrics.app:app_factory \
-     --bind 0.0.0.0:8006 \
-     --worker-class aiohttp.GunicornWebWorker \
-     --workers 4 \
-     --access-logfile -
-   ```
-
-   The API provides a controlled layer over PostgREST (security and access control); exposing PostgREST directly would be too permissive.
-
-2. **Test the API**
-
-   Query the API using a `resource_id`. Several test resources are available in the fake database:
-
-   - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
-   - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
-   - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
-   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
-
-### 🏭 Run with a real Hydra database
-
-To use the API with a real database served by [Hydra](https://github.com/datagouv/hydra) instead of the fake test database:
-
-1. **Start the real Hydra CSV database locally:**
-
-   First, you need to have Hydra CSV database running locally. See the [Hydra repository](https://github.com/datagouv/hydra) for instructions on how to set it up. Make sure the Hydra CSV database is accessible on `localhost:5434`.
-
-2. **Start PostgREST pointing to your local Hydra database:**
-   ```shell
-   docker compose --profile hydra up -d
-   ```
-   The `--profile hydra` flag tells Docker Compose to start the PostgREST service configured for a local real Hydra CSV database (instead of the test one provided by the docker compose in this repo). By default, this starts PostgREST on port 8080. You can customize the port using the `PGREST_PORT` environment variable:
-   ```shell
-   # Use default port 8080
-   docker compose --profile hydra up -d
-
-   # Use custom port (e.g., 8081)
-   PGREST_PORT=8081 docker compose --profile hydra up -d
-   ```
-
-3. **Configure the API to use it:**
-   ```shell
-   # If using default port 8080
-   export PGREST_ENDPOINT="http://localhost:8080"
-
-   # If using custom port (e.g., 8081)
-   export PGREST_ENDPOINT="http://localhost:8081"
-   ```
-
-4. **Start the API services:**
-   ```shell
-   uv sync
-   uv run adev runserver -p8005 api_tabular/tabular/app.py     # Dev server
-   uv run adev runserver -p8006 api_tabular/metrics/app.py     # Dev server
-   ```
-
-   **Note:** For production, use gunicorn with aiohttp worker:
-   ```shell
-   # Tabular API (port 8005)
-   uv run gunicorn api_tabular.tabular.app:app_factory \
-     --bind 0.0.0.0:8005 \
-     --worker-class aiohttp.GunicornWebWorker \
-     --workers 4 \
-     --access-logfile -
-
-   # Metrics API (port 8006)
-   uv run gunicorn api_tabular.metrics.app:app_factory \
-     --bind 0.0.0.0:8006 \
-     --worker-class aiohttp.GunicornWebWorker \
-     --workers 4 \
-     --access-logfile -
-   ```
-
-5. **Use real resource IDs** from your Hydra database instead of the test IDs.
-
-**Note:** Make sure your Hydra CSV database is accessible and the database schema matches the expected structure. The test database uses the `csvapi` schema, while real Hydra databases typically use the `public` schema.
-
+Any resource converted by Hydra can be queried with its real resource id, as long as its `<resource_id>.parquet` file is in the bucket.
 
 ## 📚 API Documentation
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/resources/{rid}/` | metadata and links |
+| `GET /api/resources/{rid}/profile/` | column types and statistics |
+| `GET /api/resources/{rid}/swagger/` | OpenAPI spec for this resource, with the filters allowed per column |
+| `GET /api/resources/{rid}/data/` | paginated JSON data, with filtering and sorting |
+| `GET /api/resources/{rid}/data/csv/` | same, streamed as CSV |
+| `GET /api/resources/{rid}/data/json/` | same, streamed as JSON |
+| `GET /api/resources/{rid}/sql/?q=...` | read-only SQL query on the resource |
+| `GET /health/` | health of DuckDB and reachability of the storage |
 
 ### Resource Endpoints
 
@@ -146,34 +70,18 @@ To use the API with a real database served by [Hydra](https://github.com/datagou
 GET /api/resources/{resource_id}/
 ```
 
-Returns basic information about the resource including creation date, URL, and available endpoints.
-
-**Example:**
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
-```
+Returns basic information about the resource and the available endpoints. `created_at` is the parquet file's last modification date.
 
 **Response:**
 ```json
 {
-  "created_at": "2023-04-21T22:54:22.043492+00:00",
-  "url": "https://data.gouv.fr/datasets/example/resources/fake.csv",
+  "created_at": "2026-10-19T16:23:08+00:00",
+  "url": "https://www.data.gouv.fr/api/1/datasets/r/{resource_id}",
   "links": [
-    {
-      "href": "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/",
-      "type": "GET",
-      "rel": "profile"
-    },
-    {
-      "href": "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/",
-      "type": "GET",
-      "rel": "data"
-    },
-    {
-      "href": "/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/",
-      "type": "GET",
-      "rel": "swagger"
-    }
+    {"href": "http://localhost:8005/api/resources/{resource_id}/profile/", "type": "GET", "rel": "profile"},
+    {"href": "http://localhost:8005/api/resources/{resource_id}/data/", "type": "GET", "rel": "data"},
+    {"href": "http://localhost:8005/api/resources/{resource_id}/swagger/", "type": "GET", "rel": "swagger"},
+    {"href": "http://localhost:8005/api/resources/{resource_id}/sql/", "type": "GET", "rel": "sql"}
   ]
 }
 ```
@@ -183,29 +91,7 @@ curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/
 GET /api/resources/{resource_id}/profile/
 ```
 
-Returns the CSV profile information (column types, headers, etc.) generated by [csv-detective](https://github.com/datagouv/csv-detective).
-
-**Example:**
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/
-```
-
-**Response:**
-```json
-{
-  "profile": {
-    "header": [
-        "id",
-        "score",
-        "decompte",
-        "is_true",
-        "birth",
-        "liste"
-    ]
-  },
-  "...": "..."
-}
-```
+Returns the column types and statistics, derived from the parquet file (schema, row count and DuckDB `SUMMARIZE`).
 
 #### Get Resource Data
 ```http
@@ -214,39 +100,28 @@ GET /api/resources/{resource_id}/data/
 
 Returns the actual data with support for filtering, sorting, and pagination.
 
-**Example:**
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/
-```
-
 **Response:**
 ```json
 {
   "data": [
-    {
-        "__id": 1,
-        "id": " 8c7a6452-9295-4db2-b692-34104574fded",
-        "score": 0.708,
-        "decompte": 90,
-        "is_true": false,
-        "birth": "1949-07-16",
-        "liste": "[0]"
-    },
+    {"__id": 1, "...": "..."},
     ...
   ],
   "links": {
-      "profile": "http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/",
-      "swagger": "http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/",
-      "next": "http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=20",
-      "prev": null
+    "profile": "http://localhost:8005/api/resources/{resource_id}/profile/",
+    "swagger": "http://localhost:8005/api/resources/{resource_id}/swagger/",
+    "next": "http://localhost:8005/api/resources/{resource_id}/data/?page=2&page_size=20",
+    "prev": null
   },
   "meta": {
-      "page": 1,
-      "page_size": 20,
-      "total": 1000
+    "page": 1,
+    "page_size": 20,
+    "total": 1027
   }
 }
 ```
+
+Each row carries a synthetic `__id` column (the row number in the parquet file), which is also the default sort.
 
 #### Get Resource Data as CSV
 ```http
@@ -319,11 +194,9 @@ column_name__sort=asc
 column_name__sort=desc
 ```
 
-#### Aggregation Operators
-> ⚠️ **WARNING**: Aggregation requests are disabled by default.
-> You can allow or disallow it for all resources with the `ALLOW_AGGREGATION` config. If `ALLOW_AGGREGATION` is set to `false`, you can specify allow exceptions by listing these in the `ALLOW_AGGREGATION_EXCEPTIONS` list.
-> You can get the current status and exceptions at `/api/aggregation-exceptions/` endpoint.
+> **Note**: text is sorted and compared (`sort`, `less`, `greater`, `strictly_less`, `strictly_greater`, `min`, `max`) in the French order, where accents and case only break ties (`Eléonore` comes before `Elie`). A space or a hyphen sorts before letters (`Anne Marie`, then `Anne-Flore`, then `Annette`). `exact`, `differs` and `in` stay exact matches.
 
+#### Aggregation Operators
 ```
 # group by values
 column_name__groupby
@@ -344,7 +217,7 @@ column_name__max
 column_name__sum
 ```
 
-> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`).
+> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`). Filtering is always done **before** aggregation, no matter the order in the parameters. An aggregated response has no `meta.total`, and `links.next` is set as long as the page is full. `columns` cannot be set alongside aggregators.
 
 > ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except `isnull` and `isnotnull`.
 
@@ -359,56 +232,14 @@ page_size=20    # Items per page (default: 20, max: 50)
 columns=col1,col2,col3    # Select specific columns only
 ```
 
-### Example Queries
-
-#### Basic Filtering
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?score__greater=0.9&decompte__exact=13
-```
-
-**Returns:**
-```json
-{
-  "data": [
-    {
-      "__id": 52,
-      "id": " 5174f26d-d62b-4adb-a43a-c3b6288fa2f6",
-      "score": 0.985,
-      "decompte": 13,
-      "is_true": false,
-      "birth": "1980-03-23",
-      "liste": "[0]"
-    },
-    {
-      "__id": 543,
-      "id": " 8705df7c-8a6a-49e2-9514-cf2fb532525e",
-      "score": 0.955,
-      "decompte": 13,
-      "is_true": true,
-      "birth": "1965-02-06",
-      "liste": "[0, 1, 2]"
-    }
-  ],
-  "links": {
-    "profile": "http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/profile/",
-    "swagger": "http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/swagger/",
-    "next": null,
-    "prev": null
-  },
-  "meta": {
-    "page": 1,
-    "page_size": 20,
-    "total": 2
-  }
-}
-```
+#### Nested conditions
 Top level parameters are considered joined with the `AND` operator. It is possible to add nested conditions with the following syntax:
 ```
 or=(<column1>__<operator1>.<value1>,<column2>__<operator2>.<value2>,...)
 ```
 > **Note**: the conditions within an `OR` have a `.` instead of a `=` between the operator and the value.
 
-> **Note**: the syntax for `isnull` and `isnotnull` is `<column1>__is(not)null` (no value is needed, like outisde of `OR` groups)
+> **Note**: the syntax for `isnull` and `isnotnull` is `<column1>__is(not)null` (no value is needed, like outside of `OR` groups)
 
 This scales as much as needed, but the inner operators should be `or(...)` and `and(...)` (without the `=`), like:
 ```
@@ -419,154 +250,125 @@ decompte__less=10&or=(is_true__exact.true,birth__greater.1980,and(score__strictl
 or=("is true"__exact.true,and(score__strictly_less."0.1","avg.views"__greater."15.5"))
 ```
 
-#### Aggregation with Filtering
-With filters and aggregators (filtering is always done **before** aggregation, no matter the order in the parameters):
+### Example Queries
+
 ```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?decompte__groupby&birth__less=1996&score__avg
+# filters
+curl "http://localhost:8005/api/resources/$RID/data/?Code%20du%20d%C3%A9partement__exact=62"
+curl "http://localhost:8005/api/resources/$RID/data/?Nom%20de%20l%27%C3%A9lu__contains=MARTIN"
+
+# nested conditions
+curl "http://localhost:8005/api/resources/$RID/data/?or=(\"Code%20du%20d%C3%A9partement\"__exact.62,\"Code%20du%20d%C3%A9partement\"__exact.59)"
+
+# sort, pagination, column selection
+curl "http://localhost:8005/api/resources/$RID/data/?Date%20de%20naissance__sort=desc&page=2&page_size=50"
+curl "http://localhost:8005/api/resources/$RID/data/?columns=Code%20du%20d%C3%A9partement,Nom%20de%20l%27%C3%A9lu"
+
+# number of elected officials per department, among women
+curl "http://localhost:8005/api/resources/$RID/data/?Code%20sexe__exact=F&Code%20du%20d%C3%A9partement__groupby&Nom%20de%20l%27%C3%A9lu__count"
 ```
 
-i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, grouped by `decompte`, returns:
+### SQL Endpoint
+
+Runs a read-only SQL query, where the resource is the table `resource`.
+
+```shell
+curl -G "http://localhost:8005/api/resources/$RID/sql/" \
+  --data-urlencode 'q=SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC LIMIT 5'
+```
+
 ```json
 {
-    "data": [
-        {
-            "decompte": 55,
-            "score__avg": 0.7123333333333334
-        },
-        {
-            "decompte": 27,
-            "score__avg": 0.6068888888888889
-        },
-        {
-            "decompte": 23,
-            "score__avg": 0.4603333333333334
-        },
-        ...
-    ]
+  "data": [{"dep": "62", "n": 13242}, {"dep": "59", "n": 12325}],
+  "meta": {"table": "resource", "rows": 5, "truncated": false, "row_limit": 10000, "execution_ms": 84}
 }
 ```
 
-#### Pagination
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=30
-```
+The endpoint is read-only, and the protection comes from DuckDB itself rather than from an analysis of the query:
 
-#### Column Selection
-```shell
-curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=id,score,birth
-```
+- the process runs a single DuckDB instance, sandboxed with `enable_external_access=false` and only `PARQUET_BASE_URL` in `allowed_directories`: local files, other hosts, attached databases and extension installation are all out of reach, and `lock_configuration=true` prevents a query from loosening this;
+- its database is an empty file opened read-only, so that no query can change its catalog. Secrets are shared by the whole instance whatever its mode: only the single `SELECT` rule below keeps a query from creating or dropping one;
+- every query runs on a connection of its own, where `resource` is a temporary view: whatever a query creates (temporary tables, macros...) disappears with its connection;
+- the query must be a single `SELECT` statement, its result is capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit), and it is interrupted after `SQL_TIMEOUT` seconds;
+- the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates), so a query may only call these functions: `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc` and `date_part`/`EXTRACT`. `CASE`, `CAST`, `coalesce`, comparisons, `IN`, `GROUP BY`, `ORDER BY` and CTEs are not functions and are allowed. Nothing can fabricate a value (`repeat`, `string_agg`...) nor rows (`range`...): an answer only holds values of the file, which keeps its size bounded.
 
-### Metrics API
-
-The metrics service provides similar functionality for system metrics:
-
-```shell
-# Get metrics data
-curl http://localhost:8006/api/{model}/data/
-
-# Get metrics as CSV
-curl http://localhost:8006/api/{model}/data/csv/
-```
+A query can read any parquet file of the prefix, and DuckDB does not resolve `..` in a URL before checking `allowed_directories`: it can read any object of the bucket, which anyone can already download, as the bucket is public.
 
 ### Health Check
 
 ```shell
-# Main API health
 curl http://localhost:8005/health/
-
-# Metrics API health
-curl http://localhost:8006/health/
 ```
 
 ## ⚙️ Configuration
 
-Configuration is handled through TOML files and environment variables. The default configuration is in `api_tabular/config_default.toml`.
+Configuration is handled through environment variables or a `.env` file ([.env.example](.env.example) holds the ones usually set locally). The table below lists them all.
 
-### Key Configuration Options
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PARQUET_BASE_URL` | `https://hydra.s3.rbx.io.cloud.ovh.net/parquet` | prefix holding the `<resource_id>.parquet` files |
+| `HEALTH_TIMEOUT` | `20` | timeout of the HEAD `/health/` sends to the storage, in seconds |
+| `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
+| `DOC_PATH` | `/api/doc` | path of the API documentation |
+| `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
+| `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |
+| `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
+| `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
+| `STREAM_CHUNK_SIZE` | `1000` | rows fetched at once by the CSV/JSON downloads |
+| `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of the DuckDB instance, shared by every query |
+| `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
+| `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
+| `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
+| `SQL_MAX_ROWS` | `10000` | row cap of the SQL endpoint |
+| `SQL_TIMEOUT` | `30` | timeout of the SQL endpoint, in seconds |
+| `SQL_MAX_LENGTH` | `10000` | maximum length of the `q` parameter |
+| `SENTRY_DSN` / `SENTRY_SAMPLE_RATE` | empty / `1.0` | error reporting |
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `PGREST_ENDPOINT` | `http://localhost:8080` | PostgREST server URL |
-| `SERVER_NAME` | `localhost:8005` | Server name for URL generation |
-| `SCHEME` | `http` | URL scheme (http/https) |
-| `SENTRY_DSN` | `None` | Sentry DSN for error reporting (optional) |
-| `PAGE_SIZE_DEFAULT` | `20` | Default page size |
-| `PAGE_SIZE_MAX` | `50` | Maximum allowed page size |
-| `BATCH_SIZE` | `50000` | Batch size for streaming |
-| `DOC_PATH` | `/api/doc` | Swagger documentation path |
-| `ALLOW_AGGREGATION` | `False` | Whether aggregation queries are allowed (`column__groupby`). If False, it can still be explicitly allowed with `ALLOW_AGGREGATION_EXCEPTIONS` |
-| `ALLOW_AGGREGATION_EXCEPTIONS` | `["dddddddd-7777-eeee-8888-ffffffffffff", "aaaaaaaa-9999-bbbb-1010-cccccccccccc"]` | List of resource IDs allowed for aggregation |
-
-### Environment Variables
-
-You can override any configuration value using environment variables:
-
-```shell
-export PGREST_ENDPOINT="http://my-postgrest:8080"
-export PAGE_SIZE_DEFAULT=50
-export SENTRY_DSN="https://your-sentry-dsn"
-```
-Once the containers are up and running, you can directly query PostgREST on:
-`<PGREST_ENDPOINT>/<table_name>?<filters>`
-like for example:
-`http://localhost:8080/eb7a008177131590c2f1a2ca0?decompte=eq.10`
-
-### Custom Configuration File
-
-Create a `config.toml` file in the project root or set the `CSVAPI_SETTINGS` environment variable:
-
-```shell
-export CSVAPI_SETTINGS="/path/to/your/config.toml"
-```
+Reading over the network costs one footer fetch per query (~120 ms on the OVH bucket). `DUCKDB_METADATA_CACHE=true` removes it almost entirely, but DuckDB offers no way to invalidate that cache, so a parquet file replaced in the bucket keeps being served from the cached metadata until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
 
 ## 🧪 Testing
 
-This project uses [pytest](https://pytest.org/) for testing with async support and mocking capabilities. You must have the two test containers running for the tests to run (see [### 🧪 Run with a test database](#-run-with-a-test-database) for setup instructions).
-
-### Running Tests
+This project uses [pytest](https://pytest.org/) for testing. No infrastructure is needed: the tests write their own parquet files and run the API in process against them.
 
 ```shell
-# Run all tests
+uv sync
 uv run pytest
-
-# Run specific test file
-uv run pytest tests/test_api.py
-
-# Run tests with verbose output
-uv run pytest -v
-
-# Run tests and show print statements
-uv run pytest -s
 ```
 
 ### Tests Structure
 
-- **`tests/test_api.py`** - API endpoint tests (actually pings the running API)
-- **`tests/test_config.py`** - Configuration loading tests
-- **`tests/test_query.py`** - Query building and processing tests
-- **`tests/test_swagger.py`** - Swagger documentation tests (actually pings the running API)
-- **`tests/test_utils.py`** - Utility function tests
+- **`tests/test_api.py`** - API endpoint tests, run in process against parquet files served over HTTP like the bucket
+- **`tests/test_query.py`** - Query building tests, executed on DuckDB
+- **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what the DuckDB sandbox prevents
+- **`tests/test_engine.py`** - The DuckDB instance: settings, timeouts, cancellations, failing storages
+- **`tests/test_resources.py`** - The resource cache
+- **`tests/test_errors.py`** - The filtering of the error messages
+- **`tests/test_serialization.py`** - The JSON and CSV rendering of DuckDB values
+- **`tests/test_swagger.py`** - The per-resource OpenAPI spec
 - **`tests/conftest.py`** - Test fixtures and configuration
 
-### CI/CD Testing
+## 🔀 Differences with the PostgREST version
 
-Tests are automatically run in CI/CD. See [`.circleci/config.yml`](.circleci/config.yml) for the complete CI/CD configuration.
+- No ingestion in PostgreSQL, no `tables_index` table: a `<resource_id>.parquet` file in the bucket is enough. Resource metadata is derived from the parquet file itself (schema, row count, statistics) and from the object's `Last-Modified` header (`created_at`).
+- `/api/resources/{rid}/` returns as `url` the permalink of the resource on data.gouv.fr (`DATAGOUV_URL`), which redirects to its source file, instead of the URL recorded at conversion time.
+- A resource deleted by its producer is no longer answered with a `410 Gone`: deletions are not tracked here, the data is served as long as its parquet file is in the bucket.
+- `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged.
+- Aggregations are allowed on every resource and every column: `/api/aggregation-exceptions/` always answers `{"allowed": true, "exceptions": []}`.
+- `page` and `page_size` must be positive integers, any other value answers a 400. The PostgREST version served the first page for `page=0` or a negative page, and the whole table, without any limit, for `page_size=0`.
+- The metrics API is out of scope.
 
 ## 🤝 Contributing
 
-### 🧹 Code Linting, Formatting and Type Checking
+### 🧹 Code Linting and Formatting
 
-This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/) for linting and formatting, and [ty](https://docs.astral.sh/ty/) for type checking. **Either running these commands manually or installing the pre-commit hook is required before submitting contributions.**
+This project follows PEP 8 style guidelines using [Ruff](https://astral.sh/ruff/) for linting and formatting. **Either running these commands manually or installing the pre-commit hook is required before submitting contributions.**
 
 ```shell
 # Lint (including import sorting) and format code
 uv run ruff check --fix && uv run ruff format
-
-# Type check (ty)
+# Check the types
 uv run ty check
 ```
-
-By default `ty check` checks the project root; pass paths to check specific files or directories. See the [ty CLI reference](https://docs.astral.sh/ty/reference/cli/) for options.
 
 ### 🔗 Pre-commit Hooks
 
@@ -574,7 +376,7 @@ This repository uses a [pre-commit](https://pre-commit.com/) hook which lint and
 
 **Install pre-commit hooks:**
 ```shell
-uv run pre-commit install
+uvx pre-commit install
 ```
 The pre-commit hook that automatically:
 - Check YAML syntax
@@ -590,7 +392,7 @@ Tests are automatically run on every pull request and push to main branch. See [
 
 ### 🏷️ Releases and versioning
 
-The release process uses the [`tag_version.sh`](tag_version.sh) script to create git tags, GitHub releases and update [CHANGELOG.md](CHANGELOG.md) automatically. Package version numbers are automatically derived from git tags using [setuptools_scm](https://github.com/pypa/setuptools_scm), so no manual version updates are needed in `pyproject.toml`.
+The release process uses the [`tag_version.sh`](tag_version.sh) script to create git tags, GitHub releases and update [CHANGELOG.md](CHANGELOG.md) automatically.
 
 **Prerequisites**: [GitHub CLI](https://cli.github.com/) must be installed and authenticated, and you must be on the main branch with a clean working directory.
 

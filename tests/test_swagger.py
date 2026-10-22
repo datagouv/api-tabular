@@ -1,103 +1,65 @@
-import json
-
 import pytest
-import yaml
 
-from api_tabular.core.swagger import OPERATORS_DESCRIPTIONS, TYPE_POSSIBILITIES
+from tabular_duckdb.query import PYTHON_TYPES, python_type
+from tabular_duckdb.resources import ColumnProfile
+from tabular_duckdb.swagger import TYPE_POSSIBILITIES, swagger_parameters
 
-from .conftest import (
-    AGG_ALLOWED_INDEXED_RESOURCE_ID,
-    AGG_ALLOWED_RESOURCE_ID,
-    INDEXED_RESOURCE_ID,
-    RESOURCE_ID,
-)
-
-pytestmark = pytest.mark.asyncio
-
-
-@pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
-    ],
-)
-async def test_swagger_endpoint(client, _resource_id):
-    res = await client.get(f"/api/resources/{_resource_id}/swagger/")
-    assert res.status == 200
+GLOBAL_PARAMETERS = {"page", "page_size", "columns", "or"}
+COMPARE = {"less", "greater", "strictly_less", "strictly_greater"}
+STRING_LIKE = {
+    "isnull",
+    "isnotnull",
+    "contains",
+    "notcontains",
+    "differs",
+    "exact",
+    "in",
+    "notin",
+    "sort",
+} | COMPARE
+GROUPING = {"groupby", "count"}
+NUMERIC_AGGREGATES = GROUPING | {"avg", "min", "max", "sum"}
+NUMERIC = {"isnull", "isnotnull", "differs", "exact", "in", "notin", "sort"} | COMPARE
+NULL_CHECKS = {"isnull", "isnotnull"}
 
 
 @pytest.mark.parametrize(
-    "params",
+    "duckdb_type",
     [
-        (RESOURCE_ID, False),
-        (AGG_ALLOWED_RESOURCE_ID, True),
+        *PYTHON_TYPES,
+        "DECIMAL(10,2)",
+        "INTEGER[]",
+        "STRUCT(a INTEGER)",
+        "MAP(VARCHAR, INTEGER)",
+        "UNION(a INTEGER)",
+        "GEOMETRY",
     ],
 )
-async def test_swagger_no_indexes(client, tables_index_rows, params):
-    _resource_id, allow_aggregation = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    columns = {c: v["python_type"] for c, v in detection["columns"].items()}
-    res = await client.get(f"/api/resources/{_resource_id}/swagger/")
-    swagger = await res.text()
-    swagger_dict = yaml.safe_load(swagger)
-
-    missing = []
-    for output in ["json", "csv"]:
-        params = swagger_dict["paths"][
-            f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
-        ]["parameters"]
-        params = {p["name"]: p for p in params}
-        for c in columns:
-            for p in TYPE_POSSIBILITIES[columns[c]]:
-                _params = (
-                    ["greater", "less", "strictly_greater", "strictly_less"]
-                    if p == "compare"
-                    else [p]
-                )
-                for _p in _params:
-                    if allow_aggregation:
-                        if f"{c}__{_p}" not in params:
-                            missing.append(f"{c}__{_p} is missing in {output} output")
-                        elif OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator"):
-                            assert params[f"{c}__{_p}"].get("allowEmptyValue")
-                    else:
-                        if (
-                            not OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator")
-                            and f"{c}__{_p}" not in params  # filters are in
-                        ):
-                            missing.append(f"{c}__{_p} is missing in {output} output")
-                            assert params[f"{c}__{_p}"].get("allowEmptyValue") is None
-                        if (
-                            OPERATORS_DESCRIPTIONS.get(_p, {}).get("is_aggregator")
-                            and f"{c}__{_p}" in params  # aggregators are out
-                        ):
-                            missing.append(f"{c}__{_p} is in {output} output but should not")
-    if missing:
-        raise ValueError("\n" + ";\n".join(missing))
+def test_every_column_type_has_swagger_operators(duckdb_type):
+    """A type without operators would make /swagger/ fail for every resource holding one."""
+    assert python_type(duckdb_type) in TYPE_POSSIBILITIES
 
 
 @pytest.mark.parametrize(
-    "_resource_id",
+    "python_type, operators, aggregators",
     [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
+        ("string", STRING_LIKE, GROUPING),
+        ("date", STRING_LIKE, GROUPING),
+        ("datetime", STRING_LIKE, GROUPING),
+        ("int", NUMERIC, NUMERIC_AGGREGATES),
+        ("float", NUMERIC, NUMERIC_AGGREGATES),
+        ("bool", {"isnull", "isnotnull", "differs", "exact", "sort"}, GROUPING),
+        ("json", NULL_CHECKS, set()),
     ],
 )
-async def test_swagger_with_indexes(client, tables_index_rows, exceptions_rows, _resource_id):
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
-    res = await client.get(f"/api/resources/{_resource_id}/swagger/")
-    swagger = await res.text()
-    swagger_dict = yaml.safe_load(swagger)
-
-    for output in ["json", "csv"]:
-        params = swagger_dict["paths"][
-            f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
-        ]["parameters"]
-        params = set([p["name"].split("__")[0] for p in params if "__" in p["name"]])
-        assert all(c in params for c in indexes)
-        assert not any(c in params for c in non_indexed_cols)
+def test_swagger_parameters_per_type(python_type, operators, aggregators):
+    parameters = swagger_parameters(
+        {"col": ColumnProfile(python_type=python_type, format=python_type)}
+    )
+    assert {p["name"] for p in parameters} == GLOBAL_PARAMETERS | {
+        f"col__{op}" for op in operators | aggregators
+    }
+    # is(not)null and aggregators do not take a value
+    assert {p["name"] for p in parameters if p.get("allowEmptyValue")} == {
+        f"col__{op}" for op in NULL_CHECKS | aggregators
+    }

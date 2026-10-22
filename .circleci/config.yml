@@ -14,9 +14,6 @@ parameters:
   docker-image-tabular:
     type: string
     default: "tabular-api"
-  docker-image-metrics:
-    type: string
-    default: "metric-api"
 
 jobs:
   lint:
@@ -39,36 +36,17 @@ jobs:
           command: uv run ty check
 
   tests:
-    machine:
-      image: ubuntu-2404:current  # Machine executor needed to run Docker containers (PostgreSQL + PostgREST)
+    # no infrastructure: the tests write their parquet files and serve them over HTTP themselves
+    docker:
+      - image: ghcr.io/astral-sh/uv:python<< pipeline.parameters.python-version >>-trixie
     steps:
       - checkout
       - run:
-          name: Start test containers
-          command: |
-            docker compose --profile test up -d
-      - run:
-          name: Wait for PostgreSQL to be ready
-          command: |
-            # Wait for PostgreSQL to be ready to accept connections
-            timeout 60 bash -c 'until docker compose exec -T postgres-test pg_isready -U csvapi; do sleep 2; done'
-      - run:
-          name: Wait for PostgREST to be ready
-          command: |
-            # Wait for PostgREST to be ready
-            timeout 30 bash -c 'until curl -f http://localhost:8080/ > /dev/null 2>&1; do sleep 2; done'
-      - run:
-          name: Install uv and dependencies and dev dependencies
-          command: |
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-            export PATH="$HOME/.local/bin:$PATH"
-            uv python install << pipeline.parameters.python-version >>
-            uv sync --frozen
+          name: Install Python dependencies
+          command: uv sync --frozen
       - run:
           name: Run tests
-          command: |
-            export PATH="$HOME/.local/bin:$PATH"
-            uv run pytest --junitxml=reports/python/tests.xml -p no:sugar --color=yes
+          command: uv run pytest --junitxml=reports/python/tests.xml --color=yes
       - store_test_results:
           path: reports/python
 
@@ -83,14 +61,13 @@ jobs:
             curl -LsSf https://astral.sh/uv/install.sh | sh
             export PATH="$HOME/.local/bin:$PATH"
             uv python install << pipeline.parameters.python-version >>
-            uv sync --frozen
       - run:
-          name: Compute RELEASE_VERSION via setuptools_scm, and build wheel
+          name: Compute RELEASE_VERSION from the git tags, and build wheel
           command: |
             export PATH="$HOME/.local/bin:$PATH"
             git fetch --tags --force origin
-            # derive from setuptools_scm or base version + build number
-            RELEASE_VERSION=$(uvx --from setuptools-scm python -m setuptools_scm)
+            # hatch-vcs, configured in pyproject.toml, derives it from the last tag
+            RELEASE_VERSION=$(uvx --with hatch-vcs hatch version)
             echo "Building a wheel release with version $RELEASE_VERSION"
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
@@ -121,27 +98,21 @@ jobs:
           command: |
             source "$BASH_ENV"
             : "${CONTAINER_REGISTRY_SERVER:?missing CONTAINER_REGISTRY_SERVER}"
-            IMAGE_PREFIX="${CONTAINER_REGISTRY_SERVER}/<< pipeline.parameters.container-registry-namespace >>"
+            repo="${CONTAINER_REGISTRY_SERVER}/<< pipeline.parameters.container-registry-namespace >>/<< pipeline.parameters.docker-image-tabular >>"
             DOCKER_TAG_GIT="${CIRCLE_TAG:-$(git describe --tags --exact-match 2>/dev/null || true)}"
-            build_and_push() {
-              local app_module="$1"
-              local IMAGE_NAME="$2"
-              local repo="${IMAGE_PREFIX}/${IMAGE_NAME}"
-              docker build --build-arg APP_MODULE="$app_module" \
-                -t "${repo}:${version}" \
-                $([ "${CIRCLE_BRANCH:-}" = "main" ] && echo -t "${repo}:latest") \
-                ${DOCKER_TAG_GIT:+-t "${repo}:${DOCKER_TAG_GIT}"} \
-                .
-              docker push "${repo}:${version}"
-              if [ "${CIRCLE_BRANCH:-}" = "main" ]; then
-                docker push "${repo}:latest"
-              fi
-              if [ -n "$DOCKER_TAG_GIT" ]; then
-                docker push "${repo}:${DOCKER_TAG_GIT}"
-              fi
-            }
-            build_and_push api_tabular.tabular.app:app_factory "<< pipeline.parameters.docker-image-tabular >>"
-            build_and_push api_tabular.metrics.app:app_factory "<< pipeline.parameters.docker-image-metrics >>"
+            # the version comes from git tags, which are not in the build context
+            docker build --build-arg VERSION="$RELEASE_VERSION" \
+              -t "${repo}:${version}" \
+              $([ "${CIRCLE_BRANCH:-}" = "main" ] && echo -t "${repo}:latest") \
+              ${DOCKER_TAG_GIT:+-t "${repo}:${DOCKER_TAG_GIT}"} \
+              .
+            docker push "${repo}:${version}"
+            if [ "${CIRCLE_BRANCH:-}" = "main" ]; then
+              docker push "${repo}:latest"
+            fi
+            if [ -n "$DOCKER_TAG_GIT" ]; then
+              docker push "${repo}:${DOCKER_TAG_GIT}"
+            fi
 
   publish-pypi:
     docker:
