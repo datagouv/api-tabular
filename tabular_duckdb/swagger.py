@@ -398,7 +398,8 @@ def build_swagger_file(resource_columns: dict, rid: str) -> str:
                 "get": {
                     "description": (
                         "Runs a read-only SQL query on this resource, exposed as the `resource` "
-                        "table. Only a single SELECT statement is accepted."
+                        "table. Only a single SELECT statement is accepted, calling basic "
+                        "functions only (aggregates, arithmetic, LIKE, dates)."
                     ),
                     "summary": "Run a read-only SQL query on the resource",
                     "operationId": "getResourceSql",

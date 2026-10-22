@@ -289,7 +289,8 @@ The endpoint is read-only, and the protection comes from DuckDB itself rather th
 - the process runs a single DuckDB instance, sandboxed with `enable_external_access=false` and only `PARQUET_BASE_URL` in `allowed_directories`: local files, other hosts, attached databases and extension installation are all out of reach, and `lock_configuration=true` prevents a query from loosening this;
 - its database is an empty file opened read-only, so that no query can change anything shared by the others;
 - every query runs on a connection of its own, where `resource` is a temporary view: whatever a query creates (temporary tables, macros...) disappears with its connection;
-- the query must be a single `SELECT` statement, its result is capped at `SQL_MAX_ROWS` rows and `SQL_MAX_BYTES` bytes of JSON (`meta.truncated` says whether a cap was hit), and it is interrupted after `SQL_TIMEOUT` seconds;
+- the query must be a single `SELECT` statement, its result is capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit), and it is interrupted after `SQL_TIMEOUT` seconds;
+- the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates), so a query may only call these functions: `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc` and `date_part`/`EXTRACT`. `CASE`, `CAST`, `coalesce`, comparisons, `IN`, `GROUP BY`, `ORDER BY` and CTEs are not functions and are allowed. Nothing can fabricate a value (`repeat`, `string_agg`...) nor rows (`range`...): an answer only holds values of the file, which keeps its size bounded;
 - DuckDB error messages are filtered so that the credentials do not leak.
 
 A query can read any parquet file of the prefix, not only its resource: they are all public data. DuckDB does not resolve `..` in a URL before checking `allowed_directories`, so with a private bucket, a query can read whatever its credentials can read.
@@ -319,7 +320,6 @@ Configuration is handled through environment variables or a `.env` file (see [.e
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
 | `SQL_MAX_ROWS` | `10000` | row cap of the SQL endpoint |
-| `SQL_MAX_BYTES` | `10000000` | size cap of the SQL endpoint answers, in bytes of JSON |
 | `SQL_TIMEOUT` | `30` | timeout of the SQL endpoint, in seconds |
 | `SQL_MAX_LENGTH` | `10000` | maximum length of the `q` parameter |
 | `SENTRY_DSN` | empty | error reporting |

@@ -38,13 +38,23 @@ MULTI_STATEMENTS = [
     "SELECT 1) LIMIT 1; SELECT * FROM (SELECT 1",
 ]
 
-OUTSIDE_THE_SANDBOX = [
+NOT_ALLOWED_FUNCTIONS = [
     "SELECT * FROM read_csv('/etc/passwd')",
     "SELECT * FROM read_text('/etc/passwd')",
     "SELECT * FROM read_blob('/proc/self/environ')",
     "SELECT * FROM glob('/**')",
     "SELECT * FROM read_parquet('s3://other-bucket/private.parquet')",
+    "SELECT * FROM duckdb_settings()",
+    "SELECT current_setting('memory_limit')",
+    "SELECT pg_get_viewdef(1)",
+    "SELECT * FROM resource WHERE id IN (SELECT repeat('x', 3))",
+    "WITH a AS (SELECT string_agg(id, '') AS s FROM resource) SELECT * FROM a",
+]
+
+# a path in a FROM clause is a table name, not a function call: the sandbox refuses it
+OUTSIDE_THE_SANDBOX = [
     "SELECT * FROM 'https://example.com/private.parquet'",
+    "SELECT * FROM '/etc/passwd.csv'",
 ]
 
 ALLOWED_STATEMENTS = [
@@ -53,8 +63,11 @@ ALLOWED_STATEMENTS = [
     "WITH a AS (SELECT * FROM resource) SELECT count(*) FROM a",
     "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r",
     "SELECT __id FROM resource WHERE __id < 10 ORDER BY __id",
-    "SELECT unnest([1, 2, 3]) AS x",
     "FROM resource SELECT count(*)",
+    "SELECT date_trunc('month', birth) AS m, median(score), sum(decompte) / count(*) FROM resource GROUP BY 1",
+    "SELECT CASE WHEN score > 0.5 THEN 'high' ELSE 'low' END AS level, count(DISTINCT id) FROM resource GROUP BY 1",
+    "SELECT coalesce(\"Nom de l'élu\", 'none') AS name, CAST(birth AS VARCHAR) FROM resource",
+    "SELECT EXTRACT(year FROM birth) AS y, max(score) FROM resource GROUP BY ALL",
     "SELECT count(*) FROM resource;",
     "SELECT count(*) FROM resource -- a trailing comment",
 ]
@@ -65,6 +78,13 @@ def test_only_a_single_select_is_accepted(client, statement):
     response = client.get(SQL_URL, params={"q": statement})
     assert response.status_code == 400
     assert response.json()["errors"][0]["title"] == "Invalid SQL query"
+
+
+@pytest.mark.parametrize("statement", NOT_ALLOWED_FUNCTIONS)
+def test_only_basic_functions_are_allowed(client, statement):
+    response = client.get(SQL_URL, params={"q": statement})
+    assert response.status_code == 400
+    assert "Functions not allowed" in response.json()["errors"][0]["detail"]
 
 
 @pytest.mark.parametrize("statement", OUTSIDE_THE_SANDBOX)

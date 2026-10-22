@@ -169,6 +169,9 @@ paths:
 
         Only a single `SELECT` statement is accepted: any other statement (`CREATE`, `INSERT`,
         `COPY`, `ATTACH`, `SET`, `PRAGMA`, `INSTALL`...) and multiple statements are rejected.
+        It may only call basic functions: `count`, `min`, `max`, `sum`, `avg`, `median`,
+        arithmetic, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`,
+        `length`, `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`.
         Results are capped and the query is interrupted after a timeout.
       summary: Run a read-only SQL query on the resource
       operationId: getResourceSql

@@ -736,18 +736,36 @@ def test_sql_missing_query(client):
     assert client.get(f"/api/resources/{RESOURCE_ID}/sql/").status_code == 400
 
 
-def test_sql_answer_is_capped_in_bytes(client, monkeypatch):
-    """The caller controls the size of each value: the row cap alone does not bound the answer."""
-    monkeypatch.setattr(settings, "SQL_MAX_BYTES", 10_000)
-    response = client.get(
-        f"/api/resources/{RESOURCE_ID}/sql/",
-        params={"q": "SELECT repeat('x', 1000) AS s FROM range(100)"},
+@pytest.mark.parametrize(
+    "query, function",
+    [
+        # one 300 MB value, which the rows fetched into Python would hold in full
+        ("SELECT repeat('x', 300000000) AS s", "repeat"),
+        ("SELECT string_agg(id, ' ') AS s FROM resource", "string_agg"),
+        ("SELECT string_agg(id, ' ') OVER () AS s FROM resource", "string_agg"),
+        ("SELECT list(id) AS s FROM resource", "list"),
+        ("SELECT id || id AS s FROM resource", "||"),
+        ("SELECT * FROM range(1000000000)", "range"),
+    ],
+)
+def test_sql_refuses_the_functions_fabricating_data(client, query, function):
+    """An answer may only hold values of the file: its size is then bounded by the data."""
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 400
+    assert function in response.json()["errors"][0]["detail"]
+
+
+def test_sql_basic_processing(client):
+    query = (
+        "SELECT year(birth) AS y, count(*) AS n, round(avg(score), 1) AS score, max(decompte) AS m "
+        "FROM resource WHERE id ILIKE 'id-1%' GROUP BY 1 ORDER BY 1 LIMIT 2"
     )
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
     assert response.status_code == 200
-    body = response.json()
-    assert body["meta"]["truncated"] is True
-    assert 0 < len(body["data"]) < 100
-    assert sum(len(row["s"]) for row in body["data"]) <= 10_000
+    assert response.json()["data"] == [
+        {"y": 1951, "n": 1, "score": 0.1, "m": 1},
+        {"y": 1960, "n": 1, "score": 0.0, "m": 3},
+    ]
 
 
 def test_sql_when_every_query_slot_is_taken(client, monkeypatch):
@@ -771,7 +789,10 @@ def test_sql_timeout_then_the_next_query_runs(client, monkeypatch):
     monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
     response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/",
-        params={"q": "SELECT sum(hash(range)) AS n FROM range(10000000000)"},
+        # 60^6 rows to count: with the allowed functions, only the resource can produce rows
+        params={
+            "q": "SELECT count(*) AS n FROM resource a, resource b, resource c, resource d, resource e, resource f"
+        },
     )
     assert response.status_code == 400
     assert response.json()["errors"][0]["title"] == "Query timeout"

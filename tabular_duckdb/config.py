@@ -49,8 +49,6 @@ class Settings(BaseSettings):
 
     # read-only SQL endpoint, whose queries share the QUERY_WORKERS threads
     SQL_MAX_ROWS: PositiveInt = 10000
-    # of JSON in the answer
-    SQL_MAX_BYTES: PositiveInt = 10_000_000
     SQL_TIMEOUT: int = 30
     SQL_MAX_LENGTH: int = 10000
 
