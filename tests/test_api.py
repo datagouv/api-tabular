@@ -579,11 +579,14 @@ def test_a_column_named_like_the_row_numbers_is_refused_once(client, sentry_even
     assert sentry_events == []
 
 
-def test_resource_data_database_error(client):
+def test_resource_data_database_error(client, http_parquet_dir):
     """An error only DuckDB detects, such as the average of a text column."""
     response = client.get(f"{DATA_URL}?id__avg")
     assert response.status_code == 400
-    assert response.json()["errors"][0]["title"] == "Database error"
+    error = response.json()["errors"][0]
+    assert error["title"] == "Database error"
+    # the storage location is not disclosed
+    assert http_parquet_dir not in error["detail"]
 
 
 def test_resource_data_or_group(client):

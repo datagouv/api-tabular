@@ -296,6 +296,9 @@ def test_query_value_not_castable_to_a_typed_column(typed, argument):
         ("birth__strictly_less=1955-06-01", lambda r: r["birth"] < date(1955, 6, 1)),
         # contains on a non-text column, which the swagger offers for dates
         ("birth__contains=198", lambda r: "198" in r["birth"].isoformat()),
+        # a nested value has no Python counterpart: it is compared through its text rendering
+        ("liste__exact=[a, b]", lambda r: True),
+        ("liste__differs=[a, b]", lambda r: False),
     ],
 )
 def test_query_filters(source, argument, predicate):
