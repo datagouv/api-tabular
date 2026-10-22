@@ -38,6 +38,17 @@ async def test_slow_load_does_not_block_other_resources(cache):
     assert (await slow).resource_id == SLOW_RESOURCE_ID
 
 
+async def test_a_client_going_away_does_not_cancel_the_load_of_the_others(cache):
+    first = asyncio.create_task(cache.get(SLOW_RESOURCE_ID))
+    second = asyncio.create_task(cache.get(SLOW_RESOURCE_ID))
+    await asyncio.sleep(0)
+    first.cancel()
+    await asyncio.sleep(0)
+    cache.release.set()
+    assert (await second).resource_id == SLOW_RESOURCE_ID
+    assert cache.loads == [SLOW_RESOURCE_ID]
+
+
 async def test_concurrent_requests_load_a_resource_once(cache):
     first = asyncio.create_task(cache.get(SLOW_RESOURCE_ID))
     second = asyncio.create_task(cache.get(SLOW_RESOURCE_ID))
