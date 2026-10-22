@@ -82,6 +82,9 @@ class DuckDBEngine:
     # for /health/, which must keep answering
     _executor: ThreadPoolExecutor
     _slots: asyncio.Semaphore
+    # an export only holds a slot while it fetches a chunk, but its result stays open in between,
+    # at the pace of the client: the number of open exports is bounded on its own
+    _exports: asyncio.Semaphore
 
     # --- lifecycle -----------------------------------------------------------------
 
@@ -147,6 +150,7 @@ class DuckDBEngine:
             max_workers=settings.QUERY_WORKERS, thread_name_prefix="duckdb"
         )
         self._slots = asyncio.Semaphore(settings.QUERY_WORKERS)
+        self._exports = asyncio.Semaphore(settings.QUERY_WORKERS)
 
     async def stop(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)
@@ -207,20 +211,29 @@ class DuckDBEngine:
 
         The first chunk is yielded even when empty, so that a CSV export without any row still
         gets its header. The timeout applies to each chunk, not to the whole download, whose
-        pace is the client's."""
-        async with self.connection() as cursor:
+        pace is the client's. At most QUERY_WORKERS exports are open at once."""
+        try:
+            await asyncio.wait_for(self._exports.acquire(), settings.QUERY_TIMEOUT)
+        except TimeoutError:
+            raise server_busy(settings.QUERY_TIMEOUT) from None
+        try:
+            async with self.connection() as cursor:
 
-            async def fetch_chunk() -> list[tuple]:
-                return await self.run(cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE))
+                async def fetch_chunk() -> list[tuple]:
+                    return await self.run(
+                        cursor, lambda: cursor.fetchmany(settings.STREAM_CHUNK_SIZE)
+                    )
 
-            await self.run(cursor, lambda: cursor.execute(sql, list(params or [])))
-            columns = column_names(cursor)
-            rows = await fetch_chunk()
-            yield QueryResult(columns, rows)
-            while rows:
+                await self.run(cursor, lambda: cursor.execute(sql, list(params or [])))
+                columns = column_names(cursor)
                 rows = await fetch_chunk()
-                if rows:
-                    yield QueryResult(columns, rows)
+                yield QueryResult(columns, rows)
+                while rows:
+                    rows = await fetch_chunk()
+                    if rows:
+                        yield QueryResult(columns, rows)
+        finally:
+            self._exports.release()
 
     async def ping(self) -> None:
         """Liveness check, run on the default executor so that busy query threads don't fail it."""

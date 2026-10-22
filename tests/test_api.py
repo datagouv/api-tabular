@@ -204,6 +204,26 @@ def test_query_timeout(client, monkeypatch):
     assert raised.value.title == "Query timeout"
 
 
+def test_exports_open_at_once_are_bounded(client, monkeypatch):
+    """An open export keeps its result between chunks, at the pace of its client."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    exports = [engine.stream("SELECT 1 AS n") for _ in range(settings.QUERY_WORKERS)]
+
+    async def first_chunk(export):
+        return await anext(export)
+
+    for export in exports:
+        client.portal.call(first_chunk, export)
+    try:
+        response = client.get(f"{DATA_URL}csv/")
+    finally:
+        for export in exports:
+            client.portal.call(export.aclose)
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Server busy"
+    assert client.get(f"{DATA_URL}csv/").status_code == 200
+
+
 def test_health_and_data_when_every_query_slot_is_taken(client, monkeypatch):
     """Slow /data/ queries must neither make /health/ fail nor queue the others forever."""
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
