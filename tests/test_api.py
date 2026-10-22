@@ -7,7 +7,7 @@ import yaml
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
-from tabular_duckdb.errors import QueryException
+from tabular_duckdb.errors import QueryException, query_timeout
 from tabular_duckdb.main import build_link_with_page
 
 from .conftest import (
@@ -201,6 +201,26 @@ def test_resource_profile_counts_a_rare_missing_value(client):
 def test_resource_profile_without_statistics(client, monkeypatch):
     monkeypatch.setattr(settings, "PROFILE_STATS", False)
     profile = client.get(f"/api/resources/{RESOURCE_ID}/profile/").json()["profile"]
+    assert profile["total_lines"] == TOTAL_LINES
+    assert profile["profile"] == {}
+
+
+def test_resource_profile_of_a_file_too_big_to_scan_in_time(client, monkeypatch):
+    """Only the statistics scan the file: when that times out, the profile comes without them."""
+    # loading the resource only describes the file, it is not part of what times out here
+    assert client.get(f"/api/resources/{RESOURCE_ID}/").status_code == 200
+    query = engine.query
+
+    async def scans_time_out(sql, params=None):
+        if "read_parquet" in sql:
+            raise query_timeout(settings.QUERY_TIMEOUT)
+        return await query(sql, params)
+
+    monkeypatch.setattr(engine, "query", scans_time_out)
+    response = client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    profile = response.json()["profile"]
+    assert profile["header"] == HEADER
     assert profile["total_lines"] == TOTAL_LINES
     assert profile["profile"] == {}
 

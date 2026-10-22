@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine, quote_literal
 from tabular_duckdb.errors import QueryException, safe_message
-from tabular_duckdb.query import ID_COLUMN, python_type, quote_ident
+from tabular_duckdb.query import ID_COLUMN, python_type
 
 RESOURCE_ID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -185,20 +185,25 @@ async def build_profile(resource: Resource) -> dict:
         formats.setdefault(description["format"], []).append(name)
 
     with_stats = settings.PROFILE_STATS and bool(resource.columns)
-    # the non-NULL counts of the columns only serve the statistics
-    counted = list(resource.columns) if with_stats else []
-    counts_sql = ", ".join(["count(*)", *(f"count({quote_ident(name)})" for name in counted)])
+    # the footer has the row count and the NULLs of each column: counting them by scanning the
+    # file takes longer than QUERY_TIMEOUT on the biggest resources
+    object_url = quote_literal(settings.object_url(resource.resource_id))
+    missing_values: dict[str, int | None] = {}
     try:
-        total_lines, *non_null = (
-            await engine.query(f"SELECT {counts_sql} FROM {resource.source_sql}")
-        ).rows[0]
+        total_lines = await engine.query_value(
+            f"SELECT num_rows FROM parquet_file_metadata({object_url})"
+        )
+        if with_stats:
+            # a writer that omits the null counts leaves them unknown (None)
+            null_counts = await engine.query(
+                "SELECT path_in_schema, sum(stats_null_count) "
+                f"FROM parquet_metadata({object_url}) GROUP BY ALL"
+            )
+            missing_values = dict(null_counts.rows)
     except duckdb.Error as exc:
         raise read_error(exc) from exc
 
-    profile: dict[str, dict[str, Any]] = {}
-    if with_stats:
-        missing_values = {name: total_lines - count for name, count in zip(counted, non_null)}
-        profile = await summarize(resource, missing_values)
+    profile = await summarize(resource, missing_values) if with_stats else {}
 
     return {
         "header": list(resource.columns.keys()),
@@ -218,7 +223,7 @@ def _as_float(value: Any) -> float | None:
 
 
 async def summarize(
-    resource: Resource, missing_values: dict[str, int]
+    resource: Resource, missing_values: dict[str, int | None]
 ) -> dict[str, dict[str, Any]]:
     """Per-column statistics, computed by DuckDB's SUMMARIZE."""
     try:
