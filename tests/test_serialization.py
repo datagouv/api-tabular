@@ -12,8 +12,13 @@ from tabular_duckdb.serialization import as_csv_value, jsonable, rows_to_json
             "b1a8c2e4-0f6d-4e51-9a3b-2c7d8e9f0a1b",
             "b1a8c2e4-0f6d-4e51-9a3b-2c7d8e9f0a1b",
         ),
-        # not valid UTF-8: replaced rather than failing the whole response
-        ("'\\xAA'::BLOB", "�", "�"),
+        # not valid UTF-8: escaped rather than failing the whole response, or losing the byte
+        ("'\\xAA'::BLOB", "\\xaa", "\\xaa"),
+        ("'abc'::BLOB", "abc", "abc"),
+        # map keys are converted like the values, and two invalid ones stay apart
+        ("MAP {'\\xAA'::BLOB: 1, '\\xAB'::BLOB: 2}", {"\\xaa": 1, "\\xab": 2}, None),
+        ("MAP {'abc'::BLOB: 1}", {"abc": 1}, '{"abc": 1}'),
+        ("[1, 2]::INTEGER[2]", [1, 2], "[1, 2]"),
         ("INTERVAL 1 DAY", "1 day, 0:00:00", "1 day, 0:00:00"),
         ("{'a': 1}", {"a": 1}, '{"a": 1}'),
         ("[1, 2]", [1, 2], "[1, 2]"),
@@ -25,7 +30,8 @@ def test_duckdb_values_are_serialized(duckdb_connection, expression, json_value,
     """Any of them can come out of the SQL endpoint, whatever the parquet files hold."""
     [(value,)] = duckdb_connection.execute(f"SELECT {expression}").fetchall()
     assert jsonable(value) == json_value
-    assert as_csv_value(value) == csv_value
+    if csv_value is not None:
+        assert as_csv_value(value) == csv_value
 
 
 def test_timestamp_with_time_zone_is_serialized(duckdb_connection):

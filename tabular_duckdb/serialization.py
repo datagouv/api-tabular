@@ -21,11 +21,13 @@ def jsonable(value: Any) -> Any:
         return str(value)
     if isinstance(value, uuid.UUID):
         return str(value)
-    if isinstance(value, (bytes, bytearray, memoryview)):
-        return bytes(value).decode("utf-8", errors="replace")
+    if isinstance(value, bytes):
+        # escaped rather than replaced: two different invalid values (or map keys) stay apart
+        return value.decode("utf-8", errors="backslashreplace")
     if isinstance(value, dict):
-        return {str(key): jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
+        return {str(jsonable(key)): jsonable(item) for key, item in value.items()}
+    # lists come as lists, fixed-size arrays as tuples
+    if isinstance(value, (list, tuple)):
         return [jsonable(item) for item in value]
     return str(value)
 
