@@ -330,7 +330,7 @@ async def resource_sql(rid: str, q: str = "") -> JSONResponse:
                 "table": RESOURCE_TABLE,
                 "rows": len(result.rows),
                 "truncated": result.truncated,
-                "row_limit": result.row_limit,
+                "row_limit": settings.SQL_MAX_ROWS,
                 "execution_ms": result.execution_ms,
             },
         }

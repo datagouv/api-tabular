@@ -87,7 +87,6 @@ class SqlResult:
     # JSON-serializable rows
     rows: list[dict]
     truncated: bool
-    row_limit: int
     execution_ms: int
 
 
@@ -138,6 +137,5 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
     return SqlResult(
         rows=rows[:row_limit],
         truncated=len(rows) > row_limit,
-        row_limit=row_limit,
         execution_ms=execution_ms,
     )
