@@ -56,12 +56,6 @@ def interruptible(conn: duckdb.DuckDBPyConnection, call: Callable[[], T], timeou
         watchdog.cancel()
 
 
-def install_extensions() -> None:
-    """Download httpfs once, so that runtime only has to LOAD it."""
-    with duckdb.connect(":memory:") as conn:
-        conn.execute("INSTALL httpfs")
-
-
 class DuckDBEngine:
     """Owns the single DuckDB instance of the process.
 

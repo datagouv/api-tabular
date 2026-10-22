@@ -20,7 +20,7 @@ COPY tabular_swagger.yaml ./
 USER datagouv
 
 # download the httpfs extension at build time, into the home of the user that will LOAD it
-RUN uv run --no-sync python -c "from tabular_duckdb.engine import install_extensions; install_extensions()"
+RUN uv run --no-sync python -c "import duckdb; duckdb.execute('INSTALL httpfs')"
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8005
