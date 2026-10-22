@@ -28,7 +28,7 @@ from tabular_duckdb.errors import (
     invalid_query_string,
     safe_message,
 )
-from tabular_duckdb.query import ParsedQuery, build_query
+from tabular_duckdb.query import ParsedQuery, Statement, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
@@ -99,9 +99,9 @@ def database_error(exc: duckdb.Error, resource_id: str) -> Exception:
     return handle_exception(400, "Database error", safe_message(str(exc)), resource_id)
 
 
-async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
+async def run_query(statement: Statement, resource_id: str) -> QueryResult:
     try:
-        return await engine.query(sql, params)
+        return await engine.query(statement.sql, statement.params)
     except duckdb.Error as exc:
         raise database_error(exc, resource_id) from exc
 
@@ -125,8 +125,7 @@ def check_storage() -> None:
 
 
 async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
-    sql, params = parsed.count_sql(resource.source_sql)
-    return int((await run_query(sql, params, resource_id)).rows[0][0])
+    return int((await run_query(parsed.count_sql(resource.source_sql), resource_id)).rows[0][0])
 
 
 @asynccontextmanager
@@ -253,8 +252,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     offset = page_size * (page - 1)
 
     parsed = parse_query(query_string, resource.query_columns, page_size, offset)
-    sql, params = parsed.data_sql(resource.source_sql)
-    result = await run_query(sql, params, rid)
+    result = await run_query(parsed.data_sql(resource.source_sql), rid)
     meta: dict[str, int] = {"page": page, "page_size": page_size}
     if parsed.is_aggregated:
         # like the PostgREST-based API, which reported no total for aggregated queries: a full
@@ -292,9 +290,9 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
     parsed = parse_query(query_arguments(request), resource.query_columns)
     check_output_size(await run_count(parsed, resource, rid))
 
-    sql, params = parsed.data_sql(resource.source_sql)
+    statement = parsed.data_sql(resource.source_sql)
     try:
-        chunks = await start_stream(sql, params)
+        chunks = await start_stream(statement.sql, statement.params)
     except duckdb.Error as exc:
         raise database_error(exc, rid) from exc
     streamer, mime = (

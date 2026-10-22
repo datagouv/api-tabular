@@ -195,7 +195,15 @@ def _split_list(value: str) -> list[str]:
     return items
 
 
-def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tuple[str, list]:
+@dataclass(frozen=True)
+class Statement:
+    """SQL and the values of its `?` placeholders."""
+
+    sql: str
+    params: list[Any]
+
+
+def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> Statement:
     """Translate a single `<column>__<operator>[=<value>]` filter into SQL."""
     if argument in RESERVED_ARGUMENTS:
         raise ValueError(f"Argument `{argument}` can't be set within an operator")
@@ -206,32 +214,32 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> tu
     quoted, duckdb_type = resolve_column(column_name, columns)
 
     if comparator == "isnull":
-        return f"({quoted} IS NULL)", []
+        return Statement(f"({quoted} IS NULL)", [])
     if comparator == "isnotnull":
-        return f"({quoted} IS NOT NULL)", []
+        return Statement(f"({quoted} IS NOT NULL)", [])
     if comparator in ("contains", "notcontains"):
         condition = f"(CAST({quoted} AS VARCHAR) ILIKE '%' || ? || '%')"
         # `*` is the wildcard of PostgREST's ilike patterns
         pattern = value.replace("*", "%")
-        return (condition if comparator == "contains" else f"(NOT {condition})"), [pattern]
+        return Statement(condition if comparator == "contains" else f"(NOT {condition})", [pattern])
     if comparator in ("in", "notin"):
         items = _split_list(value)
         if not items:
             # PostgREST's `in.()`: no row is in an empty list, NULLs included
-            return ("(FALSE)" if comparator == "in" else "(TRUE)"), []
+            return Statement("(FALSE)" if comparator == "in" else "(TRUE)", [])
         coerced = [coerce_value(item, duckdb_type) for item in items]
         as_varchar = any(fallback for _, fallback in coerced)
         params = [item for item, _ in coerced]
         placeholders = ", ".join("?" for _ in params)
         operator = "IN" if comparator == "in" else "NOT IN"
-        return f"({_comparable(quoted, as_varchar)} {operator} ({placeholders}))", params
+        return Statement(f"({_comparable(quoted, as_varchar)} {operator} ({placeholders}))", params)
     if comparator in COMPARATORS:
         coerced, as_varchar = coerce_value(value, duckdb_type)
         compared = _comparable(quoted, as_varchar)
         # equality stays exact, as with the deterministic collations of PostgreSQL
         if comparator in RANGE_COMPARATORS and is_text(duckdb_type):
             compared = collated(compared)
-        return f"({compared} {COMPARATORS[comparator]} ?)", [coerced]
+        return Statement(f"({compared} {COMPARATORS[comparator]} ?)", [coerced])
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
@@ -296,31 +304,27 @@ def parse_operator(
     operator: str,
     columns: Mapping[str, str],
     top_level: bool = False,
-) -> tuple[str, list]:
+) -> Statement:
     """Translate `or=(a__exact.1,and(b__less.2,c__isnotnull))` into a parenthesized SQL group."""
     match = re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query)
     if not match:
         raise ValueError(f"argument '{query}' could not be parsed")
-    conditions: list[str] = []
-    params: list[Any] = []
+    conditions: list[Statement] = []
     for param in split_top_level(match[0]):
         if param.startswith(("and(", "or(")):
-            condition, condition_params = parse_operator(param, param.split("(")[0], columns)
+            conditions.append(parse_operator(param, param.split("(")[0], columns))
         elif param.endswith(("__isnull", "__isnotnull")):
-            condition, condition_params = build_condition(
-                unquote_plus(param).replace('"', ""), "", columns
-            )
+            conditions.append(build_condition(unquote_plus(param).replace('"', ""), "", columns))
         else:
             argument, value = find_arg_val(param)
-            condition, condition_params = build_condition(
-                unquote_plus(argument), unquote_plus(value), columns
-            )
-        conditions.append(condition)
-        params.extend(condition_params)
+            conditions.append(build_condition(unquote_plus(argument), unquote_plus(value), columns))
     if not conditions:
         raise ValueError(f"argument '{query}' could not be parsed")
     joiner = " OR " if operator == "or" else " AND "
-    return f"({joiner.join(conditions)})", params
+    return Statement(
+        f"({joiner.join(condition.sql for condition in conditions)})",
+        [param for condition in conditions for param in condition.params],
+    )
 
 
 @dataclass
@@ -348,6 +352,10 @@ class ParsedQuery:
     @property
     def group_by(self) -> list[str]:
         return [quote_ident(column) for column in self.aggregators.get(GROUP_BY, [])]
+
+    def add_condition(self, condition: Statement) -> None:
+        self.conditions.append(condition.sql)
+        self.params.extend(condition.params)
 
     def where_clause(self) -> str:
         return f" WHERE {' AND '.join(self.conditions)}" if self.conditions else ""
@@ -377,7 +385,7 @@ class ParsedQuery:
             sql += f" GROUP BY {', '.join(self.group_by)}"
         return sql
 
-    def data_sql(self, source: str) -> tuple[str, list]:
+    def data_sql(self, source: str) -> Statement:
         # the last keys break the ties of the requested sort, so that pagination is
         # deterministic: __id for rows, the grouped columns for groups
         tiebreak = self.group_by if self.is_aggregated else [f"{quote_ident(ID_COLUMN)} ASC"]
@@ -389,15 +397,15 @@ class ParsedQuery:
             sql += f" LIMIT {int(self.limit)}"
         if self.offset:
             sql += f" OFFSET {int(self.offset)}"
-        return sql, list(self.params)
+        return Statement(sql, list(self.params))
 
-    def count_sql(self, source: str) -> tuple[str, list]:
+    def count_sql(self, source: str) -> Statement:
         if self.is_aggregated:
-            return (
+            return Statement(
                 f"SELECT count(*) FROM (SELECT {self.select_clause()} {self.from_clause(source)})",
                 list(self.params),
             )
-        return f"SELECT count(*) FROM {source}{self.where_clause()}", list(self.params)
+        return Statement(f"SELECT count(*) FROM {source}{self.where_clause()}", list(self.params))
 
 
 def build_query(
@@ -413,11 +421,9 @@ def build_query(
             continue
         key, separator, raw_value = raw_arg.partition("=")
         if key.lower() == "or":
-            condition, params = parse_operator(
-                f"or={decode_structure(raw_value)}", "or", columns, top_level=True
+            parsed.add_condition(
+                parse_operator(f"or={decode_structure(raw_value)}", "or", columns, top_level=True)
             )
-            parsed.conditions.append(condition)
-            parsed.params.extend(params)
             continue
         if raw_value.count("=") > 0:
             # like the PostgREST-based API, typically a missing `&` between two arguments
@@ -435,9 +441,7 @@ def build_query(
                 continue
             if comparator not in ("isnull", "isnotnull"):
                 raise ValueError(f"argument '{key}' could not be parsed")
-            condition, params = build_condition(key, "", columns)
-            parsed.conditions.append(condition)
-            parsed.params.extend(params)
+            parsed.add_condition(build_condition(key, "", columns))
             continue
         if key in ("page", "page_size"):
             # handled by the caller, which needs them to build the pagination links
@@ -462,9 +466,7 @@ def build_query(
             except ValueError:
                 raise ValueError(f"argument '{key}={value}' could not be parsed") from None
             continue
-        condition, params = build_condition(key, value, columns)
-        parsed.conditions.append(condition)
-        parsed.params.extend(params)
+        parsed.add_condition(build_condition(key, value, columns))
     if parsed.aggregators and parsed.selected is not None:
         raise ValueError("the argument `columns` cannot be set alongside aggregators")
     return parsed

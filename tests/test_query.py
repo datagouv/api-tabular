@@ -50,7 +50,8 @@ def run(
     table: Table, query_string: list[str], page_size: int | None = None, offset: int = 0
 ) -> list[dict]:
     parsed = build_query(query_string, table.columns, page_size=page_size, offset=offset)
-    result = fetch(table.conn, *parsed.data_sql(table.name))
+    statement = parsed.data_sql(table.name)
+    result = fetch(table.conn, statement.sql, statement.params)
     return [dict(zip(result.columns, values)) for values in result.rows]
 
 
@@ -127,8 +128,9 @@ def test_query_sort_ties_are_ordered_by_id(source):
     paginated_ids = []
     for offset in range(0, TOTAL_LINES, 7):
         parsed = build_query(["decompte__sort=asc", "columns=__id"], columns, 7, offset)
-        sql, params = parsed.data_sql("reversed")
-        paginated_ids.extend(value for (value,) in conn.execute(sql, params).fetchall())
+        statement = parsed.data_sql("reversed")
+        rows = conn.execute(statement.sql, statement.params).fetchall()
+        paginated_ids.extend(value for (value,) in rows)
     expected = sorted(ROWS, key=lambda r: (r["decompte"], r["__id"]))
     assert paginated_ids == [r["__id"] for r in expected]
 
@@ -340,10 +342,9 @@ def test_query_column_name_is_url_decoded(source):
 
 def test_query_count_sql(source):
     conn, columns = source.conn, source.columns
-    sql, params = build_query(["decompte__greater=3"], columns).count_sql("source")
-    assert conn.execute(sql, params).fetchone()[0] == len(
-        expected_ids(lambda r: r["decompte"] >= 3)
-    )
+    statement = build_query(["decompte__greater=3"], columns).count_sql("source")
+    [(count,)] = conn.execute(statement.sql, statement.params).fetchall()
+    assert count == len(expected_ids(lambda r: r["decompte"] >= 3))
 
 
 def test_query_specify_columns(source):
@@ -434,16 +435,17 @@ def test_query_groups_are_paginated_in_a_stable_order(source):
     groups = []
     for offset in range(0, 7, 3):
         parsed = build_query(["decompte__groupby", "id__count"], columns, 3, offset)
-        sql, params = parsed.data_sql("reversed")
-        groups.extend(group for group, _ in conn.execute(sql, params).fetchall())
+        statement = parsed.data_sql("reversed")
+        rows = conn.execute(statement.sql, statement.params).fetchall()
+        groups.extend(group for group, _ in rows)
     assert groups == list(range(7))
 
 
 def test_query_count_sql_of_an_aggregation_counts_the_groups(source):
     conn, columns = source.conn, source.columns
     parsed = build_query(["decompte__groupby", "id__count", "decompte__less=2"], columns)
-    sql, params = parsed.count_sql("source")
-    assert conn.execute(sql, params).fetchone()[0] == 3
+    statement = parsed.count_sql("source")
+    assert conn.execute(statement.sql, statement.params).fetchall() == [(3,)]
 
 
 @pytest.mark.parametrize(
