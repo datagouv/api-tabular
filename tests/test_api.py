@@ -194,7 +194,7 @@ def test_cors_headers_on_a_server_error(monkeypatch):
 
 def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
     monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
-    monkeypatch.setattr(settings, "HTTP_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "HEALTH_TIMEOUT", 1)
     response = client.get("/health/")
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "Storage unavailable"

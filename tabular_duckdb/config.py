@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     # where the parquet files live, read over HTTP(S) without credentials: a resource is read at
     # <PARQUET_BASE_URL>/<resource_id>.parquet
     PARQUET_BASE_URL: str = "https://hydra.s3.rbx.io.cloud.ovh.net/parquet"
-    HTTP_TIMEOUT: int = 20
+    # of the HEAD that /health/ sends to the storage; the reads of DuckDB use QUERY_TIMEOUT
+    HEALTH_TIMEOUT: int = 20
 
     # the data.gouv.fr instance whose resources are served, for the permalink to their file
     DATAGOUV_URL: str = "https://www.data.gouv.fr"

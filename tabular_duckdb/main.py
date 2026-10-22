@@ -110,7 +110,7 @@ def check_storage() -> None:
     """The storage is up when it answers on the prefix, even a 403 (the bucket denies listing)."""
     request = urllib.request.Request(settings.PARQUET_BASE_URL, method="HEAD")
     try:
-        urllib.request.urlopen(request, timeout=settings.HTTP_TIMEOUT).close()
+        urllib.request.urlopen(request, timeout=settings.HEALTH_TIMEOUT).close()
     except urllib.error.HTTPError as exc:
         if exc.code >= 500:
             raise QueryException(
