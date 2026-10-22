@@ -128,7 +128,7 @@ async def run_user_sql(resource: Resource, user_sql: str) -> SqlResult:
         try:
             rows = await engine.run(cursor, view_then_query, settings.SQL_TIMEOUT)
         except duckdb.Error as exc:
-            if is_storage_failure(exc) and settings.storage_over_http:
+            if is_storage_failure(exc):
                 raise read_error(exc, resource.resource_id) from exc
             raise invalid_query(safe_message(str(exc))) from exc
         execution_ms = round((asyncio.get_running_loop().time() - started) * 1000)

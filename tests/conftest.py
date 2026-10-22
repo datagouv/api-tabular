@@ -119,10 +119,10 @@ def parquet_dir(tmp_path_factory) -> str:
 
 
 @pytest.fixture(scope="session")
-def client(parquet_dir):
-    """The API, run in process against the parquet files written by `parquet_dir`."""
+def client(http_parquet_dir):
+    """The API, run in process against the parquet files of `parquet_dir`, served over HTTP."""
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(settings, "PARQUET_BASE_URL", parquet_dir)
+        patch.setattr(settings, "PARQUET_BASE_URL", http_parquet_dir)
         patch.setattr(settings, "SERVER_NAME", "testserver")
         with TestClient(app) as test_client:
             yield test_client

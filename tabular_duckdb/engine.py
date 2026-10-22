@@ -114,21 +114,6 @@ class DuckDBEngine:
         if settings.DUCKDB_METADATA_CACHE:
             db.execute("SET GLOBAL enable_http_metadata_cache=true")
             db.execute("SET GLOBAL parquet_metadata_cache=true")
-        if settings.S3_ACCESS_KEY and settings.S3_SECRET_KEY:
-            # only needed for a private bucket, public files are read over plain HTTPS
-            db.execute(
-                f"""
-                CREATE OR REPLACE SECRET tabular_s3 (
-                    TYPE s3,
-                    KEY_ID {quote_literal(settings.S3_ACCESS_KEY)},
-                    SECRET {quote_literal(settings.S3_SECRET_KEY)},
-                    ENDPOINT {quote_literal(settings.S3_ENDPOINT)},
-                    REGION {quote_literal(settings.S3_REGION)},
-                    URL_STYLE {quote_literal(settings.S3_URL_STYLE)},
-                    USE_SSL {str(settings.S3_USE_SSL).lower()}
-                )
-                """
-            )
         self._sandbox(db)
         return db
 
@@ -142,8 +127,8 @@ class DuckDBEngine:
         statement from loosening this. The CA bundles in `allowed_paths` are public certificates.
 
         DuckDB does not resolve `..` in a URL before this check: user SQL can read any object of
-        the bucket, not only those under the prefix. With the public bucket, that is what anyone
-        can already download; with a private one, it is whatever its credentials can read.
+        the bucket, not only those under the prefix, which is what anyone can already download
+        from this public bucket.
         """
         prefix = settings.PARQUET_BASE_URL.rstrip("/")
         db.execute(f"SET GLOBAL allowed_directories=[{quote_literal(prefix)}]")

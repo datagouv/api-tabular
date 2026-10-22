@@ -43,7 +43,7 @@ NOT_ALLOWED_FUNCTIONS = [
     "SELECT * FROM read_text('/etc/passwd')",
     "SELECT * FROM read_blob('/proc/self/environ')",
     "SELECT * FROM glob('/**')",
-    "SELECT * FROM read_parquet('s3://other-bucket/private.parquet')",
+    "SELECT * FROM read_parquet('https://example.com/private.parquet')",
     "SELECT * FROM duckdb_settings()",
     "SELECT current_setting('memory_limit')",
     "SELECT pg_get_viewdef(1)",

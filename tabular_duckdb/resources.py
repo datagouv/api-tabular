@@ -73,9 +73,7 @@ def head(url: str) -> dict[str, str]:
 
 
 def _created_at(url: str) -> str | None:
-    """Last modification date of the object, when the storage is reachable over HTTP."""
-    if not settings.storage_over_http:
-        return None
+    """Last modification date of the object."""
     last_modified = head(url).get("Last-Modified")
     if not last_modified:
         return None
@@ -92,9 +90,6 @@ def is_storage_failure(exc: duckdb.Error) -> bool:
 def read_error(exc: duckdb.Error, resource_id: str | None = None) -> Exception:
     """DuckDB cannot read the file: missing resource, failing storage, or unusable parquet."""
     if is_storage_failure(exc):
-        if not settings.storage_over_http:
-            # no HEAD was possible on an s3:// URL, so an IO error most likely means "not found"
-            return HTTPException(404)
         # the HEAD found the object: the storage failed while DuckDB was reading it
         return handle_exception(
             502,

@@ -18,16 +18,12 @@ class QueryException(Exception):
 
 
 def safe_message(message: str) -> str:
-    """Do not leak the storage location nor credentials in DuckDB error messages."""
+    """Do not leak the storage location in DuckDB error messages."""
     # the `LINE 1: ...` context quotes the SQL that ran, which reads the parquet file by its
     # location and is cut at an arbitrary length: no replacement can catch a truncated prefix.
-    # It is never what the client wrote anyway, even on /sql/ where the query is rebuilt.
+    # It is never exactly what the client wrote anyway: /sql/ runs the query wrapped in a LIMIT.
     redacted = message.partition("\nLINE ")[0]
-    redacted = redacted.replace(settings.PARQUET_BASE_URL.rstrip("/") + "/", "<resource>/")
-    for secret in (settings.S3_SECRET_KEY, settings.S3_ACCESS_KEY):
-        if secret:
-            redacted = redacted.replace(secret, "***")
-    return redacted.strip()
+    return redacted.replace(settings.PARQUET_BASE_URL.rstrip("/") + "/", "<resource>/").strip()
 
 
 def invalid_query_string(detail: str) -> QueryException:

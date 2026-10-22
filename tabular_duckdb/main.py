@@ -105,8 +105,6 @@ async def run_query(sql: str, params: list, resource_id: str) -> QueryResult:
 
 
 def check_storage() -> None:
-    if not settings.storage_over_http:
-        return
     try:
         head(settings.PARQUET_BASE_URL)
     except StarletteHTTPException:

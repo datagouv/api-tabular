@@ -46,7 +46,7 @@ uv sync
 uv run uvicorn tabular_duckdb.main:app --port 8005 --reload
 ```
 
-Configuration comes from environment variables or a `.env` file, see [.env.example](.env.example) and the [⚙️ Configuration](#️-configuration) section; the defaults point at the public OVH bucket. Another bucket only needs `PARQUET_BASE_URL`, and `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_ENDPOINT` if it is private (the base URL can then be an `s3://` one).
+Configuration comes from environment variables or a `.env` file, see [.env.example](.env.example) and the [⚙️ Configuration](#️-configuration) section; the defaults point at the public OVH bucket. Another storage only needs `PARQUET_BASE_URL`, an HTTP(S) prefix readable without credentials.
 
 Any resource converted by Hydra can be queried with its real resource id, as long as its `<resource_id>.parquet` file is in the bucket.
 
@@ -290,10 +290,9 @@ The endpoint is read-only, and the protection comes from DuckDB itself rather th
 - its database is an empty file opened read-only, so that no query can change anything shared by the others;
 - every query runs on a connection of its own, where `resource` is a temporary view: whatever a query creates (temporary tables, macros...) disappears with its connection;
 - the query must be a single `SELECT` statement, its result is capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit), and it is interrupted after `SQL_TIMEOUT` seconds;
-- the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates), so a query may only call these functions: `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc` and `date_part`/`EXTRACT`. `CASE`, `CAST`, `coalesce`, comparisons, `IN`, `GROUP BY`, `ORDER BY` and CTEs are not functions and are allowed. Nothing can fabricate a value (`repeat`, `string_agg`...) nor rows (`range`...): an answer only holds values of the file, which keeps its size bounded;
-- DuckDB error messages are filtered so that the credentials do not leak.
+- the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates), so a query may only call these functions: `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc` and `date_part`/`EXTRACT`. `CASE`, `CAST`, `coalesce`, comparisons, `IN`, `GROUP BY`, `ORDER BY` and CTEs are not functions and are allowed. Nothing can fabricate a value (`repeat`, `string_agg`...) nor rows (`range`...): an answer only holds values of the file, which keeps its size bounded.
 
-A query can read any parquet file of the prefix, not only its resource: they are all public data. DuckDB does not resolve `..` in a URL before checking `allowed_directories`, so with a private bucket, a query can read whatever its credentials can read.
+A query can read any parquet file of the prefix, and DuckDB does not resolve `..` in a URL before checking `allowed_directories`: it can read any object of the bucket, which anyone can already download, as the bucket is public.
 
 ### Health Check
 
@@ -308,8 +307,6 @@ Configuration is handled through environment variables or a `.env` file (see [.e
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PARQUET_BASE_URL` | `https://hydra.s3.rbx.io.cloud.ovh.net/parquet` | prefix holding the `<resource_id>.parquet` files |
-| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | empty | only for a private bucket, creates a DuckDB S3 secret |
-| `S3_ENDPOINT` / `S3_REGION` / `S3_URL_STYLE` / `S3_USE_SSL` | empty / `us-east-1` / `vhost` / `true` | that secret's settings |
 | `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
 | `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
 | `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |

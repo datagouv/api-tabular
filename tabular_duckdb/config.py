@@ -7,18 +7,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # where the parquet files live: a resource is read at <PARQUET_BASE_URL>/<resource_id>.parquet
+    # where the parquet files live, read over HTTP(S) without credentials: a resource is read at
+    # <PARQUET_BASE_URL>/<resource_id>.parquet
     PARQUET_BASE_URL: str = "https://hydra.s3.rbx.io.cloud.ovh.net/parquet"
     HTTP_TIMEOUT: int = 20
-
-    # only needed for a private bucket: when set, a DuckDB S3 secret is created and the
-    # base URL can be an s3:// one
-    S3_ACCESS_KEY: str = ""
-    S3_SECRET_KEY: str = ""
-    S3_ENDPOINT: str = ""
-    S3_REGION: str = "us-east-1"
-    S3_URL_STYLE: str = "vhost"
-    S3_USE_SSL: bool = True
 
     # the data.gouv.fr instance whose resources are served, for the permalink to their file
     DATAGOUV_URL: str = "https://www.data.gouv.fr"
@@ -54,11 +46,6 @@ class Settings(BaseSettings):
 
     SENTRY_DSN: str = ""
     SENTRY_SAMPLE_RATE: float = 1.0
-
-    @property
-    def storage_over_http(self) -> bool:
-        """An s3:// base URL is only reachable through DuckDB, not with a plain HTTP request."""
-        return self.PARQUET_BASE_URL.startswith(("http://", "https://"))
 
     def object_url(self, resource_id: str) -> str:
         return f"{self.PARQUET_BASE_URL.rstrip('/')}/{resource_id}.parquet"

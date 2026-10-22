@@ -148,20 +148,6 @@ def test_storage_failing_while_the_parquet_file_is_read(client, storage, restart
     assert [event["event_id"] for event in sentry_events] == [error["code"]]
 
 
-def test_resources_read_over_http(client, http_parquet_dir, restart_on):
-    """The production path: the parquet file read by DuckDB through ranged HTTP requests."""
-    restart_on(http_parquet_dir)
-    meta = client.get(f"/api/resources/{RESOURCE_ID}/")
-    assert meta.status_code == 200
-    assert meta.json()["created_at"] == "2024-01-01T12:00:00+00:00"
-    data = client.get(DATA_URL, params={"page_size": 1})
-    assert data.json()["data"] == [FIRST_ROW]
-    sql = client.get(
-        f"/api/resources/{RESOURCE_ID}/sql/", params={"q": "SELECT count(*) AS n FROM resource"}
-    )
-    assert sql.json()["data"] == [{"n": TOTAL_LINES}]
-
-
 def test_cors_headers_on_a_server_error(monkeypatch):
     async def broken(resource_id):
         raise RuntimeError("unexpected")
@@ -209,8 +195,8 @@ def test_resource_meta(client, base_url):
     response = client.get(f"/api/resources/{RESOURCE_ID}/")
     assert response.status_code == 200
     assert response.json() == {
-        # local files have no Last-Modified header to report
-        "created_at": None,
+        # the Last-Modified header of the object
+        "created_at": "2024-01-01T12:00:00+00:00",
         "url": f"https://www.data.gouv.fr/api/1/datasets/r/{RESOURCE_ID}",
         "links": [
             {
@@ -252,9 +238,8 @@ def test_malformed_resource_id(client):
     assert response.text == "404: Not Found"
 
 
-def test_resource_id_with_a_trailing_newline(client, storage, monkeypatch):
+def test_resource_id_with_a_trailing_newline(client):
     """`$` would match before the newline, which then breaks the HEAD on the storage."""
-    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/200")
     response = client.get(f"/api/resources/{RESOURCE_ID}%0A/data/")
     assert response.status_code == 404
 
@@ -275,13 +260,13 @@ def test_cors_preflight(client, headers):
 
 
 @pytest.mark.parametrize("suffix", ["", "data/", "sql/?q=SELECT 1 AS n FROM resource"])
-def test_invalid_resource_file(client, parquet_dir, suffix):
+def test_invalid_resource_file(client, http_parquet_dir, suffix):
     response = client.get(f"/api/resources/{CORRUPT_RESOURCE_ID}/{suffix}")
     assert response.status_code == 400
     error = response.json()["errors"][0]
     assert error["title"] == "Invalid resource file"
     # the storage location is not disclosed
-    assert parquet_dir not in error["detail"]
+    assert http_parquet_dir not in error["detail"]
     assert f"<resource>/{CORRUPT_RESOURCE_ID}.parquet" in error["detail"]
 
 

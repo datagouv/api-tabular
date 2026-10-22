@@ -13,10 +13,3 @@ def test_safe_message_drops_the_quoted_sql():
 def test_safe_message_hides_the_storage_location():
     message = f"IO Error: cannot open {settings.object_url('abc')}"
     assert safe_message(message) == "IO Error: cannot open <resource>/abc.parquet"
-
-
-def test_safe_message_hides_the_credentials(monkeypatch):
-    monkeypatch.setattr(settings, "S3_ACCESS_KEY", "access-key-id")
-    monkeypatch.setattr(settings, "S3_SECRET_KEY", "secret-key-value")
-    message = "HTTP Error: denied for access-key-id with secret-key-value"
-    assert safe_message(message) == "HTTP Error: denied for *** with ***"
