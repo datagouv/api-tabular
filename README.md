@@ -302,24 +302,27 @@ curl http://localhost:8005/health/
 
 ## ⚙️ Configuration
 
-Configuration is handled through environment variables or a `.env` file (see [.env.example](.env.example)).
+Configuration is handled through environment variables or a `.env` file ([.env.example](.env.example) holds the ones usually set locally). The table below lists them all.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PARQUET_BASE_URL` | `https://hydra.s3.rbx.io.cloud.ovh.net/parquet` | prefix holding the `<resource_id>.parquet` files |
+| `HEALTH_TIMEOUT` | `20` | timeout of the HEAD `/health/` sends to the storage, in seconds |
 | `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
+| `DOC_PATH` | `/api/doc` | path of the API documentation |
 | `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
 | `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
+| `STREAM_CHUNK_SIZE` | `1000` | rows fetched at once by the CSV/JSON downloads |
 | `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of the DuckDB instance, shared by every query |
-| `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | data queries are interrupted after this many seconds, and at most this many run at once (a 503 is returned to the others once the timeout is spent waiting) |
+| `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
 | `SQL_MAX_ROWS` | `10000` | row cap of the SQL endpoint |
 | `SQL_TIMEOUT` | `30` | timeout of the SQL endpoint, in seconds |
 | `SQL_MAX_LENGTH` | `10000` | maximum length of the `q` parameter |
-| `SENTRY_DSN` | empty | error reporting |
+| `SENTRY_DSN` / `SENTRY_SAMPLE_RATE` | empty / `1.0` | error reporting |
 
 Reading over the network costs one footer fetch per query (~120 ms on the OVH bucket). `DUCKDB_METADATA_CACHE=true` removes it almost entirely, but DuckDB offers no way to invalidate that cache, so a parquet file replaced in the bucket keeps being served from the cached metadata until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
 
@@ -334,9 +337,14 @@ uv run pytest
 
 ### Tests Structure
 
-- **`tests/test_api.py`** - API endpoint tests, run in process against the local parquet files
+- **`tests/test_api.py`** - API endpoint tests, run in process against parquet files served over HTTP like the bucket
 - **`tests/test_query.py`** - Query building tests, executed on DuckDB
 - **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what the DuckDB sandbox prevents
+- **`tests/test_engine.py`** - The DuckDB instance: settings, timeouts, cancellations, failing storages
+- **`tests/test_resources.py`** - The resource cache
+- **`tests/test_errors.py`** - The filtering of the error messages
+- **`tests/test_serialization.py`** - The JSON and CSV rendering of DuckDB values
+- **`tests/test_swagger.py`** - The per-resource OpenAPI spec
 - **`tests/conftest.py`** - Test fixtures and configuration
 
 ## 🔀 Differences with the PostgREST version
