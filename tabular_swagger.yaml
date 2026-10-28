@@ -172,7 +172,7 @@ paths:
         It may only read the `resource` table and its own CTEs, and use basic processing:
         `count`, `min`, `max`, `sum`, `avg`, `median`, arithmetic, `round`, `abs`, `floor`,
         `ceil`, `nullif`, `coalesce`, `CASE`, `CAST`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`,
-        `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, comparisons, `IN`,
+        `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, `strftime`, comparisons, `IN`,
         `BETWEEN`, joins, subqueries, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`. A rejected query
         gets a 400 quoting the part at fault.
         Results are capped and the query is interrupted after a timeout.

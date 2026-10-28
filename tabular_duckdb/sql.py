@@ -106,6 +106,8 @@ ALLOWED_NODES = (
     exp.TimestampTrunc,
     exp.DateTrunc,
     exp.Extract,
+    # strftime
+    exp.TimeToStr,
 )
 
 # functions sqlglot does not model, which it parses as anonymous calls

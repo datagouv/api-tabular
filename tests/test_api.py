@@ -819,6 +819,16 @@ def test_sql_basic_processing(client):
     ]
 
 
+def test_sql_strftime_labels_the_groups(client):
+    query = (
+        "SELECT strftime(birth, '%Y') AS y, count(*) AS n "
+        "FROM resource WHERE id ILIKE 'id-1%' GROUP BY 1 ORDER BY 1 LIMIT 2"
+    )
+    response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
+    assert response.status_code == 200
+    assert response.json()["data"] == [{"y": "1951", "n": 1}, {"y": "1960", "n": 1}]
+
+
 def test_sql_when_every_query_slot_is_taken(client, monkeypatch):
     """When slow queries hold every slot, the next ones must not wait forever."""
     monkeypatch.setattr(settings, "SQL_TIMEOUT", 1)
