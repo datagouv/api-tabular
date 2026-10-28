@@ -284,16 +284,11 @@ curl -G "http://localhost:8005/api/resources/$RID/sql/" \
 }
 ```
 
-The endpoint is read-only, and the protection comes from DuckDB itself rather than from an analysis of the query:
+The endpoint is read-only, as the query is checked against an allowlist before running:
 
-- the process runs a single DuckDB instance, sandboxed with `enable_external_access=false` and only `PARQUET_BASE_URL` in `allowed_directories`: local files, other hosts, attached databases and extension installation are all out of reach, and `lock_configuration=true` prevents a query from loosening this;
-- its database is an empty file opened read-only, so that no query can change its catalog. Secrets are shared by the whole instance whatever its mode: only the single `SELECT` rule below keeps a query from creating or dropping one;
-- every query runs on a connection of its own, where `resource` is a temporary view: whatever a query creates (temporary tables, macros...) disappears with its connection;
-- the query is parsed by [sqlglot](https://github.com/tobymao/sqlglot), and must be a single `SELECT` made only of allowed constructs (`ALLOWED_NODES` in `tabular_duckdb/sql.py`), reading no other table than `resource` and its own CTEs. What runs is the SQL regenerated from the parsed tree, never the text of the client;
+- the query is parsed by [sqlglot](https://github.com/tobymao/sqlglot), and must be a single `SELECT` made only of allowed constructs (`ALLOWED_NODES` in `tabular_duckdb/sql.py`), reading no other table than `resource` and its own CTEs: no file, URL, table function or catalog view can be named. What runs is the SQL regenerated from the parsed tree, never the text of the client;
 - the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates): `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `coalesce`, `CASE`, `CAST`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, comparisons, `IN`, `BETWEEN`, joins, subqueries, CTEs at the start of the query, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`. Nothing can fabricate a value (`repeat`, `string_agg`, `||`...) nor rows (`range`, `UNION`, recursive CTEs): an answer only holds values of the file, which keeps its size bounded. A refused query gets a 400 quoting the part at fault;
 - the result is capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit), and the query is interrupted after `SQL_TIMEOUT` seconds.
-
-A query can read any parquet file of the prefix, and DuckDB does not resolve `..` in a URL before checking `allowed_directories`: it can read any object of the bucket, which anyone can already download, as the bucket is public.
 
 ### Health Check
 
@@ -340,7 +335,7 @@ uv run pytest
 
 - **`tests/test_api.py`** - API endpoint tests, run in process against parquet files served over HTTP like the bucket
 - **`tests/test_query.py`** - Query building tests, executed on DuckDB
-- **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what the DuckDB sandbox prevents
+- **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what it allows
 - **`tests/test_engine.py`** - The DuckDB instance: settings, timeouts, cancellations, failing storages
 - **`tests/test_resources.py`** - The resource cache
 - **`tests/test_errors.py`** - The filtering of the error messages

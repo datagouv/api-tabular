@@ -1,10 +1,8 @@
 import asyncio
-import tempfile
 import threading
 from collections.abc import AsyncGenerator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, TypeVar
 
 import duckdb
@@ -13,16 +11,6 @@ from tabular_duckdb.config import settings
 from tabular_duckdb.errors import query_timeout, server_busy
 
 T = TypeVar("T")
-
-# where httpfs looks for the system CA bundle to verify HTTPS certificates: it reads it from disk
-# on every TLS connection, so the sandbox must allow it (missing paths are ignored)
-CA_BUNDLES = (
-    "/etc/ssl/certs/ca-certificates.crt",
-    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-    "/etc/pki/tls/certs/ca-bundle.crt",
-    "/etc/ssl/ca-bundle.pem",
-    "/etc/ssl/cert.pem",
-)
 
 
 def quote_literal(value: str) -> str:
@@ -59,18 +47,14 @@ def interruptible(conn: duckdb.DuckDBPyConnection, call: Callable[[], T], timeou
 class DuckDBEngine:
     """Owns the single DuckDB instance of the process.
 
-    The instance is sandboxed, then its configuration is locked, and its database is an empty
-    file opened read-only, so that no statement can change its catalog. Secrets are the
-    exception: they belong to the instance, and `CREATE SECRET` on one connection is seen by all;
-    only the single SELECT rule of /sql/ keeps users from running one. Every query runs on its own
-    connection (`cursor()`), whose temporary objects (views, tables, macros) disappear when it is
-    closed, while the HTTP connections and the caches of the instance are shared by all.
+    Every query runs on its own connection (`cursor()`), whose temporary objects (the `resource`
+    view of /sql/) disappear when it is closed, while the HTTP connections and the caches of the
+    instance are shared by all.
 
     Everything is set by `start()`, which the application lifespan runs before serving any
     request."""
 
     _db: duckdb.DuckDBPyConnection
-    _directory: tempfile.TemporaryDirectory
     # the queries get their own threads: when they saturate, the default executor stays free
     # for /health/, which must keep answering
     _executor: ThreadPoolExecutor
@@ -81,13 +65,9 @@ class DuckDBEngine:
 
     # --- lifecycle -----------------------------------------------------------------
 
-    def _open(self) -> duckdb.DuckDBPyConnection:
-        # an in-memory database cannot be opened read-only, an empty file can
-        path = Path(self._directory.name) / "empty.duckdb"
-        duckdb.connect(str(path)).close()
-        # persistent secrets would make httpfs read ~/.duckdb/stored_secrets, which the
-        # sandbox below forbids
-        db = duckdb.connect(str(path), read_only=True, config={"allow_persistent_secrets": False})
+    @staticmethod
+    def _open() -> duckdb.DuckDBPyConnection:
+        db = duckdb.connect()
         # GLOBAL everywhere: a plain SET of some options (http_timeout...) only applies to this
         # connection, while every query runs on a cursor of its own
         db.execute(f"SET GLOBAL threads={int(settings.DUCKDB_THREADS)}")
@@ -96,8 +76,6 @@ class DuckDBEngine:
         # json) are built into DuckDB. INSTALL does nothing when the image already installed it
         db.execute("INSTALL httpfs")
         db.execute("LOAD httpfs")
-        db.execute("SET GLOBAL autoinstall_known_extensions=false")
-        db.execute("SET GLOBAL autoload_known_extensions=false")
         db.execute("SET GLOBAL max_expression_depth=500")
         # the dates of the files (`created_at`), whatever the time zone of the server
         db.execute("SET GLOBAL TimeZone='UTC'")
@@ -111,30 +89,9 @@ class DuckDBEngine:
         if settings.DUCKDB_METADATA_CACHE:
             db.execute("SET GLOBAL enable_http_metadata_cache=true")
             db.execute("SET GLOBAL parquet_metadata_cache=true")
-        self._sandbox(db)
         return db
 
-    @staticmethod
-    def _sandbox(db: duckdb.DuckDBPyConnection) -> None:
-        """Cut off every external access except the parquet prefix, then lock the config.
-
-        `allowed_directories` keeps the resource prefix readable while
-        `enable_external_access=false` denies everything else: local files, other hosts,
-        attaching databases and installing extensions. `lock_configuration` then prevents any
-        statement from loosening this. The CA bundles in `allowed_paths` are public certificates.
-
-        DuckDB does not resolve `..` in a URL before this check: user SQL can read any object of
-        the bucket, not only those under the prefix, which is what anyone can already download
-        from this public bucket.
-        """
-        prefix = settings.PARQUET_BASE_URL.rstrip("/")
-        db.execute(f"SET GLOBAL allowed_directories=[{quote_literal(prefix)}]")
-        db.execute(f"SET GLOBAL allowed_paths=[{', '.join(map(quote_literal, CA_BUNDLES))}]")
-        db.execute("SET GLOBAL enable_external_access=false")
-        db.execute("SET GLOBAL lock_configuration=true")
-
     async def start(self) -> None:
-        self._directory = tempfile.TemporaryDirectory(prefix="tabular-duckdb-")
         self._db = await asyncio.to_thread(self._open)
         self._executor = ThreadPoolExecutor(
             max_workers=settings.QUERY_WORKERS, thread_name_prefix="duckdb"
@@ -145,7 +102,6 @@ class DuckDBEngine:
     async def stop(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)
         self._db.close()
-        self._directory.cleanup()
 
     # --- queries -------------------------------------------------------------------
 

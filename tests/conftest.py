@@ -262,14 +262,12 @@ def closed_port() -> int:
 
 
 @pytest.fixture
-async def engine_on(monkeypatch):
-    """Start an engine of its own on a storage: its sandbox only opens the prefix set at start.
-
-    The settings patched before the call (QUERY_WORKERS, QUERY_TIMEOUT...) apply to it too."""
+async def start_engine():
+    """Start an engine of its own, with the settings patched before the call (QUERY_WORKERS,
+    QUERY_TIMEOUT...)."""
     engines: list[DuckDBEngine] = []
 
-    async def start(base_url: str) -> DuckDBEngine:
-        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+    async def start() -> DuckDBEngine:
         engine = DuckDBEngine()
         await engine.start()
         engines.append(engine)

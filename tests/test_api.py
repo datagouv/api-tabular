@@ -102,26 +102,20 @@ def sentry_events():
 
 
 @pytest.fixture
-def restart_on(client, monkeypatch):
-    """Restart the engine on another storage: its sandbox only opens the prefix set at start."""
-    original = settings.PARQUET_BASE_URL
+def read_from(monkeypatch):
+    """Read the parquet files from another storage, with an empty resource cache."""
 
-    def restart(base_url: str) -> None:
+    def switch(base_url: str) -> None:
         monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
         monkeypatch.setattr(resource_cache, "_entries", {})
-        client.portal.call(engine.stop)
-        client.portal.call(engine.start)
 
-    yield restart
-    settings.PARQUET_BASE_URL = original
-    client.portal.call(engine.stop)
-    client.portal.call(engine.start)
+    return switch
 
 
 def test_storage_error_is_reported_without_the_storage_location(
-    client, storage, restart_on, sentry_events
+    client, storage, read_from, sentry_events
 ):
-    restart_on(f"{storage}/500")
+    read_from(f"{storage}/500")
     response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert response.status_code == 502
     error = response.json()["errors"][0]
@@ -147,9 +141,9 @@ def test_health_does_not_report_to_sentry(client, closed_port, monkeypatch, sent
 
 
 @pytest.mark.parametrize("status", [403, 404])
-def test_missing_parquet_file(client, storage, restart_on, sentry_events, status):
+def test_missing_parquet_file(client, storage, read_from, sentry_events, status):
     """A bucket that does not grant listing answers 403 for a missing object."""
-    restart_on(f"{storage}/{status}")
+    read_from(f"{storage}/{status}")
     assert client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/").status_code == 404
     assert sentry_events == []
 
@@ -162,9 +156,9 @@ def test_parquet_file_deleted_while_its_resource_is_cached(client, parquet_dir):
     assert client.get(f"/api/resources/{DELETED_RESOURCE_ID}/data/").status_code == 404
 
 
-def test_storage_failing_while_the_parquet_file_is_read(client, storage, restart_on, sentry_events):
+def test_storage_failing_while_the_parquet_file_is_read(client, storage, read_from, sentry_events):
     """The HEAD succeeds, then the storage fails the reads of DuckDB: a 502, not the file's fault."""
-    restart_on(f"{storage}/200")
+    read_from(f"{storage}/200")
     response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert response.status_code == 502
     error = response.json()["errors"][0]

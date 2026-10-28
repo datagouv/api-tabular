@@ -1,12 +1,8 @@
-"""The SQL endpoint: what a query is refused, and what the DuckDB instance prevents it from doing."""
+"""The SQL endpoint: what a query is refused, and what it is allowed."""
 
-from pathlib import Path
-
-import duckdb
 import pytest
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import DuckDBEngine
 
 from .conftest import RESOURCE_ID, TOTAL_LINES
 
@@ -161,108 +157,3 @@ def test_too_long_query_is_rejected(client, monkeypatch):
     response = client.get(SQL_URL, params={"q": "SELECT count(*) AS n FROM resource"})
     assert response.status_code == 400
     assert "characters" in response.json()["errors"][0]["detail"]
-
-
-# --- the DuckDB instance -------------------------------------------------------------
-
-
-@pytest.fixture
-async def instance(parquet_dir, engine_on):
-    """The engine, whose single readable prefix is `parquet_dir`."""
-    return await engine_on(parquet_dir)
-
-
-async def execute(engine: DuckDBEngine, sql: str) -> list[tuple]:
-    """Run any statement on a connection of its own, like a request of the SQL endpoint."""
-    with engine.cursor() as cursor:
-        return await engine.run(cursor, lambda: cursor.execute(sql).fetchall())
-
-
-async def test_what_a_connection_creates_disappears_with_it(instance):
-    """Statements run on throwaway connections: none can tamper with the next query."""
-    await execute(instance, "CREATE TEMP MACRO lower(x) AS 'pwned'")
-    await execute(instance, "CREATE TEMP TABLE leftover AS SELECT 1")
-    assert await execute(instance, "SELECT lower('A')") == [("a",)]
-    with pytest.raises(duckdb.CatalogException):
-        await execute(instance, "SELECT * FROM leftover")
-
-
-@pytest.mark.parametrize(
-    "statement",
-    [
-        "CREATE TABLE shared AS SELECT 1",
-        "CREATE MACRO lower(x) AS 'pwned'",
-        "ATTACH ':memory:' AS writable",
-    ],
-)
-async def test_nothing_shared_can_be_changed(instance, statement):
-    with pytest.raises(duckdb.Error):
-        await execute(instance, statement)
-
-
-@pytest.mark.parametrize(
-    "statement",
-    [
-        "SET enable_external_access=true",
-        "SET allowed_directories=['/']",
-        "SET lock_configuration=false",
-    ],
-)
-async def test_the_sandbox_cannot_be_loosened(instance, statement):
-    with pytest.raises(duckdb.Error):
-        await execute(instance, statement)
-
-
-async def test_the_parquet_prefix_is_readable(instance, parquet_dir):
-    rows = await execute(
-        instance, f"SELECT count(*) FROM read_parquet('{parquet_dir}/{RESOURCE_ID}.parquet')"
-    )
-    assert rows == [(TOTAL_LINES,)]
-
-
-@pytest.mark.parametrize(
-    "outside",
-    [
-        "{tmp}/outside.parquet",
-        # the prefix is a directory, not the start of a path
-        "{prefix}_private/outside.parquet",
-        "{prefix}/../outside.parquet",
-    ],
-)
-async def test_local_files_outside_the_prefix_are_denied(instance, parquet_dir, tmp_path, outside):
-    path = Path(outside.format(tmp=tmp_path, prefix=parquet_dir))
-    path.parent.mkdir(exist_ok=True)
-    with duckdb.connect(":memory:") as conn:
-        conn.execute(f"COPY (SELECT 1 AS a) TO '{path}' (FORMAT parquet)")
-    with pytest.raises(duckdb.PermissionException):
-        await execute(instance, f"SELECT * FROM read_parquet('{path}')")
-
-
-@pytest.fixture
-async def remote_instance(closed_port, engine_on):
-    """The engine reading an HTTP prefix where nothing listens: a read let through fails to
-    connect, a read denied by the sandbox fails before."""
-    prefix = f"http://127.0.0.1:{closed_port}/parquet"
-    return await engine_on(prefix), prefix
-
-
-async def test_the_remote_prefix_is_let_through(remote_instance):
-    engine, prefix = remote_instance
-    with pytest.raises(duckdb.IOException):
-        await execute(engine, f"SELECT * FROM read_parquet('{prefix}/x.parquet')")
-
-
-@pytest.mark.parametrize(
-    "outside",
-    [
-        "{prefix}_private/x.parquet",
-        "{prefix}-other/x.parquet",
-        "{host}/other/x.parquet",
-        "http://other-host/parquet/x.parquet",
-    ],
-)
-async def test_other_remote_prefixes_and_hosts_are_denied(remote_instance, outside):
-    engine, prefix = remote_instance
-    url = outside.format(prefix=prefix, host=prefix.removesuffix("/parquet"))
-    with pytest.raises(duckdb.PermissionException):
-        await execute(engine, f"SELECT * FROM read_parquet('{url}')")
