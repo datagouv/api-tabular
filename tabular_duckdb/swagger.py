@@ -411,8 +411,8 @@ def build_swagger_file(resource_columns: Mapping[str, ColumnProfile], rid: str) 
                 "get": {
                     "description": (
                         "Runs a read-only SQL query on this resource, exposed as the `resource` "
-                        "table. Only a single SELECT statement is accepted, calling basic "
-                        "functions only (aggregates, arithmetic, LIKE, dates)."
+                        "table. Only a single SELECT statement is accepted, made of basic "
+                        "processing only (aggregates, arithmetic, LIKE, dates, CTEs)."
                     ),
                     "summary": "Run a read-only SQL query on the resource",
                     "operationId": "getResourceSql",

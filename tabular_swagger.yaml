@@ -169,9 +169,12 @@ paths:
 
         Only a single `SELECT` statement is accepted: any other statement (`CREATE`, `INSERT`,
         `COPY`, `ATTACH`, `SET`, `PRAGMA`, `INSTALL`...) and multiple statements are rejected.
-        It may only call basic functions: `count`, `min`, `max`, `sum`, `avg`, `median`,
-        arithmetic, `round`, `abs`, `floor`, `ceil`, `nullif`, `LIKE`/`ILIKE`, `lower`, `upper`,
-        `length`, `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`.
+        It may only read the `resource` table and its own CTEs, and use basic processing:
+        `count`, `min`, `max`, `sum`, `avg`, `median`, arithmetic, `round`, `abs`, `floor`,
+        `ceil`, `nullif`, `coalesce`, `CASE`, `CAST`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`,
+        `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, comparisons, `IN`,
+        `BETWEEN`, joins, subqueries, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`. A rejected query
+        gets a 400 quoting the part at fault.
         Results are capped and the query is interrupted after a timeout.
       summary: Run a read-only SQL query on the resource
       operationId: getResourceSql
