@@ -13,6 +13,7 @@ NOT_A_SELECT = [
     "CREATE OR REPLACE VIEW resource AS SELECT 1",
     "CREATE TEMP MACRO lower(x) AS 'pwned'",
     "INSERT INTO resource VALUES (1)",
+    "WITH x AS (SELECT 1) INSERT INTO resource SELECT * FROM x",
     "DELETE FROM resource",
     "UPDATE resource SET x = 1",
     "DROP VIEW resource",
