@@ -5,6 +5,7 @@ from typing import NotRequired, TypedDict
 
 import yaml
 
+from tabular_duckdb.config import settings
 from tabular_duckdb.resources import ColumnProfile
 
 TYPE_POSSIBILITIES = {
@@ -412,7 +413,10 @@ def build_swagger_file(resource_columns: Mapping[str, ColumnProfile], rid: str) 
                     "description": (
                         "Runs a read-only SQL query on this resource, exposed as the `resource` "
                         "table. Only a single SELECT statement is accepted, made of basic "
-                        "processing only (aggregates, arithmetic, LIKE, dates, CTEs)."
+                        "processing only (aggregates, arithmetic, LIKE, dates, CTEs). Results "
+                        f"are capped at {settings.SQL_MAX_ROWS:,} rows (`meta.truncated` tells "
+                        "when rows were cut) and the query is interrupted after "
+                        f"{settings.SQL_TIMEOUT} seconds."
                     ),
                     "summary": "Run a read-only SQL query on the resource",
                     "operationId": "getResourceSql",

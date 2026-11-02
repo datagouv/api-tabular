@@ -175,7 +175,8 @@ paths:
         `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, `strftime`, comparisons, `IN`,
         `BETWEEN`, joins, subqueries, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`. A rejected query
         gets a 400 quoting the part at fault.
-        Results are capped and the query is interrupted after a timeout.
+        Results are capped at 10,000 rows (`meta.truncated` tells when rows were cut, `meta.row_limit`
+        gives the cap) and the query is interrupted after 30 seconds.
       summary: Run a read-only SQL query on the resource
       operationId: getResourceSql
       responses:
