@@ -4,9 +4,9 @@ The query is parsed by sqlglot, and only runs when every node of its tree is of 
 and it reads no other table than the resource and its own CTEs. What runs is the SQL regenerated
 from that tree, never the client's text: a construct that DuckDB would read differently from
 sqlglot cannot slip through. The allowed kinds serve basic processing of the data (aggregates for
-a chart, rounding, dates) and nothing that fabricates values (`repeat`, `string_agg`, `list`,
-`||`) nor rows (`range`, recursive CTEs): an answer only holds values of the file, so that its
-size is bounded by the data and SQL_MAX_ROWS. The query is interrupted after SQL_TIMEOUT seconds.
+a chart, rounding, dates), without `repeat`, `string_agg`, `list`, `||`, `range` nor recursive
+CTEs, which would let a short query build a value or a number of rows of any size. The answer is
+capped at SQL_MAX_ROWS rows, and the query interrupted after SQL_TIMEOUT seconds.
 """
 
 import asyncio

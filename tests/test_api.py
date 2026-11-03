@@ -800,7 +800,7 @@ def test_sql_missing_query(client):
     ],
 )
 def test_sql_refuses_the_functions_fabricating_data(client, query, function):
-    """An answer may only hold values of the file: its size is then bounded by the data."""
+    """These would let a short query build a value or a number of rows of any size."""
     response = client.get(f"/api/resources/{RESOURCE_ID}/sql/", params={"q": query})
     assert response.status_code == 400
     assert response.json()["errors"][0]["detail"] == f"Not allowed: {function}"
