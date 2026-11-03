@@ -118,6 +118,15 @@ def invalid_query(detail: str) -> QueryException:
     return QueryException(400, "Invalid SQL query", detail)
 
 
+def snippet(node: exp.Expr) -> str:
+    """A refused node as SQL, which tells a client (or an LLM) what to rewrite."""
+    try:
+        return node.sql(dialect="duckdb", comments=False)[:100]
+    except ValueError:
+        # sqlglot parses some syntax it cannot write back, such as the JSON path `'$..'`
+        return type(node).__name__
+
+
 def is_forbidden(node: exp.Expr) -> bool:
     """Whether the node is refused, its children then left unvisited."""
     if isinstance(node, exp.Anonymous):
@@ -175,10 +184,8 @@ def compile_query(user_sql: str, limit: int) -> str:
     except RecursionError as exc:
         raise invalid_query("The query is nested too deeply") from exc
     if forbidden:
-        # the outermost refused nodes, as SQL, which tells a client (or an LLM) what to rewrite
-        snippets = dict.fromkeys(
-            node.sql(dialect="duckdb", comments=False)[:100] for node in forbidden
-        )
+        # the outermost refused nodes
+        snippets = dict.fromkeys(snippet(node) for node in forbidden)
         raise invalid_query(f"Not allowed: {', '.join(snippets)}")
     check_tables(tree)
     wrapped = sqlglot.select("*").from_(tree.subquery()).limit(limit)

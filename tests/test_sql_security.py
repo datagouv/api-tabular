@@ -55,6 +55,8 @@ NOT_ALLOWED = [
     "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT n FROM r",
     "SELECT x -> x + 1 FROM resource",
     "SELECT * FROM resource USING SAMPLE 10%",
+    # a JSON path that sqlglot cannot write back as SQL, to quote it in the error
+    "SELECT json_extract(id, '$..') FROM resource",
 ]
 
 # an unqualified name could resolve to a catalog view of DuckDB, a path to a file
