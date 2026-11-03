@@ -1,6 +1,8 @@
 """The SQL endpoint: what a query is refused, and what it is allowed."""
 
 import pytest
+import sqlglot
+from sqlglot.errors import ParseError
 
 from tabular_duckdb.config import settings
 
@@ -142,6 +144,20 @@ def test_a_parse_error_tells_where(client):
     response = client.get(SQL_URL, params={"q": "SELECT FROM WHERE"})
     assert response.status_code == 400
     assert "(line 1, column 17)" in response.json()["errors"][0]["detail"]
+
+
+def test_a_parse_error_without_location(client, monkeypatch):
+    """sqlglot does not require a ParseError to say where it failed."""
+
+    def parse(*args, **kwargs):
+        raise ParseError("No expression was parsed")
+
+    monkeypatch.setattr(sqlglot, "parse", parse)
+    response = client.get(SQL_URL, params={"q": "SELECT 1"})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["detail"] == (
+        "Could not parse the query: No expression was parsed"
+    )
 
 
 @pytest.mark.parametrize("statement", ALLOWED_STATEMENTS)

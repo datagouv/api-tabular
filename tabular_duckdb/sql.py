@@ -129,14 +129,13 @@ def parse(user_sql: str) -> exp.Query:
     try:
         # a trailing `;` gives an empty statement
         statements = [stmt for stmt in sqlglot.parse(user_sql, dialect="duckdb") if stmt]
-    except ParseError as exc:
-        error = exc.errors[0]
-        raise invalid_query(
-            f"Could not parse the query: {error['description']} "
-            f"(line {error['line']}, column {error['col']})"
-        ) from exc
     except (SqlglotError, RecursionError) as exc:
-        raise invalid_query(f"Could not parse the query: {exc}") from exc
+        detail = str(exc)
+        # where the parser failed, which a ParseError usually carries but is not required to
+        if isinstance(exc, ParseError) and exc.errors:
+            error = exc.errors[0]
+            detail = f"{error['description']} (line {error['line']}, column {error['col']})"
+        raise invalid_query(f"Could not parse the query: {detail}") from exc
     # a UNION is a query too, refused by ALLOWED_NODES with the part at fault
     if len(statements) != 1 or not isinstance(statements[0], exp.Query):
         raise invalid_query("Only a single SELECT query is allowed")
