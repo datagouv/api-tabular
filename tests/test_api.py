@@ -112,10 +112,12 @@ def read_from(monkeypatch):
     return switch
 
 
+@pytest.mark.parametrize("status", [500, 429, 401])
 def test_storage_error_is_reported_without_the_storage_location(
-    client, storage, read_from, sentry_events
+    client, storage, read_from, sentry_events, status
 ):
-    read_from(f"{storage}/500")
+    """A throttled or refused read is no fault of the file either."""
+    read_from(f"{storage}/{status}")
     response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
     assert response.status_code == 502
     error = response.json()["errors"][0]

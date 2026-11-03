@@ -32,7 +32,6 @@ from tabular_duckdb.query import ParsedQuery, Statement, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
-    is_missing_file,
     is_storage_failure,
     profile_columns,
     read_error,
@@ -94,7 +93,7 @@ def parse_query(
 
 
 def database_error(exc: duckdb.Error, resource_id: str) -> Exception:
-    if is_missing_file(exc) or is_storage_failure(exc):
+    if is_storage_failure(exc):
         return read_error(exc, resource_id)
     return handle_exception(400, "Database error", safe_message(str(exc)), resource_id)
 

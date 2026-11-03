@@ -55,10 +55,11 @@ class Resource:
 
 
 def is_storage_failure(exc: duckdb.Error) -> bool:
-    """The storage failed to serve a file, as opposed to a missing file or a client error."""
-    if isinstance(exc, duckdb.HTTPException):
-        # the HTTP status of the answer, set on the instance by DuckDB
-        return getattr(exc, "status_code", 500) >= 500
+    """The storage did not serve the file, as opposed to a query or a file DuckDB cannot use.
+
+    Any failed HTTP answer (an HTTPException is an IOException) comes from the storage: a 429 or
+    a 401 is no fault of the file. A missing file is one too, which `is_missing_file` tells apart.
+    """
     return isinstance(exc, duckdb.IOException)
 
 
