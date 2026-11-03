@@ -61,13 +61,14 @@ jobs:
             curl -LsSf https://astral.sh/uv/install.sh | sh
             export PATH="$HOME/.local/bin:$PATH"
             uv python install << pipeline.parameters.python-version >>
+            uv sync --frozen
       - run:
-          name: Compute RELEASE_VERSION from the git tags, and build wheel
+          name: Compute RELEASE_VERSION via setuptools_scm, and build wheel
           command: |
             export PATH="$HOME/.local/bin:$PATH"
-            git fetch --tags --force origin
-            # hatch-vcs, configured in pyproject.toml, derives it from the last tag
-            RELEASE_VERSION=$(uvx --with hatch-vcs hatch version)
+            uv pip install --system setuptools-scm
+            # derive from setuptools_scm or base version + build number
+            RELEASE_VERSION=$(python -m setuptools_scm)
             echo "Building a wheel release with version $RELEASE_VERSION"
             echo "Build number: $CIRCLE_BUILD_NUM"
             echo "Commit hash: ${CIRCLE_SHA1:0:7}"
