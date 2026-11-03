@@ -760,6 +760,18 @@ def test_sql_row_limit(client, monkeypatch):
     assert body["meta"]["rows"] == body["meta"]["row_limit"] == 10
 
 
+def test_sql_keeps_the_order_of_the_query(client):
+    """The query runs inside the subquery that caps its rows, which SQL does not require to keep
+    the order of its ORDER BY: pinned on a file of several row groups, read in parallel."""
+    response = client.get(
+        f"/api/resources/{RARE_NULL_RESOURCE_ID}/sql/",
+        params={"q": "SELECT value FROM resource WHERE value IS NOT NULL ORDER BY value DESC"},
+    )
+    assert response.status_code == 200
+    values = [value for value in range(RARE_NULL_TOTAL_LINES - 1, 0, -1) if value != 25000]
+    assert [row["value"] for row in response.json()["data"]] == values[: settings.SQL_MAX_ROWS]
+
+
 def test_sql_cte(client):
     response = client.get(
         f"/api/resources/{RESOURCE_ID}/sql/",
