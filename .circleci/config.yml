@@ -13,7 +13,7 @@ parameters:
     default: "datagouv_api-tabular"
   docker-image-tabular:
     type: string
-    default: "tabular-api"
+    default: "tabular-parquet"
 
 jobs:
   lint:
