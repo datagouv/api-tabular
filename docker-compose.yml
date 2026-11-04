@@ -40,7 +40,7 @@ services:
     volumes:
       - ./db/initdb/:/docker-entrypoint-initdb.d/
       - ./db/tables_index.csv:/tmp/tables_index.csv
-      - ./db/exceptions.csv:/tmp/exceptions.csv
+      - ./db/indexes.csv:/tmp/indexes.csv
     environment:
       - POSTGRES_DB=csvapi
       - POSTGRES_USER=csvapi

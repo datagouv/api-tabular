@@ -15,7 +15,7 @@ from api_tabular.core.url import build_link_with_page, url_for
 from api_tabular.core.utils import build_offset
 from api_tabular.core.version import get_app_version
 from api_tabular.tabular.utils import (
-    get_potential_indexes,
+    get_indexes,
     get_resource,
     get_resource_data,
     stream_resource_data,
@@ -62,8 +62,7 @@ async def resource_profile(request):
     resource: dict = await get_resource(
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
-    resource["indexes"] = list(indexes) if isinstance(indexes, set) else None
+    resource["indexes"] = await get_indexes(request.app["csession"], resource_id)
     return web.json_response(resource)
 
 
