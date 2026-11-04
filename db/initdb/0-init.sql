@@ -16,14 +16,15 @@ ALTER COLUMN created_at TYPE TIMESTAMPTZ;
 
 COPY tables_index(id, parsing_table, csv_detective, resource_id, url, created_at, deleted_at, dataset_id) FROM '/tmp/tables_index.csv' DELIMITER ',' CSV HEADER;
 
-CREATE TABLE IF NOT EXISTS "csvapi".resources_exceptions (
-    id serial PRIMARY KEY,
-    resource_id UUID,
-    table_indexes JSONB,
-    comment VARCHAR
+-- same as hydra's migrations/csv/20261104_add_resources_indexes.sql
+CREATE TABLE IF NOT EXISTS "csvapi".resources_indexes (
+    resource_id UUID NOT NULL,
+    column_name VARCHAR NOT NULL,
+    index_type VARCHAR NOT NULL,
+    PRIMARY KEY (resource_id, column_name)
 );
 
-COPY resources_exceptions(id, resource_id, table_indexes, comment) FROM '/tmp/exceptions.csv' DELIMITER ',' CSV HEADER;
+COPY resources_indexes(resource_id, column_name, index_type) FROM '/tmp/indexes.csv' DELIMITER ',' CSV HEADER;
 
 
 --

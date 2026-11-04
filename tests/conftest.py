@@ -77,8 +77,3 @@ def csv_to_dict(file_name: str) -> dict:
 @pytest.fixture
 def tables_index_rows() -> Generator[dict, Any, Any]:
     yield csv_to_dict("tables_index")
-
-
-@pytest.fixture
-def exceptions_rows() -> Generator[dict, Any, Any]:
-    yield csv_to_dict("exceptions")
