@@ -73,11 +73,7 @@ async def resource_swagger(request):
     resource: dict = await get_resource(
         request.app["csession"], resource_id, ["profile:csv_detective"]
     )
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
-    columns: dict[str, str] = resource["profile"]["columns"]
-    if indexes:
-        columns = {col: params for col, params in columns.items() if col in indexes}
-    swagger_string = build_swagger_file(columns, resource_id)
+    swagger_string = build_swagger_file(resource["profile"]["columns"], resource_id)
     return web.Response(body=swagger_string)
 
 
@@ -102,7 +98,7 @@ async def resource_data(request):
 
     offset = build_offset(page, page_size)
 
-    sql_query = await try_build_query(request, query_string, resource_id, page_size, offset)
+    sql_query = try_build_query(query_string, resource_id, page_size, offset)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
 

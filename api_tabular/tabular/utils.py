@@ -65,16 +65,14 @@ async def get_potential_indexes(session: ClientSession, resource_id: str) -> set
         return set(indexes.keys()) if indexes else None
 
 
-async def try_build_query(
-    request: Request,
+def try_build_query(
     query_string: list[str],
     resource_id: str,
     page_size: int | None = None,
     offset: int = 0,
-):
-    indexes: set | None = await get_potential_indexes(request.app["csession"], resource_id)
+) -> str:
     try:
-        sql_query = build_sql_query_string(query_string, resource_id, indexes, page_size, offset)
+        sql_query = build_sql_query_string(query_string, resource_id, page_size, offset)
     except ValueError as e:
         raise QueryException(400, None, "Invalid query string", f"Malformed query: {e}")
     except PermissionError as e:
@@ -86,7 +84,7 @@ async def stream_resource_data(request: Request, format: str):
     resource_id = request.match_info["rid"]
     query_string = request.query_string.split("&") if request.query_string else []
 
-    sql_query = await try_build_query(request, query_string, resource_id)
+    sql_query = try_build_query(query_string, resource_id)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
 
     mime = "application/json" if format == "json" else "text/csv"
