@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 (2026-11-05)
+
+- chore(CI): use recommended UV_PUBLISH_TOKEN ([#117](https://github.com/datagouv/api-tabular/pull/117))
+- ci: push Docker images to the new container registry ([#123](https://github.com/datagouv/api-tabular/pull/123))
+- fix(deps): bump urllib3 to 2.8.0 ([#109](https://github.com/datagouv/api-tabular/pull/109))
+- test: mock health check without aioresponses ([#124](https://github.com/datagouv/api-tabular/pull/124))
+
+
 ## 0.4.1 (2026-06-18)
 
 - fix: fix aiohttp version to be compatible with python 3.14
