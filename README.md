@@ -451,6 +451,8 @@ i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, group
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=30
 ```
 
+> **Note**: `links.next` is `null` when the current page is the last one, including for aggregation queries (which have no `meta.total`).
+
 #### Column Selection
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?columns=id,score,birth

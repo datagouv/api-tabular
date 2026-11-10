@@ -305,7 +305,7 @@ def swagger_component(resource_columns: dict) -> dict:
                                 "type": "string",
                             },
                             "next": {
-                                "description": "Pagination link to the next page of the resource data",
+                                "description": "Pagination link to the next page of the resource data, null on the last page",
                                 "type": "string",
                             },
                             "prev": {
