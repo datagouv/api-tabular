@@ -56,7 +56,7 @@ def build_sql_query_string(
                     agg_query += f'"{column[1:-1]}__{operator}":{column}.{operator}(),'
         # we pop the trailing comma (it's always there, by construction)
         sql_query.append(agg_query[:-1])
-    if page_size:
+    if page_size is not None:
         sql_query.append(f"limit={page_size}")
     if offset >= 1:
         sql_query.append(f"offset={offset}")

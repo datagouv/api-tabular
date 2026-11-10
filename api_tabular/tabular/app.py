@@ -12,7 +12,7 @@ from api_tabular.core.health import check_health
 from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.swagger import build_swagger_file
 from api_tabular.core.url import build_link_with_page, url_for
-from api_tabular.core.utils import build_offset
+from api_tabular.core.utils import parse_pagination
 from api_tabular.core.version import get_app_version
 from api_tabular.tabular.utils import (
     get_potential_indexes,
@@ -97,10 +97,7 @@ def build_next_page(
 async def resource_data(request):
     resource_id = request.match_info["rid"]
     query_string = request.query_string.split("&") if request.query_string else []
-    page = int(request.query.get("page", "1"))
-    page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
-
-    offset = build_offset(page, page_size)
+    page, page_size, offset = parse_pagination(request.query)
 
     sql_query = await try_build_query(request, query_string, resource_id, page_size, offset)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])

@@ -264,6 +264,29 @@ async def test_api_resource_data_with_page_size_error(client):
     }
 
 
+@pytest.mark.parametrize(
+    "args,detail",
+    [
+        ("page_size=0", "Page size must be at least 1"),
+        ("page_size=-1", "Page size must be at least 1"),
+        ("page_size=abc", "Page size must be an integer"),
+        ("page_size=1.5", "Page size must be an integer"),
+        ("page_size=", "Page size must be an integer"),
+        ("page_size=1_0", "Page size must be an integer"),
+        ("page=abc", "Page must be an integer"),
+        ("page=", "Page must be an integer"),
+        ("page=0", "Page must be at least 1"),
+        ("page=-1", "Page must be at least 1"),
+    ],
+)
+async def test_api_resource_data_with_invalid_pagination_returns_400(client, args, detail):
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
+    assert res.status == 400
+    assert await res.json() == {
+        "errors": [{"code": None, "detail": detail, "title": "Invalid query string"}]
+    }
+
+
 async def test_api_resource_data_not_found(client):
     res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
     assert res.status == 404
