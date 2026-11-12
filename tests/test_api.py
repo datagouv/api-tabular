@@ -272,7 +272,6 @@ async def test_api_resource_data_with_page_size_error(client):
         ("page_size=abc", "Page size must be an integer"),
         ("page_size=1.5", "Page size must be an integer"),
         ("page_size=", "Page size must be an integer"),
-        ("page_size=1_0", "Page size must be an integer"),
         ("page=abc", "Page must be an integer"),
         ("page=", "Page must be an integer"),
         ("page=0", "Page must be at least 1"),

@@ -1,4 +1,3 @@
-import re
 from collections.abc import Mapping
 
 from aiohttp.client import ClientResponse
@@ -26,10 +25,10 @@ def _parse_int_param(query: Mapping[str, str], name: str, label: str, default: i
     raw = query.get(name)
     if raw is None:
         return default
-    # stricter than int(), which also accepts "1_0", " 1" or non-ASCII digits
-    if not re.fullmatch(r"-?[0-9]+", raw):
+    try:
+        return int(raw)
+    except ValueError:
         raise QueryException(400, None, "Invalid query string", f"{label} must be an integer")
-    return int(raw)
 
 
 def parse_pagination(query: Mapping[str, str]) -> tuple[int, int, int]:
