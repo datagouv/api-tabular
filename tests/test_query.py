@@ -200,6 +200,49 @@ def test_query_with_or_group(query_str, expected, should_fail):
         assert result == expected
 
 
+@pytest.mark.parametrize(
+    "operator, postgrest_operator",
+    [
+        ("exact", "eq"),
+        ("differs", "isdistinct"),
+        ("less", "lte"),
+        ("greater", "gte"),
+        ("strictly_less", "lt"),
+        ("strictly_greater", "gt"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    ['"12.4"', "12"],
+    ids=["quoted_value", "unquoted_value"],
+)
+def test_query_or_group_with_quoted_column(operator, postgrest_operator, value):
+    query_str = [f'or=("first col"__{operator}.{value},second_col__exact.BIDULE)']
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == (
+        f'or=("first col".{postgrest_operator}.{value},"second_col".eq.BIDULE)'
+        "&limit=50&order=__id.asc"
+    )
+
+
+def test_query_or_group_with_quoted_column_isnull():
+    query_str = ['or=("first col"__isnull,second_col__exact.BIDULE)']
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == 'or=("first col".is.null,"second_col".eq.BIDULE)&limit=50&order=__id.asc'
+
+
+@pytest.mark.parametrize(
+    "operator, postgrest_operator",
+    [("strictly_less", "lt"), ("strictly_greater", "gt")],
+)
+def test_query_or_group_with_unquoted_column_strict_operator(operator, postgrest_operator):
+    query_str = [f"or=(first_col__{operator}.12,second_col__exact.BIDULE)"]
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == (
+        f'or=("first_col".{postgrest_operator}.12,"second_col".eq.BIDULE)&limit=50&order=__id.asc'
+    )
+
+
 def test_query_build_multiple_with_unknown():
     query_str = ["select=numnum"]
     with pytest.raises(ValueError):

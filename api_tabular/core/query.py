@@ -165,7 +165,7 @@ def split_top_level(s: str) -> list[str]:
 def find_arg_val(param: str) -> tuple[str, str]:
     if param.count('"') not in {0, 2, 4}:
         raise ValueError(f"argument '{param}' could not be parsed")
-    column_operator_pattern = r'^"[^"]*"__[a-z]+'
+    column_operator_pattern = r'^"[^"]*"__[a-z_]+'
     value_pattern = r'\."[^"]*"$'
     if param.count('"') == 0:
         # no quote, we expect col__op.val

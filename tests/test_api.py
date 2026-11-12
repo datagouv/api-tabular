@@ -234,6 +234,17 @@ async def test_api_resource_data_with_data_args(client, filters):
         assert conforms(row, filters, group="and")
 
 
+async def test_api_resource_data_or_group_with_quoted_columns_and_strict_operators(client):
+    params = 'or=("score"__strictly_greater."0.9","score"__strictly_less."0.1")'
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
+    assert res.status == 200
+    body = await res.json()
+    # only checking first page
+    assert body["data"]
+    for row in body["data"]:
+        assert row["score"] > 0.9 or row["score"] < 0.1
+
+
 async def test_api_resource_data_with_args_error(client):
     args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
     res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
