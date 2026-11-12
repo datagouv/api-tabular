@@ -163,35 +163,20 @@ def split_top_level(s: str) -> list[str]:
 
 
 def find_arg_val(param: str) -> tuple[str, str]:
-    if param.count('"') not in {0, 2, 4}:
-        raise ValueError(f"argument '{param}' could not be parsed")
-    column_operator_pattern = r'^"[^"]*"__[a-z_]+'
-    value_pattern = r'\."[^"]*"$'
-    if param.count('"') == 0:
-        # no quote, we expect col__op.val
-        _split = param.split(".")
-        if len(_split) != 2:
-            raise ValueError(f"argument '{param}' could not be parsed")
-        return tuple[str, str](_split)  # ty: ignore[invalid-argument-type]
-    elif param.count('"') == 4:
-        # 4 quotes, we expect "col.umn"__op."val.ue"
-        col_op = re.findall(column_operator_pattern, param)
-        val = re.findall(value_pattern, param)
-        if len(col_op) != 1 or len(val) != 1:
-            raise ValueError(f"argument '{param}' could not be parsed")
+    # the operator is not checked here, add_filter validates it like for unquoted columns
+    quoted_column = re.match(r'^"([^"]*)"__', param)
+    if quoted_column:
         # we drop the double quotes around the column as they will be added back in get_column_and_operator
-        # the dot is included in the value result, we pop it in the result
-        return col_op[0].replace('"', ""), val[0][1:]
+        column_prefix = f"{quoted_column.group(1)}__"
+        operator_value = param[quoted_column.end() :]
     else:
-        # we have any of "col.umn"__op.val, col__op."val.ue"
-        col_op = re.findall(column_operator_pattern, param)
-        val = re.findall(value_pattern, param)
-        if not col_op:
-            # case col__op."val.ue"
-            return param.split(".")[0], val[0][1:]
-        else:
-            # case "col.umn"__op.val
-            return col_op[0].replace('"', ""), param.split(".")[-1]
+        column_prefix, operator_value = "", param
+    operator, dot, value = operator_value.partition(".")
+    # a quoted value is kept as is, an unquoted one can't contain a dot
+    value_is_valid = re.fullmatch(r'"[^"]*"', value) or not re.search(r'[".]', value)
+    if not dot or '"' in operator or not value_is_valid:
+        raise ValueError(f"argument '{param}' could not be parsed")
+    return column_prefix + operator, value
 
 
 def parse_operator(query: str, operator: str, top_level: bool = False):
