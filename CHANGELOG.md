@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3 (2026-11-12)
+
+- fix: validate pagination params and reject page_size=0 ([#128](https://github.com/datagouv/api-tabular/pull/128))
+- fix(cors): set CORS headers on every response, errors and streams included ([#132](https://github.com/datagouv/api-tabular/pull/132))
+- fix(deps): bump aiohttp, pytest and transitive deps to fix vulnerabilities ([#130](https://github.com/datagouv/api-tabular/pull/130))
+- fix(docker): leave the dev dependency group out of the image ([#131](https://github.com/datagouv/api-tabular/pull/131))
+- fix(query): accept underscored operators on quoted columns in or()/and() ([#133](https://github.com/datagouv/api-tabular/pull/133))
+
+
 ## 0.4.2 (2026-11-05)
 
 - chore(CI): use recommended UV_PUBLISH_TOKEN ([#117](https://github.com/datagouv/api-tabular/pull/117))
