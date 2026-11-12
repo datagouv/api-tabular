@@ -97,7 +97,8 @@ async def resource_data(request):
     query_string = request.query_string.split("&") if request.query_string else []
     page, page_size, offset = parse_pagination(request.query)
 
-    # one extra row tells whether a next page exists when the total is unknown (aggregation)
+    # one extra row tells whether a next page exists when the total is unknown (aggregation);
+    # a PostgREST db-max-rows <= PAGE_SIZE_MAX would silently drop it, and links.next with it
     sql_query = await try_build_query(request, query_string, resource_id, page_size + 1, offset)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
