@@ -1,7 +1,9 @@
 import pytest
 import pytest_asyncio
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from api_tabular.core import cors as cors_module
 from api_tabular.metrics.app import app_factory as metrics_app_factory
 
 from .conftest import RESOURCE_ID, UNKNOWN_RESOURCE_ID
@@ -9,6 +11,8 @@ from .conftest import RESOURCE_ID, UNKNOWN_RESOURCE_ID
 pytestmark = pytest.mark.asyncio
 
 ORIGIN = {"Origin": "http://front.example"}
+PREFLIGHT_GET = {**ORIGIN, "Access-Control-Request-Method": "GET"}
+PREFLIGHT_POST = {**ORIGIN, "Access-Control-Request-Method": "POST"}
 EXPECTED_CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -108,4 +112,54 @@ async def test_cors_headers_on_unhandled_500(client, mocker):
 async def test_cors_headers_on_metrics_400(metrics_client):
     res = await metrics_client.get("/api/site/data/?limit=1", headers=ORIGIN)
     assert res.status == 400
+    assert_cors_headers_set_once(res)
+
+
+async def test_setup_cors_registers_preflight_middleware_and_headers_signal():
+    app = web.Application()
+    cors_module.setup_cors(app)
+    assert list(app.middlewares) == [cors_module._preflight_middleware]
+    assert list(app.on_response_prepare) == [cors_module.add_cors_headers]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [f"/api/resources/{RESOURCE_ID}/data/", f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/"],
+)
+async def test_preflight_get_on_existing_route_returns_204(client, path):
+    res = await client.options(path, headers=PREFLIGHT_GET)
+    assert res.status == 204
+    assert_cors_headers_set_once(res)
+
+
+async def test_preflight_on_unknown_path_returns_aiohttp_404(client):
+    res = await client.options("/api/does-not-exist/", headers=PREFLIGHT_GET)
+    assert res.status == 404
+    assert_cors_headers_set_once(res)
+    assert await res.text() == "404: Not Found"
+
+
+async def test_preflight_for_method_not_accepted_by_route_returns_405(client):
+    res = await client.options(f"/api/resources/{RESOURCE_ID}/data/", headers=PREFLIGHT_POST)
+    assert res.status == 405
+    assert_cors_headers_set_once(res)
+    assert set(res.headers["Allow"].split(",")) == {"GET", "HEAD"}
+
+
+async def test_metrics_preflight_get_on_existing_route_returns_204(metrics_client):
+    res = await metrics_client.options("/api/site/data/", headers=PREFLIGHT_GET)
+    assert res.status == 204
+    assert_cors_headers_set_once(res)
+
+
+async def test_metrics_preflight_on_unknown_path_returns_aiohttp_404(metrics_client):
+    res = await metrics_client.options("/api/does-not-exist/", headers=PREFLIGHT_GET)
+    assert res.status == 404
+    assert_cors_headers_set_once(res)
+    assert await res.text() == "404: Not Found"
+
+
+async def test_metrics_preflight_for_method_not_accepted_by_route_returns_405(metrics_client):
+    res = await metrics_client.options("/api/site/data/", headers=PREFLIGHT_POST)
+    assert res.status == 405
     assert_cors_headers_set_once(res)

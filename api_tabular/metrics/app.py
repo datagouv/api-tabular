@@ -7,7 +7,7 @@ from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
-from api_tabular.core.cors import add_cors_headers, cors_middleware
+from api_tabular.core.cors import setup_cors
 from api_tabular.core.data import stream_data
 from api_tabular.core.error import QueryException, handle_exception
 from api_tabular.core.health import check_health
@@ -111,9 +111,9 @@ async def app_factory():
     async def on_cleanup(app):
         await app["csession"].close()
 
-    app = web.Application(middlewares=[cors_middleware])
+    app = web.Application()
+    setup_cors(app)
     app.add_routes(routes)
-    app.on_response_prepare.append(add_cors_headers)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
 
