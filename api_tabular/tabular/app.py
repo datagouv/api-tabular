@@ -7,7 +7,7 @@ from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
-from api_tabular.core.cors import cors_middleware
+from api_tabular.core.cors import add_cors_headers, cors_middleware
 from api_tabular.core.health import check_health
 from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.swagger import build_swagger_file
@@ -178,6 +178,7 @@ async def app_factory():
 
     app = web.Application(middlewares=[cors_middleware])
     app.add_routes(routes)
+    app.on_response_prepare.append(add_cors_headers)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
 

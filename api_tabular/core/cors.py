@@ -1,24 +1,25 @@
 from aiohttp import web
 
+CORS_HEADERS = {
+    # Using "*" ensures the Nginx cache remains consistent for all origins
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Expose-Headers": "*",
+}
+
 
 @web.middleware
 async def cors_middleware(request, handler):
     """
-    Middleware to handle CORS and the OPTIONS preflight.
+    Middleware to handle the CORS OPTIONS preflight.
     """
     if request.method == "OPTIONS":
         # Handle cases of preflight OPTIONS requests (was managed by aiohttp_cors before)
-        response = web.Response(status=204)
-    else:
-        response = await handler(request)
+        return web.Response(status=204)
+    return await handler(request)
 
-    # Add CORS headers to the response
-    # Using "*" ensures the Nginx cache remains consistent for all origins
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = (
-        "Content-Type, Authorization, X-Requested-With"
-    )
-    response.headers["Access-Control-Expose-Headers"] = "*"
 
-    return response
+async def add_cors_headers(request: web.Request, response: web.StreamResponse) -> None:
+    # on_response_prepare also fires for raised HTTP errors, unhandled 500s and streamed responses
+    response.headers.update(CORS_HEADERS)
