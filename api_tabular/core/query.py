@@ -7,7 +7,6 @@ from api_tabular.core.utils import is_aggregation_allowed
 def build_sql_query_string(
     request_arg: list,
     resource_id: str | None = None,
-    indexes: set | None = None,
     page_size: int | None = None,
     offset: int = 0,
 ) -> str:
@@ -33,7 +32,7 @@ def build_sql_query_string(
                 _filter, _ = add_filter(_split[0], "")
                 sql_query.append(_filter)
             else:
-                column, operator = add_aggregator(_split[0], indexes)
+                column, operator = add_aggregator(_split[0])
                 if column:
                     aggregators[operator].append(column)
         else:
@@ -129,11 +128,10 @@ def add_filter(
     raise ValueError(f"argument '{argument}={value}' could not be parsed")
 
 
-def add_aggregator(argument: str, indexes: set | None) -> tuple[str, str]:
+def add_aggregator(argument: str) -> tuple[str, str]:
     operator = None
     if "__" in argument:
         column, operator = get_column_and_operator(argument)
-        raise_if_not_index(column, indexes)
     if operator in ["avg", "count", "max", "min", "sum", "groupby"]:
         return column, operator
     raise ValueError(f"argument '{argument}' could not be parsed")
@@ -222,11 +220,3 @@ def parse_operator(query: str, operator: str, top_level: bool = False):
                 argument, value = find_arg_val(param)
                 postgrest_params.append(add_filter(argument, value, in_operator=True)[0])
     return f"{operator}{'=' if top_level else ''}({','.join(postgrest_params)})"
-
-
-def raise_if_not_index(column_name: str, indexes: set | None) -> None:
-    if indexes is None:
-        return
-    # we pop the heading and trailing " that were added upstream
-    if column_name[1:-1] not in indexes:
-        raise PermissionError(f"{column_name[1:-1]} is not among the allowed columns: {indexes}")

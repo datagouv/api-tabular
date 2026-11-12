@@ -288,67 +288,17 @@ async def test_api_with_unsupported_args(client):
 @pytest.mark.parametrize(
     "params",
     [
+        (RESOURCE_ID, True),
         (INDEXED_RESOURCE_ID, True),
+        (AGG_ALLOWED_RESOURCE_ID, False),
         (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
     ],
 )
-async def test_api_exception_resource_indexes(client, tables_index_rows, exceptions_rows, params):
+async def test_api_aggregation_does_not_depend_on_indexes(client, tables_index_rows, params):
+    """Only ALLOW_AGGREGATION decides whether a resource can be aggregated, and then on all of its
+    columns: an index on the grouped column does not make a full-table aggregation any cheaper"""
     _resource_id, forbidden = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    # sorted because it's made from a set so the order might not be preserved
-    assert sorted(indexes) == list(sorted(content["indexes"]))
-
-    # checking that the resource is readable with no filter
-    res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
-    assert res.status == 200
-
-    # checking that the resource can be filtered on any columns
-    for col in detection["columns"].keys():
-        if detection["columns"][col]["python_type"] == "json":
-            # can't handle json type for now
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
-        )
-        assert res.status == 200
-
-    # checking that the resource cannot be aggregated on a non-indexed column
-    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
-    for col in non_indexed_cols:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403
-
-    # checking whether aggregation is allowed on indexed columns
-    for idx in indexes:
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{idx}__groupby&page=1&page_size=1"
-        )
-        assert res.status == 403 if forbidden else 200
-
-
-@pytest.mark.parametrize(
-    "params",
-    [
-        (RESOURCE_ID, True),
-        (AGG_ALLOWED_RESOURCE_ID, False),
-    ],
-)
-async def test_api_exception_resource_no_indexes(client, tables_index_rows, params):
-    _resource_id, forbidden = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    # checking that we have an `indexes` key in the profile endpoint
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    content = await res.json()
-    assert content["profile"] == detection
-    assert content["indexes"] is None
 
     # checking that the resource is readable with no filter
     res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
@@ -371,7 +321,7 @@ async def test_api_exception_resource_no_indexes(client, tables_index_rows, para
         res = await client.get(
             f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
         )
-        assert res.status == 403 if forbidden else 200
+        assert res.status == (403 if forbidden else 200)
 
 
 @pytest.mark.parametrize(
