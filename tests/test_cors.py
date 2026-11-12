@@ -94,8 +94,12 @@ async def test_cors_headers_on_404_unknown_route(client):
     assert_cors_headers_set_once(res)
 
 
-async def test_cors_headers_on_unhandled_500(client):
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page_size=abc", headers=ORIGIN)
+async def test_cors_headers_on_unhandled_500(client, mocker):
+    mocker.patch(
+        "api_tabular.tabular.app.get_resource",
+        side_effect=RuntimeError("unexpected failure"),
+    )
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/", headers=ORIGIN)
     assert res.status == 500
     assert_cors_headers_set_once(res)
     assert (await res.text()).startswith("500 Internal Server Error")
