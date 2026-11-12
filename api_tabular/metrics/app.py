@@ -14,7 +14,7 @@ from api_tabular.core.health import check_health
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.url import build_link_with_page
-from api_tabular.core.utils import build_offset, process_total
+from api_tabular.core.utils import parse_pagination, process_total
 from api_tabular.core.version import get_app_version
 
 routes = web.RouteTableDef()
@@ -40,10 +40,7 @@ async def metrics_data(request):
     """
     model = request.match_info["model"]
     query_string = request.query_string.split("&") if request.query_string else []
-    page = int(request.query.get("page", "1"))
-    page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
-
-    offset = build_offset(page, page_size)
+    page, page_size, offset = parse_pagination(request.query)
     try:
         sql_query = build_sql_query_string(query_string, page_size=page_size, offset=offset)
     except ValueError as e:

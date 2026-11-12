@@ -350,8 +350,8 @@ column_name__sum
 
 #### Pagination
 ```
-page=1          # Page number (default: 1)
-page_size=20    # Items per page (default: 20, max: 50)
+page=1          # Page number (default: 1, min: 1)
+page_size=20    # Items per page (default: 20, min: 1, max: 50)
 ```
 
 #### Column Selection

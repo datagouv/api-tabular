@@ -11,6 +11,11 @@ def test_query_build_limit():
     assert result == "limit=12&order=__id.asc"
 
 
+def test_query_build_zero_limit():
+    result = build_sql_query_string([], page_size=0)
+    assert result == "limit=0&order=__id.asc"
+
+
 def test_query_build_offset():
     query_str = []
     result = build_sql_query_string(query_str, page_size=12, offset=12)
