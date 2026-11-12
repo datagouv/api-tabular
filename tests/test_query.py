@@ -194,6 +194,29 @@ def test_query_build_multiple():
             )
             for forbidden in ["page", "page_size", "columns"]
         ),
+        # unknown operators on a quoted column
+        *(
+            (
+                [
+                    f"or=({param},second_col__exact.BIDULE)",
+                ],
+                None,
+                True,
+            )
+            for param in [
+                '"first col"__exact_.12',
+                '"first col"__unknown."12.4"',
+                '"first col"__.12',
+            ]
+        ),
+        # unquoted value containing a dot after a quoted column
+        (
+            [
+                'or=("first col"__exact.12.4,second_col__exact.BIDULE)',
+            ],
+            None,
+            True,
+        ),
     ],
 )
 def test_query_with_or_group(query_str, expected, should_fail):
@@ -203,6 +226,64 @@ def test_query_with_or_group(query_str, expected, should_fail):
     else:
         result = build_sql_query_string(query_str, page_size=50)
         assert result == expected
+
+
+@pytest.mark.parametrize(
+    "operator, postgrest_operator",
+    [
+        ("exact", "eq"),
+        ("differs", "isdistinct"),
+        ("less", "lte"),
+        ("greater", "gte"),
+        ("strictly_less", "lt"),
+        ("strictly_greater", "gt"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    ['"12.4"', "12"],
+    ids=["quoted_value", "unquoted_value"],
+)
+def test_query_or_group_with_quoted_column(operator, postgrest_operator, value):
+    query_str = [f'or=("first col"__{operator}.{value},second_col__exact.BIDULE)']
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == (
+        f'or=("first col".{postgrest_operator}.{value},"second_col".eq.BIDULE)'
+        "&limit=50&order=__id.asc"
+    )
+
+
+@pytest.mark.parametrize(
+    "operator",
+    ["EXACT", "Strictly_Greater", "STRICTLY_LESS"],
+)
+@pytest.mark.parametrize(
+    "value",
+    ['"12.4"', "12"],
+    ids=["quoted_value", "unquoted_value"],
+)
+def test_query_or_group_with_quoted_column_is_case_insensitive_like_unquoted(operator, value):
+    quoted = build_sql_query_string([f'or=("first_col"__{operator}.{value})'], page_size=50)
+    unquoted = build_sql_query_string([f"or=(first_col__{operator}.{value})"], page_size=50)
+    assert quoted == unquoted
+
+
+def test_query_or_group_with_quoted_column_isnull():
+    query_str = ['or=("first col"__isnull,second_col__exact.BIDULE)']
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == 'or=("first col".is.null,"second_col".eq.BIDULE)&limit=50&order=__id.asc'
+
+
+@pytest.mark.parametrize(
+    "operator, postgrest_operator",
+    [("strictly_less", "lt"), ("strictly_greater", "gt")],
+)
+def test_query_or_group_with_unquoted_column_strict_operator(operator, postgrest_operator):
+    query_str = [f"or=(first_col__{operator}.12,second_col__exact.BIDULE)"]
+    result = build_sql_query_string(query_str, page_size=50)
+    assert result == (
+        f'or=("first_col".{postgrest_operator}.12,"second_col".eq.BIDULE)&limit=50&order=__id.asc'
+    )
 
 
 def test_query_build_multiple_with_unknown():
