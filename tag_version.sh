@@ -1,17 +1,25 @@
 #!/bin/bash
 
-# Script to create a git tag and update CHANGELOG.md
-# Usage: ./tag-version.sh <version> [--dry-run]
+# Release script, in two steps:
+#   1. ./tag_version.sh <version> [--dry-run]
+#      Updates CHANGELOG.md on a release/v<version> branch and opens a PR.
+#   2. ./tag_version.sh <version> --tag [--dry-run]
+#      Once the PR is merged, tags the release commit on main and creates the GitHub release.
 
 set -e
 
 DRY_RUN=false
+TAG_MODE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --tag)
+            TAG_MODE=true
             shift
             ;;
         *)
@@ -22,11 +30,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$VERSION" ]; then
-    echo "Usage: $0 <version> [--dry-run]"
-    echo "Example: $0 11.0.1"
+    echo "Usage: $0 <version> [--tag] [--dry-run]"
+    echo "Example: $0 11.0.1             # open the release PR (CHANGELOG update)"
+    echo "Example: $0 11.0.1 --tag       # after the PR is merged: tag + GitHub release"
     echo "Example: $0 11.0.1 --dry-run"
     exit 1
 fi
+
+RELEASE_BRANCH="release/v$VERSION"
 
 DATE=$(date +%Y-%m-%d)
 
@@ -89,6 +100,58 @@ fi
 # Check if tag already exists
 if git rev-parse "v$VERSION" >/dev/null 2>&1; then
     echo "Error: Tag v$VERSION already exists"
+    exit 1
+fi
+
+# Step 2: tag the merged release commit and create the GitHub release
+if [ "$TAG_MODE" = true ]; then
+    # Find the commit on main that added this version's CHANGELOG entry
+    RELEASE_COMMIT=$(git log -1 --format=%H -S "## $VERSION (" -- CHANGELOG.md)
+    if [ -z "$RELEASE_COMMIT" ]; then
+        echo "Error: No CHANGELOG entry for $VERSION found on $MAIN_BRANCH"
+        echo "Has the release PR ($RELEASE_BRANCH) been merged, and is your $MAIN_BRANCH up to date?"
+        exit 1
+    fi
+
+    # Extract release notes from the CHANGELOG section of this version
+    RELEASE_NOTES=$(awk -v header="## $VERSION (" '
+        index($0, header) == 1 { in_section = 1; next }
+        in_section && /^## / { exit }
+        in_section { print }
+    ' CHANGELOG.md)
+
+    echo "Release commit: $(git log -1 --format='%h %s' "$RELEASE_COMMIT")"
+
+    if [ "$DRY_RUN" = true ]; then
+        echo "Release notes:"
+        echo "$RELEASE_NOTES"
+        echo ""
+        echo "Would run: git tag -a \"v$VERSION\" -m \"Version $VERSION\" $RELEASE_COMMIT"
+        echo "Would run: git push origin v$VERSION"
+        echo "Would run: gh release create \"v$VERSION\" --title \"v$VERSION\" --notes <release notes>"
+        exit 0
+    fi
+
+    git tag -a "v$VERSION" -m "Version $VERSION" "$RELEASE_COMMIT"
+    echo "✓ Created tag v$VERSION"
+
+    git push origin "v$VERSION"
+    echo "✓ Pushed tag v$VERSION to origin"
+
+    echo "$RELEASE_NOTES" | gh release create "v$VERSION" \
+        --title "v$VERSION" \
+        --notes-file -
+    echo "✓ Created GitHub release v$VERSION"
+    exit 0
+fi
+
+# Step 1: check the release branch doesn't already exist
+if git rev-parse --verify "$RELEASE_BRANCH" >/dev/null 2>&1; then
+    echo "Error: Local branch $RELEASE_BRANCH already exists"
+    exit 1
+fi
+if [ -n "$(git ls-remote --heads origin "$RELEASE_BRANCH" 2>/dev/null)" ]; then
+    echo "Error: Branch $RELEASE_BRANCH already exists on origin"
     exit 1
 fi
 
@@ -225,11 +288,12 @@ RELEASE_NOTES="$SORTED_COMMITS"
 if [ "$DRY_RUN" = true ]; then
     echo "Would update CHANGELOG.md with:"
     echo "$NEW_ENTRY"
+    echo "Would run: git checkout -b $RELEASE_BRANCH"
     echo "Would run: git add CHANGELOG.md"
     echo "Would run: git commit -m \"chore: release $VERSION (CHANGELOG)\""
-    echo "Would run: git tag -a \"v$VERSION\" -m \"Version $VERSION\""
-    echo "Would run: git push origin HEAD v$VERSION"
-    echo "Would run: gh release create \"v$VERSION\" --title \"v$VERSION\" --notes <release notes>"
+    echo "Would run: git push -u origin $RELEASE_BRANCH"
+    echo "Would run: gh pr create --base $MAIN_BRANCH --head $RELEASE_BRANCH --title \"chore: release $VERSION (CHANGELOG)\" --body <release notes>"
+    echo "Would run: git checkout $MAIN_BRANCH"
     exit 0
 fi
 
@@ -248,25 +312,29 @@ fi
 
 echo "CHANGELOG.md updated with commits from $LAST_TAG to HEAD"
 
-# Commit CHANGELOG update
+# Commit CHANGELOG update on a release branch
+git checkout -b "$RELEASE_BRANCH"
 git add CHANGELOG.md
 git commit -m "chore: release $VERSION (CHANGELOG)"
 
-echo "✓ Committed CHANGELOG.md"
+echo "✓ Committed CHANGELOG.md on $RELEASE_BRANCH"
 
-# Create the git tag
-git tag -a "v$VERSION" -m "Version $VERSION"
+# Push the release branch
+git push -u origin "$RELEASE_BRANCH"
 
-echo "✓ Created tag v$VERSION"
+echo "✓ Pushed $RELEASE_BRANCH to origin"
 
-# Push the commit and tag
-git push origin HEAD "v$VERSION"
+# Open the release PR
+PR_URL=$(echo "$RELEASE_NOTES" | gh pr create \
+    --base "$MAIN_BRANCH" \
+    --head "$RELEASE_BRANCH" \
+    --title "chore: release $VERSION (CHANGELOG)" \
+    --body-file -)
 
-echo "✓ Pushed commit and tag v$VERSION to origin"
+echo "✓ Opened release PR: $PR_URL"
 
-# Create GitHub release
-echo "$RELEASE_NOTES" | gh release create "v$VERSION" \
-    --title "v$VERSION" \
-    --notes-file -
+git checkout "$MAIN_BRANCH"
 
-echo "✓ Created GitHub release v$VERSION"
+echo ""
+echo "Once the PR is merged, run:"
+echo "  git pull origin $MAIN_BRANCH && $0 $VERSION --tag"
