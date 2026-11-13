@@ -82,15 +82,13 @@ async def resource_swagger(request):
 
 
 def build_next_page(
-    nb_results: int, page_size: int, offset: int, total: int | None, default_next: str
+    has_more_rows: bool, page_size: int, offset: int, total: int | None, default_next: str
 ) -> str | None:
     if total is not None:
         # this is for raw or filtering queries
         return default_next if page_size + offset < total else None
-    # for aggregation queries, the total is erroneous but we can be somewhat smart for the next page
-    if nb_results < page_size:
-        return None
-    return default_next
+    # for aggregation queries the total is erroneous, so we rely on the extra row fetched
+    return default_next if has_more_rows else None
 
 
 @routes.get(r"/api/resources/{rid}/data/", name="data")
@@ -99,9 +97,13 @@ async def resource_data(request):
     query_string = request.query_string.split("&") if request.query_string else []
     page, page_size, offset = parse_pagination(request.query)
 
-    sql_query = await try_build_query(request, query_string, resource_id, page_size, offset)
+    # one extra row tells whether a next page exists when the total is unknown (aggregation);
+    # a PostgREST db-max-rows <= PAGE_SIZE_MAX would silently drop it, and links.next with it
+    sql_query = await try_build_query(request, query_string, resource_id, page_size + 1, offset)
     resource = await get_resource(request.app["csession"], resource_id, ["parsing_table"])
     response, total = await get_resource_data(request.app["csession"], resource, sql_query)
+    has_more_rows = len(response) > page_size
+    response = response[:page_size]
 
     next = build_link_with_page(request, query_string, page + 1, page_size)
     prev = build_link_with_page(request, query_string, page - 1, page_size)
@@ -111,7 +113,7 @@ async def resource_data(request):
             "profile": url_for(request, "profile", rid=resource_id, _external=True),
             "swagger": url_for(request, "swagger", rid=resource_id, _external=True),
             "next": build_next_page(
-                nb_results=len(response),
+                has_more_rows=has_more_rows,
                 page_size=page_size,
                 offset=offset,
                 total=total,

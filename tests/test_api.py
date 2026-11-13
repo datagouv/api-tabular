@@ -157,6 +157,66 @@ async def test_api_resource_data_with_meta_args(client, base_url, tables_index_r
 
 
 @pytest.mark.parametrize(
+    "page,page_size,expected_ids",
+    [
+        (49, 20, list(range(961, 981))),
+        (50, 20, list(range(981, 1001))),
+        (34, 30, list(range(991, 1001))),
+    ],
+)
+async def test_api_resource_data_raw_page_never_contains_next_page_row(
+    client, base_url, page, page_size, expected_ids
+):
+    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page={page}&page_size={page_size}")
+    assert res.status == 200
+    body = await res.json()
+    assert [row["__id"] for row in body["data"]] == expected_ids
+    assert body["meta"]["total"] == 1000
+    expected_next = (
+        f"{base_url}/api/resources/{RESOURCE_ID}/data/?page={page + 1}&page_size={page_size}"
+        if page * page_size < 1000
+        else None
+    )
+    assert body["links"]["next"] == expected_next
+
+
+# AGG_ALLOWED_RESOURCE_ID has 10 rows with distinct `id` values and 2 distinct `is_true` values;
+# PostgREST only groups rows when an aggregate function is selected, hence the `__count`
+@pytest.mark.parametrize(
+    "query,nb_rows,expected_next_query",
+    [
+        ("id__groupby&decompte__count&page_size=10", 10, None),
+        ("id__groupby&decompte__count&page=2&page_size=5", 5, None),
+        (
+            "id__groupby&decompte__count&page_size=9",
+            9,
+            "id__groupby&decompte__count&page=2&page_size=9",
+        ),
+        (
+            "id__groupby&decompte__count&page=2&page_size=4",
+            4,
+            "id__groupby&decompte__count&page=3&page_size=4",
+        ),
+        ("id__groupby&decompte__count&page=3&page_size=4", 2, None),
+        ("is_true__groupby&id__count&page_size=10", 2, None),
+    ],
+)
+async def test_api_resource_data_aggregated_next_link_is_exact(
+    client, base_url, query, nb_rows, expected_next_query
+):
+    res = await client.get(f"/api/resources/{AGG_ALLOWED_RESOURCE_ID}/data/?{query}")
+    assert res.status == 200
+    body = await res.json()
+    assert len(body["data"]) == nb_rows
+    assert "total" not in body["meta"]
+    assert body["links"]["next"] == (
+        f"{base_url}/api/resources/{AGG_ALLOWED_RESOURCE_ID}/data/?{expected_next_query}"
+        if expected_next_query
+        else None
+    )
+
+
+@pytest.mark.parametrize(
     "filters",
     [
         [("id", "exact", "e5b8864b-d1d0-4452-8d83-517d31da7ff2")],
