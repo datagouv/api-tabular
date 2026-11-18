@@ -7,14 +7,14 @@ from aiohttp import ClientSession, web
 from aiohttp_swagger import setup_swagger
 
 from api_tabular import config
-from api_tabular.core.cors import cors_middleware
+from api_tabular.core.cors import setup_cors
 from api_tabular.core.data import stream_data
 from api_tabular.core.error import QueryException, handle_exception
 from api_tabular.core.health import check_health
 from api_tabular.core.query import build_sql_query_string
 from api_tabular.core.sentry import get_sentry_kwargs
 from api_tabular.core.url import build_link_with_page
-from api_tabular.core.utils import build_offset, process_total
+from api_tabular.core.utils import parse_pagination, process_total
 from api_tabular.core.version import get_app_version
 
 routes = web.RouteTableDef()
@@ -40,10 +40,7 @@ async def metrics_data(request):
     """
     model = request.match_info["model"]
     query_string = request.query_string.split("&") if request.query_string else []
-    page = int(request.query.get("page", "1"))
-    page_size = int(request.query.get("page_size", config.PAGE_SIZE_DEFAULT))
-
-    offset = build_offset(page, page_size)
+    page, page_size, offset = parse_pagination(request.query)
     try:
         sql_query = build_sql_query_string(query_string, page_size=page_size, offset=offset)
     except ValueError as e:
@@ -111,7 +108,8 @@ async def app_factory():
     async def on_cleanup(app):
         await app["csession"].close()
 
-    app = web.Application(middlewares=[cors_middleware])
+    app = web.Application()
+    setup_cors(app)
     app.add_routes(routes)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)

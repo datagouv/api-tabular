@@ -350,8 +350,8 @@ column_name__sum
 
 #### Pagination
 ```
-page=1          # Page number (default: 1)
-page_size=20    # Items per page (default: 20, max: 50)
+page=1          # Page number (default: 1, min: 1)
+page_size=20    # Items per page (default: 20, min: 1, max: 50)
 ```
 
 #### Column Selection
@@ -450,6 +450,8 @@ i.e. `decompte` and average of `score` for all rows where `birth<="1996"`, group
 ```shell
 curl http://localhost:8005/api/resources/aaaaaaaa-1111-bbbb-2222-cccccccccccc/data/?page=2&page_size=30
 ```
+
+> **Note**: `links.next` is `null` when the current page is the last one, including for aggregation queries (which have no `meta.total`).
 
 #### Column Selection
 ```shell

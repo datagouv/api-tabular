@@ -53,12 +53,14 @@ paths:
       schema:
         type: integer
         default: 1
+        minimum: 1
     - name: page_size
       in: query
       required: false
       description: Number of results per page
       schema:
         type: integer
+        minimum: 1
     - name: column__sort
       in: query
       required: false
