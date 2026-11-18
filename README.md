@@ -592,26 +592,31 @@ Tests are automatically run on every pull request and push to main branch. See [
 
 ### 🏷️ Releases and versioning
 
-The release process uses the [`tag_version.sh`](tag_version.sh) script to create git tags, GitHub releases and update [CHANGELOG.md](CHANGELOG.md) automatically. Package version numbers are automatically derived from git tags using [setuptools_scm](https://github.com/pypa/setuptools_scm), so no manual version updates are needed in `pyproject.toml`.
+The release process uses the [`tag_version.sh`](tag_version.sh) script, in two steps: it first opens a PR updating [CHANGELOG.md](CHANGELOG.md), then, once that PR is merged, creates the git tag and the GitHub release. Package version numbers are automatically derived from git tags using [setuptools_scm](https://github.com/pypa/setuptools_scm), so no manual version updates are needed in `pyproject.toml`.
 
-**Prerequisites**: [GitHub CLI](https://cli.github.com/) must be installed and authenticated, and you must be on the main branch with a clean working directory.
+**Prerequisites**: [GitHub CLI](https://cli.github.com/) must be installed and authenticated, and you must be on an up-to-date main branch with a clean working directory.
 
 ```bash
-# Create a new release
-./tag_version.sh <version>
-
-# Example
+# 1. Open the release PR (CHANGELOG update on a release/v<version> branch)
 ./tag_version.sh 2.5.0
 
-# Dry run to see what would happen
+# 2. Once the PR is merged, tag the release commit and create the GitHub release
+git pull origin main
+./tag_version.sh 2.5.0 --tag
+
+# Dry run (works for both steps)
 ./tag_version.sh 2.5.0 --dry-run
+./tag_version.sh 2.5.0 --tag --dry-run
 ```
 
-The script automatically:
+Step 1 automatically:
 - Extracts commits since the last tag and formats them for CHANGELOG.md
 - Identifies breaking changes (commits with `!:` in the subject)
-- Creates a git tag and pushes it to the remote repository
-- Creates a GitHub release with the changelog content
+- Commits the CHANGELOG on a `release/v<version>` branch, pushes it and opens a PR
+
+Step 2 automatically:
+- Finds the commit on main that added the version's CHANGELOG entry and tags it
+- Pushes the tag and creates a GitHub release from that CHANGELOG section
 
 ### Publishing to PyPI
 
