@@ -18,6 +18,8 @@ WORKDIR /home/datagouv
 ADD . /home/datagouv/
 RUN chown -R datagouv:datagouv /home/datagouv
 USER datagouv
+# Set as ENV rather than a `--no-dev` flag: the `uv run` of the CMD syncs the environment again at startup
+ENV UV_NO_DEV=1
 RUN uv sync --frozen
 
 # run (ENV from ARG so shell can expand APP_MODULE at runtime)

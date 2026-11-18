@@ -2,6 +2,7 @@ from typing import cast
 
 import yaml
 
+from api_tabular import config
 from api_tabular.core.utils import is_aggregation_allowed
 
 TYPE_POSSIBILITIES = {
@@ -165,9 +166,9 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
         {
             "name": "page",
             "in": "query",
-            "description": "Specific page (page=value)",
+            "description": "Specific page, starting at 1 (page=value)",
             "required": False,
-            "schema": {"type": "integer"},
+            "schema": {"type": "integer", "minimum": 1},
             "example": 1,
         },
         {
@@ -175,7 +176,7 @@ def swagger_parameters(resource_columns: dict, resource_id: str) -> list:
             "in": "query",
             "description": "Number of results per page (page_size=value)",
             "required": False,
-            "schema": {"type": "integer"},
+            "schema": {"type": "integer", "minimum": 1, "maximum": config.PAGE_SIZE_MAX},
             "example": 20,
         },
         {
@@ -304,7 +305,7 @@ def swagger_component(resource_columns: dict) -> dict:
                                 "type": "string",
                             },
                             "next": {
-                                "description": "Pagination link to the next page of the resource data",
+                                "description": "Pagination link to the next page of the resource data, null on the last page",
                                 "type": "string",
                             },
                             "prev": {
