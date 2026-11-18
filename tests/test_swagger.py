@@ -33,10 +33,12 @@ async def test_swagger_endpoint(client, _resource_id):
     "params",
     [
         (RESOURCE_ID, False),
+        (INDEXED_RESOURCE_ID, False),
         (AGG_ALLOWED_RESOURCE_ID, True),
+        (AGG_ALLOWED_INDEXED_RESOURCE_ID, True),
     ],
 )
-async def test_swagger_no_indexes(client, tables_index_rows, params):
+async def test_swagger_documents_all_columns(client, tables_index_rows, params):
     _resource_id, allow_aggregation = params
     detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
     columns = {c: v["python_type"] for c, v in detection["columns"].items()}
@@ -77,27 +79,3 @@ async def test_swagger_no_indexes(client, tables_index_rows, params):
                             missing.append(f"{c}__{_p} is in {output} output but should not")
     if missing:
         raise ValueError("\n" + ";\n".join(missing))
-
-
-@pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-    ],
-)
-async def test_swagger_with_indexes(client, tables_index_rows, exceptions_rows, _resource_id):
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    indexes = list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-    non_indexed_cols = [col for col in detection["columns"].keys() if col not in indexes]
-    res = await client.get(f"/api/resources/{_resource_id}/swagger/")
-    swagger = await res.text()
-    swagger_dict = yaml.safe_load(swagger)
-
-    for output in ["json", "csv"]:
-        params = swagger_dict["paths"][
-            f"/api/resources/{_resource_id}/data/{'' if output == 'json' else 'csv/'}"
-        ]["parameters"]
-        params = set([p["name"].split("__")[0] for p in params if "__" in p["name"]])
-        assert all(c in params for c in indexes)
-        assert not any(c in params for c in non_indexed_cols)
