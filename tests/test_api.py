@@ -70,20 +70,16 @@ async def test_api_resource_meta_not_found(client):
 
 
 @pytest.mark.parametrize(
-    "_resource_id",
+    "params",
     [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
+        (AGG_ALLOWED_INDEXED_RESOURCE_ID, ["decompte"]),
+        (AGG_ALLOWED_RESOURCE_ID, None),
+        (INDEXED_RESOURCE_ID, ["birth", "id"]),
+        (RESOURCE_ID, None),
     ],
 )
-async def test_api_resource_profile(client, tables_index_rows, exceptions_rows, _resource_id):
-    indexes = (
-        list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-        if _resource_id in exceptions_rows
-        else None
-    )
+async def test_api_resource_profile(client, tables_index_rows, params):
+    _resource_id, indexes = params
     res = await client.get(f"/api/resources/{_resource_id}/profile/")
     assert res.status == 200
     body = await res.json()
@@ -91,7 +87,7 @@ async def test_api_resource_profile(client, tables_index_rows, exceptions_rows, 
     if indexes is None:
         assert body["indexes"] is None
     else:
-        assert sorted(body["indexes"]) == sorted(indexes)
+        assert sorted(body["indexes"]) == indexes
 
 
 async def test_api_resource_profile_not_found(client):
