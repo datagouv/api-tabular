@@ -14,7 +14,8 @@ import uvicorn
 import yaml
 from fastapi import FastAPI, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.types import DecoratedCallable
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -38,10 +39,19 @@ from tabular_duckdb.resources import (
     resource_cache,
 )
 from tabular_duckdb.serialization import jsonable, rows_to_json
-from tabular_duckdb.streaming import check_output_size, start_stream, stream_csv, stream_json
+from tabular_duckdb.streaming import (
+    ClosingStreamingResponse,
+    check_output_size,
+    start_stream,
+    stream_csv,
+    stream_json,
+)
 from tabular_duckdb.swagger import build_swagger_file
 
 SWAGGER_FILE = Path(__file__).resolve().parent.parent / "tabular_swagger.yaml"
+OPENAPI_DOCUMENT = yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8"))
+OPENAPI_DOCUMENT["info"]["version"] = __version__
+BIGINT_MAX = 2**63 - 1
 
 
 def external_url(path: str) -> str:
@@ -66,16 +76,16 @@ def query_arguments(request: Request) -> list[str]:
     return request.url.query.split("&") if request.url.query else []
 
 
-def int_argument(request: Request, name: str, default: int) -> int:
+def int_argument(request: Request, name: str, label: str, default: int) -> int:
     raw = request.query_params.get(name)
-    if raw is None or raw == "":
+    if raw is None:
         return default
     try:
         value = int(raw)
     except ValueError:
-        raise invalid_query_string(f"`{name}` must be an integer, got '{raw}'") from None
+        raise invalid_query_string(f"{label} must be an integer") from None
     if value < 1:
-        raise invalid_query_string(f"`{name}` must be greater than 0")
+        raise invalid_query_string(f"{label} must be at least 1")
     return value
 
 
@@ -136,8 +146,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         )
     await engine.start()
     app.state.started_at = datetime.now(UTC)
-    app.state.openapi_document = yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8"))
-    app.state.openapi_document["info"]["version"] = __version__
     try:
         yield
     finally:
@@ -159,7 +167,7 @@ CORS_HEADERS = {
 
 
 class CORSHeadersMiddleware:
-    """The CORS headers on every response, and a 204 to every preflight.
+    """The CORS headers on every response.
 
     Unlike Starlette's CORSMiddleware, the headers do not depend on the request having an
     Origin: the Nginx cache in front of the API serves a response to every origin. It wraps the
@@ -172,19 +180,17 @@ class CORSHeadersMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
-        elif scope["method"] == "OPTIONS":
-            await Response(status_code=204, headers=CORS_HEADERS)(scope, receive, send)
-        else:
+            return
 
-            async def send_with_cors(message: Message) -> None:
-                if message["type"] == "http.response.start":
-                    MutableHeaders(scope=message).update(CORS_HEADERS)
-                await send(message)
+        async def send_with_cors(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).update(CORS_HEADERS)
+            await send(message)
 
-            await self.app(scope, receive, send_with_cors)
+        await self.app(scope, receive, send_with_cors)
 
 
-def get(path: str, **kwargs: Any) -> Callable:
+def get(path: str, **kwargs: Any) -> Callable[[DecoratedCallable], DecoratedCallable]:
     """GET route also answering HEAD, like every GET route of the PostgREST-based API."""
     return api.api_route(path, methods=["GET", "HEAD"], **kwargs)
 
@@ -195,9 +201,17 @@ async def query_exception_handler(request: Request, exc: QueryException) -> JSON
 
 
 @api.exception_handler(StarletteHTTPException)
-async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> PlainTextResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> Response:
+    # no route accepts OPTIONS: the router answers 405 on an existing path, listing its methods.
+    # A preflight gets a 204 only when the route accepts the method it asks for, otherwise the
+    # 404 or 405 of the route, like the PostgREST-based API
+    if (
+        request.method == "OPTIONS"
+        and exc.status_code == 405
+        and request.headers.get("access-control-request-method", "GET")
+        in (exc.headers or {}).get("Allow", "").split(", ")
+    ):
+        return Response(status_code=204)
     # the plain text body of the PostgREST-based API for its HTTP errors, e.g. "404: Not Found"
     return PlainTextResponse(
         f"{exc.status_code}: {HTTPStatus(exc.status_code).phrase}",
@@ -242,19 +256,23 @@ async def resource_swagger(rid: str) -> Response:
 async def resource_data(request: Request, rid: str) -> JSONResponse:
     resource = await resource_cache.get(rid)
     query_string = query_arguments(request)
-    page = int_argument(request, "page", 1)
-    page_size = int_argument(request, "page_size", settings.PAGE_SIZE_DEFAULT)
+    page = int_argument(request, "page", "Page", 1)
+    page_size = int_argument(request, "page_size", "Page size", settings.PAGE_SIZE_DEFAULT)
     if page_size > settings.PAGE_SIZE_MAX:
         raise invalid_query_string(f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}")
     offset = page_size * (page - 1)
+    # DuckDB takes LIMIT and OFFSET as BIGINT
+    if offset + page_size + 1 > BIGINT_MAX:
+        raise invalid_query_string("Page is too large")
 
-    parsed = parse_query(query_string, resource.query_columns, page_size, offset)
+    # one extra row tells whether a next page exists when there is no total (aggregation)
+    parsed = parse_query(query_string, resource.query_columns, page_size + 1, offset)
     result = await run_query(parsed.data_sql(resource.source_sql), rid)
+    rows = result.rows[:page_size]
     meta: dict[str, int] = {"page": page, "page_size": page_size}
     if parsed.is_aggregated:
-        # like the PostgREST-based API, which reported no total for aggregated queries: a full
-        # page is the only hint that another one may follow
-        has_next = len(result.rows) >= page_size
+        # like the PostgREST-based API, which reported no total for aggregated queries
+        has_next = len(result.rows) > page_size
     else:
         meta["total"] = await run_count(parsed, resource, rid)
         has_next = page_size + offset < meta["total"]
@@ -262,7 +280,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     path = request.url.path
     return JSONResponse(
         {
-            "data": rows_to_json(result.columns, result.rows),
+            "data": rows_to_json(result.columns, rows),
             "links": {
                 "profile": resource_url(rid, "profile/"),
                 "swagger": resource_url(rid, "swagger/"),
@@ -282,7 +300,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     )
 
 
-async def stream_resource_data(request: Request, rid: str, format: str) -> StreamingResponse:
+async def stream_resource_data(request: Request, rid: str, format: str) -> ClosingStreamingResponse:
     resource = await resource_cache.get(rid)
     parsed = parse_query(query_arguments(request), resource.query_columns)
     check_output_size(await run_count(parsed, resource, rid))
@@ -295,7 +313,7 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
     streamer, mime = (
         (stream_json, "application/json") if format == "json" else (stream_csv, "text/csv")
     )
-    return StreamingResponse(
+    return ClosingStreamingResponse(
         streamer(chunks),
         media_type=mime,
         headers={"Content-Disposition": f'attachment; filename="{rid}.{format}"'},
@@ -303,12 +321,12 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Strea
 
 
 @get("/api/resources/{rid}/data/csv/")
-async def resource_data_csv(request: Request, rid: str) -> StreamingResponse:
+async def resource_data_csv(request: Request, rid: str) -> ClosingStreamingResponse:
     return await stream_resource_data(request, rid, format="csv")
 
 
 @get("/api/resources/{rid}/data/json/")
-async def resource_data_json(request: Request, rid: str) -> StreamingResponse:
+async def resource_data_json(request: Request, rid: str) -> ClosingStreamingResponse:
     return await stream_resource_data(request, rid, format="json")
 
 
@@ -339,8 +357,8 @@ OPENAPI_PATH = f"{settings.DOC_PATH}/swagger.json"
 
 
 @get(OPENAPI_PATH)
-async def openapi_document(request: Request) -> JSONResponse:
-    return JSONResponse(request.app.state.openapi_document)
+async def openapi_document() -> JSONResponse:
+    return JSONResponse(OPENAPI_DOCUMENT)
 
 
 @get(settings.DOC_PATH)

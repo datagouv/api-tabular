@@ -5,6 +5,8 @@ from typing import NotRequired, TypedDict
 
 import yaml
 
+from tabular_duckdb.config import settings
+from tabular_duckdb.query import RANGE_COMPARATORS
 from tabular_duckdb.resources import ColumnProfile
 
 TYPE_POSSIBILITIES = {
@@ -88,6 +90,13 @@ TYPE_POSSIBILITIES = {
         "isnull",
         "isnotnull",
     ],
+}
+
+RANGE_COMPARATOR_LABELS = {
+    "less": "Less than",
+    "greater": "Greater than",
+    "strictly_less": "Strictly less than",
+    "strictly_greater": "Strictly greater than",
 }
 
 MAP_TYPES = {
@@ -176,9 +185,9 @@ def swagger_parameters(resource_columns: Mapping[str, ColumnProfile]) -> list[di
         {
             "name": "page",
             "in": "query",
-            "description": "Specific page (page=value)",
+            "description": "Specific page, starting at 1 (page=value)",
             "required": False,
-            "schema": {"type": "integer"},
+            "schema": {"type": "integer", "minimum": 1},
             "example": 1,
         },
         {
@@ -186,7 +195,7 @@ def swagger_parameters(resource_columns: Mapping[str, ColumnProfile]) -> list[di
             "in": "query",
             "description": "Number of results per page (page_size=value)",
             "required": False,
-            "schema": {"type": "integer"},
+            "schema": {"type": "integer", "minimum": 1, "maximum": settings.PAGE_SIZE_MAX},
             "example": 20,
         },
         {
@@ -250,12 +259,9 @@ def swagger_parameters(resource_columns: Mapping[str, ColumnProfile]) -> list[di
                 }
             )
         if "compare" in possibilities:
-            for suffix, label in (
-                ("less", "Less than"),
-                ("greater", "Greater than"),
-                ("strictly_less", "Strictly less than"),
-                ("strictly_greater", "Strictly greater than"),
-            ):
+            for suffix in RANGE_COMPARATORS:
+                # indexed, not .get(): a comparator added without a label fails the swagger tests
+                label = RANGE_COMPARATOR_LABELS[suffix]
                 parameters_list.append(
                     {
                         "name": f"{key}__{suffix}",
@@ -288,7 +294,8 @@ def swagger_component(resource_columns: Mapping[str, ColumnProfile]) -> dict:
                             },
                             "next": {
                                 "description": (
-                                    "Pagination link to the next page of the resource data"
+                                    "Pagination link to the next page of the resource data, "
+                                    "null on the last page"
                                 ),
                                 "type": "string",
                             },

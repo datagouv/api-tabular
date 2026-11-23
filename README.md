@@ -21,7 +21,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
 
 ### 📋 Requirements
 
-- **Python** >= 3.11, < 3.14
+- **Python** >= 3.11, < 3.15
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker & Docker Compose** (optional)
 
@@ -69,7 +69,7 @@ Any resource converted by Hydra can be queried with its real resource id, as lon
 GET /api/resources/{resource_id}/
 ```
 
-Returns basic information about the resource and the available endpoints. `created_at` is the parquet file's last modification date.
+Returns basic information about the resource and the available endpoints. `created_at` is the date hydra parsed the resource, embedded in the parquet file (its last modification date for files exported before hydra embedded it).
 
 **Response:**
 ```json
@@ -215,14 +215,14 @@ column_name__max
 column_name__sum
 ```
 
-> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`). Filtering is always done **before** aggregation, no matter the order in the parameters. An aggregated response has no `meta.total`, and `links.next` is set as long as the page is full. `columns` cannot be set alongside aggregators.
+> **Note**: Passing an aggregation operator (`count`, `avg`, `min`, `max`, `sum`) returns a column that is named `<column_name>__<operator>` (for instance: `?birth__groupby&score__sum` will return a list of dicts with the keys `birth` and `score__sum`). Filtering is always done **before** aggregation, no matter the order in the parameters. An aggregated response has no `meta.total`, and `links.next` is `null` on the last page, like for the other queries. `columns` cannot be set alongside aggregators.
 
 > ⚠️ **WARNING**: columns that contain **JSON** objects (see the `profile` to know which ones do) **do not support filtering nor aggregation** for now, except `isnull` and `isnotnull`.
 
 #### Pagination
 ```
-page=1          # Page number (default: 1)
-page_size=20    # Items per page (default: 20, max: 50)
+page=1          # Page number (default: 1, min: 1)
+page_size=20    # Items per page (default: 20, min: 1, max: 50)
 ```
 
 #### Column Selection
@@ -317,12 +317,11 @@ uv run pytest
 
 ## 🔀 Differences with the PostgREST version
 
-- No ingestion in PostgreSQL, no `tables_index` table: a `<resource_id>.parquet` file in the bucket is enough. Resource metadata is derived from the parquet file itself (schema, row count, statistics) and from the object's `Last-Modified` header (`created_at`).
+- No ingestion in PostgreSQL, no `tables_index` table: a `<resource_id>.parquet` file in the bucket is enough. Resource metadata is derived from the parquet file itself (schema, row count, statistics, `created_at`).
 - `/api/resources/{rid}/` returns as `url` the permalink of the resource on data.gouv.fr (`DATAGOUV_URL`), which redirects to its source file, instead of the URL recorded at conversion time.
 - A resource deleted by its producer is no longer answered with a `410 Gone`: deletions are not tracked here, the data is served as long as its parquet file is in the bucket.
 - `/profile/` returns `"indexes": null`: there is no database index, the parquet file is scanned, so no column is privileged.
 - Aggregations are allowed on every resource and every column: `/api/aggregation-exceptions/` always answers `{"allowed": true, "exceptions": []}`.
-- `page` and `page_size` must be positive integers, any other value answers a 400. The PostgREST version served the first page for `page=0` or a negative page, and the whole table, without any limit, for `page_size=0`.
 - The metrics API is out of scope.
 
 ## 🤝 Contributing

@@ -6,6 +6,7 @@ import duckdb
 import pytest
 
 from tabular_duckdb.config import settings
+from tabular_duckdb.engine import TEMP_DIRECTORY
 
 from .conftest import SLOW_QUERY
 
@@ -45,7 +46,7 @@ async def test_a_cancelled_query_logs_no_error(single_worker_engine, caplog):
 
 async def test_the_settings_apply_to_the_connection_of_every_query(single_worker_engine):
     """They are set on the instance, while each query runs on a connection of its own."""
-    names = ["http_timeout", "http_retries", "max_expression_depth"]
+    names = ["http_timeout", "http_retries", "max_expression_depth", "TimeZone", "temp_directory"]
     with single_worker_engine.cursor() as cursor:
         values = cursor.execute(
             "SELECT " + ", ".join(f"current_setting('{name}')" for name in names)
@@ -54,6 +55,8 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
         "http_timeout": settings.QUERY_TIMEOUT,
         "http_retries": 0,
         "max_expression_depth": 500,
+        "TimeZone": "UTC",
+        "temp_directory": TEMP_DIRECTORY,
     }
 
 

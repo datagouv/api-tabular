@@ -33,6 +33,7 @@ COMPARATORS = {
 SORT_DIRECTIONS = {"asc": "ASC", "desc": "DESC"}
 NULLS_PLACEMENTS = {"nullsfirst": "NULLS FIRST", "nullslast": "NULLS LAST"}
 RESERVED_ARGUMENTS = ("page", "page_size", "columns")
+MAX_GROUP_DEPTH = 50
 
 TRUE_VALUES = ("true", "t", "1", "yes", "y")
 FALSE_VALUES = ("false", "f", "0", "no", "n")
@@ -128,60 +129,72 @@ def collated(quoted_column: str) -> str:
     return f"{quoted_column} COLLATE {TEXT_COLLATION}"
 
 
-def resolve_column(name: str, columns: Mapping[str, str]) -> tuple[str, str]:
-    """Check the column against the parquet schema and return (quoted name, DuckDB type)."""
+def column_type(name: str, columns: Mapping[str, str]) -> str:
+    """The DuckDB type of a column, which must be in the parquet schema."""
     if name not in columns:
         raise ValueError(f"unknown column '{name}'")
-    return quote_ident(name), columns[name]
+    return columns[name]
 
 
-def coerce_value(value: str, duckdb_type: str) -> tuple[Any, bool]:
-    """Convert a query string value to a bindable Python value.
-
-    Returns (value, compare_as_varchar): nested values (lists, structs, JSON) and types without
-    a Python counterpart are compared through their text rendering. A value that does not fit
-    the column type is rejected, like PostgreSQL did, rather than compared as a string, which
-    would silently return wrong rows ('9' >= '12.5').
-    """
+def compares_as_varchar(duckdb_type: str) -> bool:
+    """Nested values (lists, structs, JSON) and types without a Python counterpart are compared
+    through their text rendering."""
     normalized = duckdb_type.upper()
     kind = python_type(duckdb_type)
     if kind == "json":
-        return value, True
+        return True
+    return not (
+        is_text(duckdb_type)
+        or kind in ("int", "float")
+        or normalized in ("UUID", "BOOLEAN", "DATE", "TIME")
+        or normalized.startswith(("DECIMAL", "TIMESTAMP"))
+    )
+
+
+def coerce_value(value: str, duckdb_type: str) -> Any:
+    """Convert a query string value to a bindable Python value.
+
+    A value that does not fit the column type is rejected, like PostgreSQL did, rather than
+    compared as a string, which would silently return wrong rows ('9' >= '12.5').
+    """
+    if compares_as_varchar(duckdb_type) or is_text(duckdb_type):
+        return value
+    normalized = duckdb_type.upper()
+    kind = python_type(duckdb_type)
     try:
-        if is_text(duckdb_type):
-            return value, False
         if normalized == "UUID":
             UUID(value)
-            return value, False
+            return value
         if normalized == "BOOLEAN":
             lowered = value.strip().lower()
             if lowered in TRUE_VALUES:
-                return True, False
+                return True
             if lowered in FALSE_VALUES:
-                return False, False
+                return False
             raise ValueError(value)
         if normalized.startswith("DECIMAL"):
-            return Decimal(value), False
+            return Decimal(value)
         if kind == "float":
-            return float(value), False
+            return float(value)
         if kind == "int":
-            return int(value), False
+            return int(value)
         if normalized == "DATE":
-            return date.fromisoformat(value), False
+            return date.fromisoformat(value)
         if normalized.startswith("TIMESTAMP"):
             try:
-                return datetime.fromisoformat(value), False
+                return datetime.fromisoformat(value)
             except ValueError:
-                return date.fromisoformat(value), False
-        if normalized == "TIME":
-            return time.fromisoformat(value), False
+                return date.fromisoformat(value)
+        # TIME, the last type compares_as_varchar leaves out
+        return time.fromisoformat(value)
     except (ValueError, InvalidOperation) as exc:
         raise ValueError(f"invalid value '{value}' for a column of type {duckdb_type}") from exc
-    return value, True
 
 
-def _comparable(quoted_column: str, as_varchar: bool) -> str:
-    return f"CAST({quoted_column} AS VARCHAR)" if as_varchar else quoted_column
+def _comparable(quoted_column: str, duckdb_type: str) -> str:
+    return (
+        f"CAST({quoted_column} AS VARCHAR)" if compares_as_varchar(duckdb_type) else quoted_column
+    )
 
 
 def _split_list(value: str) -> list[str]:
@@ -211,7 +224,8 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> St
     if comparator == "sort":
         raise ValueError(f"Argument `{argument}` can't be set within an operator")
 
-    quoted, duckdb_type = resolve_column(column_name, columns)
+    duckdb_type = column_type(column_name, columns)
+    quoted = quote_ident(column_name)
 
     if comparator == "isnull":
         return Statement(f"({quoted} IS NULL)", [])
@@ -227,15 +241,14 @@ def build_condition(argument: str, value: str, columns: Mapping[str, str]) -> St
         if not items:
             # PostgREST's `in.()`: no row is in an empty list, NULLs included
             return Statement("(FALSE)" if comparator == "in" else "(TRUE)", [])
-        coerced = [coerce_value(item, duckdb_type) for item in items]
-        as_varchar = any(fallback for _, fallback in coerced)
-        params = [item for item, _ in coerced]
+        params = [coerce_value(item, duckdb_type) for item in items]
         placeholders = ", ".join("?" for _ in params)
         operator = "IN" if comparator == "in" else "NOT IN"
-        return Statement(f"({_comparable(quoted, as_varchar)} {operator} ({placeholders}))", params)
+        compared = _comparable(quoted, duckdb_type)
+        return Statement(f"({compared} {operator} ({placeholders}))", params)
     if comparator in COMPARATORS:
-        coerced, as_varchar = coerce_value(value, duckdb_type)
-        compared = _comparable(quoted, as_varchar)
+        coerced = coerce_value(value, duckdb_type)
+        compared = _comparable(quoted, duckdb_type)
         # equality stays exact, as with the deterministic collations of PostgreSQL
         if comparator in RANGE_COMPARATORS and is_text(duckdb_type):
             compared = collated(compared)
@@ -273,30 +286,21 @@ def find_arg_val(param: str) -> tuple[str, str]:
     """Split a condition of an OR/AND group into (argument, value).
 
     Handles the four possible shapes: `col__op.val`, `"col.umn"__op.val`,
-    `col__op."val.ue"` and `"col.umn"__op."val.ue"`.
+    `col__op."val.ue"` and `"col.umn"__op."val.ue"`. The operator is validated by
+    build_condition, like outside of the groups.
     """
-    if param.count('"') not in {0, 2, 4}:
+    quoted_column = re.match(r'^"([^"]*)"__', param)
+    if quoted_column:
+        column_prefix = f"{quoted_column.group(1)}__"
+        operator_value = param[quoted_column.end() :]
+    else:
+        column_prefix, operator_value = "", param
+    operator, dot, value = operator_value.partition(".")
+    quoted_value = re.fullmatch(r'"([^"]*)"', value)
+    # an unquoted value cannot hold a dot, which separates the terms
+    if not dot or '"' in operator or not (quoted_value or not re.search(r'[".]', value)):
         raise ValueError(f"argument '{param}' could not be parsed")
-    column_operator_pattern = r'^"[^"]*"__[a-zA-Z_]+'
-    value_pattern = r'\."[^"]*"$'
-    if param.count('"') == 0:
-        _split = param.split(".")
-        if len(_split) != 2:
-            raise ValueError(f"argument '{param}' could not be parsed")
-        return _split[0], _split[1]
-    column_operator = re.findall(column_operator_pattern, param)
-    value = re.findall(value_pattern, param)
-    if param.count('"') == 4:
-        if len(column_operator) != 1 or len(value) != 1:
-            raise ValueError(f"argument '{param}' could not be parsed")
-        return column_operator[0].replace('"', ""), value[0][2:-1]
-    if not column_operator:
-        # case col__op."val.ue"
-        if not value:
-            raise ValueError(f"argument '{param}' could not be parsed")
-        return param.split(".")[0], value[0][2:-1]
-    # case "col.umn"__op.val
-    return column_operator[0].replace('"', ""), param.split(".")[-1]
+    return column_prefix + operator, quoted_value.group(1) if quoted_value else value
 
 
 def parse_operator(
@@ -304,15 +308,20 @@ def parse_operator(
     operator: str,
     columns: Mapping[str, str],
     top_level: bool = False,
+    depth: int = 1,
 ) -> Statement:
     """Translate `or=(a__exact.1,and(b__less.2,c__isnotnull))` into a parenthesized SQL group."""
+    # each level is parsed on the event loop and rescans the group: without a bound, a 5 KB
+    # query blocks the process, then overflows the recursion
+    if depth > MAX_GROUP_DEPTH:
+        raise ValueError(f"groups cannot be nested more than {MAX_GROUP_DEPTH} levels deep")
     match = re.findall(rf"^{operator}{'=' if top_level else ''}\((.*)\)$", query)
     if not match:
         raise ValueError(f"argument '{query}' could not be parsed")
     conditions: list[Statement] = []
     for param in split_top_level(match[0]):
         if param.startswith(("and(", "or(")):
-            conditions.append(parse_operator(param, param.split("(")[0], columns))
+            conditions.append(parse_operator(param, param.split("(")[0], columns, depth=depth + 1))
         elif param.endswith(("__isnull", "__isnotnull")):
             conditions.append(build_condition(unquote_plus(param).replace('"', ""), "", columns))
         else:
@@ -434,7 +443,7 @@ def build_query(
             # without a value: an aggregator, or `is(not)null`
             column_name, comparator = split_column_operator(key)
             if comparator == GROUP_BY or comparator in AGGREGATE_FUNCTIONS:
-                _, duckdb_type = resolve_column(column_name, columns)
+                duckdb_type = column_type(column_name, columns)
                 parsed.aggregators.setdefault(comparator, []).append(column_name)
                 if is_text(duckdb_type):
                     parsed.text_columns.add(column_name)
@@ -449,9 +458,10 @@ def build_query(
         if key == "columns":
             if '"' in value:
                 raise ValueError('Forbidden character `"` in a column name')
-            parsed.selected = [
-                resolve_column(column, columns)[0] for column in value.split(",") if column
-            ]
+            names = [column for column in value.split(",") if column]
+            for name in names:
+                column_type(name, columns)
+            parsed.selected = [quote_ident(name) for name in names]
             if not parsed.selected:
                 raise ValueError(f"argument '{raw_arg}' could not be parsed")
             continue
@@ -459,8 +469,8 @@ def build_query(
             raise ValueError(f"argument '{key}={value}' could not be parsed")
         column_name, comparator = split_column_operator(key)
         if comparator == "sort":
-            quoted, duckdb_type = resolve_column(column_name, columns)
-            sorted_by = collated(quoted) if is_text(duckdb_type) else quoted
+            quoted = quote_ident(column_name)
+            sorted_by = collated(quoted) if is_text(column_type(column_name, columns)) else quoted
             try:
                 parsed.order_by.append(f"{sorted_by} {parse_sort(value)}")
             except ValueError:

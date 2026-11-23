@@ -233,7 +233,7 @@ components:
       type: object
       properties:
         created_at:
-          description: Last modification date of the parquet file in the bucket
+          description: Date the resource was parsed, embedded in the parquet file by hydra (the last modification date of the file for older files)
           type: string
         url:
           description: Always null in this architecture (the source file is not tracked)

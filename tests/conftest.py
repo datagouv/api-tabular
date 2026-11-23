@@ -79,6 +79,9 @@ INSPECTION = {
     },
 }
 
+# the date hydra parsed the file into its database, as it embeds it (format_utc_datetime)
+EMBEDDED_CREATED_AT = "2026-06-09T10:00:00.123456Z"
+
 # PostgreSQL float columns accept NaN and infinities, and hydra copies them to the parquet
 FLOATS_RESOURCE_ID = "aaaaaaaa-7777-bbbb-8888-cccccccccccc"
 FLOATS_RESOURCE_SQL = """
@@ -117,7 +120,8 @@ def parquet_dir(tmp_path_factory) -> str:
         inspection = json.dumps(INSPECTION).replace("'", "''")
         conn.execute(
             f"COPY ({INSPECTED_RESOURCE_SQL}) TO '{directory}/{INSPECTED_RESOURCE_ID}.parquet' "
-            f"(FORMAT parquet, KV_METADATA {{csv_detective: '{inspection}'}})"
+            f"(FORMAT parquet, KV_METADATA {{csv_detective: '{inspection}', "
+            f"created_at: '{EMBEDDED_CREATED_AT}'}})"
         )
         conn.execute(
             f"COPY ({FLOATS_RESOURCE_SQL}) TO '{directory}/{FLOATS_RESOURCE_ID}.parquet' "

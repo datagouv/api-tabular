@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 from tabular_duckdb.engine import fetch
-from tabular_duckdb.query import build_query
+from tabular_duckdb.query import MAX_GROUP_DEPTH, build_query
 from tabular_duckdb.resources import Resource
 
 from .conftest import RESOURCE_ID, TOTAL_LINES
@@ -498,6 +498,10 @@ def test_query_aggregator_on_unknown_column(source):
             [f'or=("{NAME}"__isnotnull,or(decompte__exact.1,id__contains.-1))'],
             lambda r: r[NAME] is not None or r["decompte"] == 1 or "-1" in r["id"],
         ),
+        (
+            ['or=("score"__strictly_greater."0.9","decompte"__strictly_less.1)'],
+            lambda r: r["score"] > 0.9 or r["decompte"] < 1,
+        ),
     ],
 )
 def test_query_or_group(source, query_string, predicate):
@@ -550,6 +554,11 @@ def test_query_or_group_with_encoded_column_name_on_isnull(source):
         ["or(decompte__exact.1,decompte__greater.3)"],
         # a value holding a dot must be quoted
         ["or=(decompte__exact.1,score__greater.0.8)"],
+        # after a quoted column too
+        ['or=(decompte__exact.1,"score"__greater.0.8)'],
+        # unknown operator on a quoted column
+        ['or=("decompte"__exact_.1)'],
+        ['or=("decompte"__.1)'],
         # sort is not allowed within an operator
         ["or=(decompte__exact.1,score__sort.asc)"],
         # unknown column within an operator
@@ -565,3 +574,16 @@ def test_query_or_group_with_encoded_column_name_on_isnull(source):
 def test_query_with_malformed_or_group(source, query_string):
     with pytest.raises(ValueError):
         run(source, query_string)
+
+
+def test_query_or_group_nesting_is_bounded(source):
+    def nested(depth: int) -> str:
+        group = "decompte__isnull"
+        for _ in range(depth - 1):
+            group = f"and({group})"
+        return f"or=({group})"
+
+    assert ids(source, [nested(MAX_GROUP_DEPTH)]) == []
+    # far beyond the recursion limit, still a ValueError (a 400) rather than a RecursionError
+    with pytest.raises(ValueError, match="nested"):
+        run(source, [nested(2000)])

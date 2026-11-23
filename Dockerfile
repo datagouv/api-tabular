@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
+FROM astral/uv:python3.14-trixie-slim
 
 # the API reads remote files through DuckDB extensions: not as root
 RUN groupadd --system datagouv && \

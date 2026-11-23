@@ -3,6 +3,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, NotRequired, TypedDict
 
 import duckdb
@@ -17,8 +18,15 @@ RESOURCE_ID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
 
-# key-value metadata where hydra embeds the csv-detective inspection of the source file
+# key-value metadata where hydra embeds the csv-detective inspection of the source file, and
+# the date it parsed the file into its database
 INSPECTION_KEY = "csv_detective"
+CREATED_AT_KEY = "created_at"
+
+
+def parquet_literal(resource_id: str) -> str:
+    """The URL of the parquet file of a resource, as a SQL string literal."""
+    return quote_literal(settings.object_url(resource_id))
 
 
 @dataclass
@@ -38,8 +46,7 @@ class Resource:
 
     @property
     def url_literal(self) -> str:
-        """The URL of the parquet file, as a SQL string literal."""
-        return quote_literal(settings.object_url(self.resource_id))
+        return parquet_literal(self.resource_id)
 
     @property
     def source_sql(self) -> str:
@@ -131,17 +138,25 @@ class ResourceCache:
         return resource
 
     async def _load(self, resource_id: str) -> Resource:
-        url_literal = quote_literal(settings.object_url(resource_id))
+        url_literal = parquet_literal(resource_id)
         try:
-            # a single HEAD, which reads no content: whether the file exists, and its date
-            last_modified = await engine.query_value(
-                f"SELECT last_modified FROM read_blob({url_literal})"
-            )
+            # also tells a missing file, by the 404 (or 403) of the storage
             described = await engine.query(f"DESCRIBE SELECT * FROM read_parquet({url_literal})")
-            embedded = await engine.query_value(
-                f"SELECT value FROM parquet_kv_metadata({url_literal}) WHERE decode(key) = ?",
-                [INSPECTION_KEY],
+            metadata = await engine.query(
+                f"SELECT decode(key), value FROM parquet_kv_metadata({url_literal}) "
+                "WHERE decode(key) IN (?, ?)",
+                [INSPECTION_KEY, CREATED_AT_KEY],
             )
+            embedded: dict[str, bytes] = dict(metadata.rows)
+            if CREATED_AT_KEY in embedded:
+                created_at = datetime.fromisoformat(embedded[CREATED_AT_KEY].decode()).isoformat()
+            else:
+                # files exported before hydra embedded the date: the upload date of the file,
+                # read by a single HEAD
+                last_modified = await engine.query_value(
+                    f"SELECT last_modified FROM read_blob({url_literal})"
+                )
+                created_at = last_modified.isoformat() if last_modified else None
         except duckdb.Error as exc:
             raise read_error(exc, resource_id) from exc
         columns = {row[0]: row[1] for row in described.rows}
@@ -155,9 +170,9 @@ class ResourceCache:
                 )
         return Resource(
             resource_id=resource_id,
-            created_at=last_modified.isoformat() if last_modified else None,
+            created_at=created_at,
             columns=columns,
-            inspection=json.loads(embedded) if embedded is not None else None,
+            inspection=json.loads(embedded[INSPECTION_KEY]) if INSPECTION_KEY in embedded else None,
         )
 
 

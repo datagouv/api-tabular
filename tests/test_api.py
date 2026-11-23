@@ -1,4 +1,6 @@
+import asyncio
 import csv
+import gc
 import io
 import shutil
 from pathlib import Path
@@ -9,6 +11,7 @@ import sentry_sdk
 import yaml
 from fastapi.testclient import TestClient
 from sentry_sdk.transport import Transport
+from starlette.types import Message, Scope
 
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine
@@ -216,6 +219,60 @@ def test_exports_open_at_once_are_bounded(client, monkeypatch):
     assert client.get(f"{DATA_URL}csv/").status_code == 200
 
 
+async def cut_off_download(path: str) -> int:
+    """A slow client going away while the first chunk of a download is sent, as uvicorn tells
+    the application: the response is cancelled within `send`, with its body suspended at a
+    `yield`. Returns the status of the response."""
+    started = asyncio.Event()
+    status = 0
+
+    async def receive() -> Message:
+        await started.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        nonlocal status
+        if message["type"] == "http.response.start":
+            status = message["status"]
+        elif status == 200:
+            started.set()
+            await asyncio.Event().wait()
+
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+    }
+    await app(scope, receive, send)
+    return status
+
+
+@pytest.mark.parametrize("output", ["csv", "json"])
+def test_a_download_cut_off_by_its_client_frees_its_slot(client, monkeypatch, output):
+    """Without the garbage collector, which Starlette would leave the abandoned body to."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "STREAM_CHUNK_SIZE", 1)
+    gc.disable()
+    try:
+        statuses = [
+            client.portal.call(cut_off_download, f"{DATA_URL}{output}/")
+            for _ in range(settings.QUERY_WORKERS + 1)
+        ]
+    finally:
+        gc.enable()
+    # once every slot leaked, the next download would answer 503 "Server busy"
+    assert statuses == [200] * (settings.QUERY_WORKERS + 1)
+
+
 def test_health_and_data_when_every_query_slot_is_taken(client, monkeypatch):
     """Slow /data/ queries must neither make /health/ fail nor queue the others forever."""
     monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
@@ -236,7 +293,7 @@ def test_resource_meta(client, base_url):
     response = client.get(f"/api/resources/{RESOURCE_ID}/")
     assert response.status_code == 200
     assert response.json() == {
-        # the Last-Modified header of the object
+        # a file without the date hydra embeds: the Last-Modified header of the object
         "created_at": "2024-01-01T12:00:00+00:00",
         "url": f"https://www.data.gouv.fr/api/1/datasets/r/{RESOURCE_ID}",
         "links": [
@@ -257,6 +314,12 @@ def test_resource_meta(client, base_url):
             },
         ],
     }
+
+
+def test_resource_meta_created_at_is_the_date_hydra_embeds(client):
+    """The ingestion date the PostgREST-based API served from tables_index, not the upload."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/")
+    assert response.json()["created_at"] == "2026-06-09T10:00:00.123456+00:00"
 
 
 @pytest.mark.parametrize("suffix", ["", "profile/", "swagger/", "data/", "data/csv/"])
@@ -293,6 +356,31 @@ def test_cors_preflight(client, headers):
     assert response.status_code == 204
     assert response.headers["access-control-allow-origin"] == "*"
     assert response.headers["access-control-allow-methods"] == "GET, OPTIONS"
+
+
+def test_cors_preflight_on_an_unknown_resource(client):
+    """The route exists: whether the resource does is up to the request that follows."""
+    response = client.options(
+        f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/",
+        headers={"Access-Control-Request-Method": "GET"},
+    )
+    assert response.status_code == 204
+
+
+def test_cors_preflight_on_an_unknown_path(client):
+    response = client.options(
+        "/api/does-not-exist/", headers={"Access-Control-Request-Method": "GET"}
+    )
+    assert response.status_code == 404
+    assert response.text == "404: Not Found"
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+def test_cors_preflight_for_a_method_the_route_refuses(client):
+    response = client.options(DATA_URL, headers={"Access-Control-Request-Method": "POST"})
+    assert response.status_code == 405
+    assert set(response.headers["allow"].replace(" ", "").split(",")) == {"GET", "HEAD"}
+    assert response.headers["access-control-allow-origin"] == "*"
 
 
 @pytest.mark.parametrize("suffix", ["", "data/"])
@@ -336,18 +424,23 @@ def test_resource_profile(client):
     # SUMMARIZE renders min and max as strings, whatever the column type
     assert profile["profile"]["decompte"]["min"] == "0"
     assert profile["profile"]["decompte"]["max"] == "6"
+    decomptes = [i % 7 for i in range(1, TOTAL_LINES + 1)]
+    assert profile["profile"]["decompte"]["mean"] == pytest.approx(sum(decomptes) / TOTAL_LINES)
+    assert profile["profile"]["decompte"]["std"] is not None
+    assert profile["profile"]["decompte"]["nb_distinct"] == 7
     assert profile["profile"]["Nom de l'élu"]["nb_missing_values"] == TOTAL_LINES // 5
     assert profile["profile"]["decompte"]["nb_missing_values"] == 0
     # a nested column, which the parquet footer only describes through its leaves
     assert profile["profile"]["liste"]["nb_missing_values"] == 0
 
 
-def test_resource_profile_counts_rare_missing_values_across_row_groups(client, parquet_dir):
+def test_resource_profile_counts_rare_missing_values_across_row_groups(
+    client, parquet_dir, duckdb_connection
+):
     path = f"{parquet_dir}/{RARE_NULL_RESOURCE_ID}.parquet"
-    with duckdb.connect(":memory:") as conn:
-        [(row_groups,)] = conn.execute(
-            f"SELECT num_row_groups FROM parquet_file_metadata('{path}')"
-        ).fetchall()
+    [(row_groups,)] = duckdb_connection.execute(
+        f"SELECT num_row_groups FROM parquet_file_metadata('{path}')"
+    ).fetchall()
     assert row_groups > 1
     response = client.get(f"/api/resources/{RARE_NULL_RESOURCE_ID}/profile/")
     profile = response.json()["profile"]
@@ -480,17 +573,24 @@ def test_resource_data_with_page_size_error(client):
 
 
 @pytest.mark.parametrize(
-    "name, value, detail",
+    "argument, detail",
     [
-        ("page", "0", "`page` must be greater than 0"),
-        ("page", "-3", "`page` must be greater than 0"),
-        ("page_size", "0", "`page_size` must be greater than 0"),
-        ("page_size", "-1", "`page_size` must be greater than 0"),
-        ("page", "abc", "`page` must be an integer, got 'abc'"),
+        ("page_size=0", "Page size must be at least 1"),
+        ("page_size=-1", "Page size must be at least 1"),
+        ("page_size=abc", "Page size must be an integer"),
+        ("page_size=1.5", "Page size must be an integer"),
+        ("page_size=", "Page size must be an integer"),
+        ("page=abc", "Page must be an integer"),
+        ("page=", "Page must be an integer"),
+        ("page=0", "Page must be at least 1"),
+        ("page=-1", "Page must be at least 1"),
+        # an offset beyond the BIGINT of DuckDB, which would fail as a database error
+        ("page=1000000000000000000", "Page is too large"),
     ],
 )
-def test_resource_data_with_invalid_page(client, name, value, detail):
-    response = client.get(DATA_URL, params={name: value})
+def test_resource_data_with_invalid_page(client, argument, detail):
+    """The messages of the PostgREST-based API."""
+    response = client.get(f"{DATA_URL}?{argument}")
     assert response.status_code == 400
     assert response.json() == {
         "errors": [{"code": None, "title": "Invalid query string", "detail": detail}]
@@ -595,8 +695,9 @@ def test_resource_data_unknown_column(client):
     [
         (1, 3, [0, 1, 2], True),
         (3, 3, [6], False),
-        # like the PostgREST-based API, a full page always links to the next one
-        (1, 7, list(range(7)), True),
+        (1, 6, list(range(6)), True),
+        # a full last page does not link to an empty one
+        (1, 7, list(range(7)), False),
     ],
 )
 def test_resource_data_aggregation(client, page, page_size, groups, has_next):
@@ -660,6 +761,7 @@ def test_resource_data_csv(client):
     response = client.get(f"{DATA_URL}csv/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == f'attachment; filename="{RESOURCE_ID}.csv"'
     rows = list(csv.reader(io.StringIO(response.text)))
     assert rows[0] == ["__id"] + HEADER
     assert len(rows) == TOTAL_LINES + 1
@@ -684,6 +786,7 @@ def test_resource_data_csv_non_finite_floats(client):
 def test_resource_data_json(client):
     response = client.get(f"{DATA_URL}json/")
     assert response.status_code == 200
+    assert response.headers["content-disposition"] == f'attachment; filename="{RESOURCE_ID}.json"'
     rows = response.json()
     assert len(rows) == TOTAL_LINES
     assert rows[0] == FIRST_ROW

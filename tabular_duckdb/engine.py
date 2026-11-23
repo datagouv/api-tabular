@@ -1,8 +1,10 @@
 import asyncio
+import tempfile
 import threading
 from collections.abc import AsyncGenerator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TypeVar
 
 import duckdb
@@ -11,6 +13,10 @@ from tabular_duckdb.config import settings
 from tabular_duckdb.errors import query_timeout, server_busy
 
 T = TypeVar("T")
+
+# where queries larger than DUCKDB_MEMORY_LIMIT spill: DuckDB defaults to `.tmp` in the working
+# directory, which the user of the image cannot write to
+TEMP_DIRECTORY = str(Path(tempfile.gettempdir()) / "duckdb")
 
 
 def quote_literal(value: str) -> str:
@@ -71,6 +77,7 @@ class DuckDBEngine:
         # connection, while every query runs on a cursor of its own
         db.execute(f"SET GLOBAL threads={int(settings.DUCKDB_THREADS)}")
         db.execute(f"SET GLOBAL memory_limit={quote_literal(settings.DUCKDB_MEMORY_LIMIT)}")
+        db.execute(f"SET GLOBAL temp_directory={quote_literal(TEMP_DIRECTORY)}")
         # httpfs reads the parquet files over HTTP(S); the other extensions in use (parquet, icu,
         # json) are built into DuckDB. INSTALL does nothing when the image already installed it
         db.execute("INSTALL httpfs")
