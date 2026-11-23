@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     # DuckDB, for the single instance shared by every query
     DUCKDB_THREADS: int = 4
     DUCKDB_MEMORY_LIMIT: str = "2GB"
-    # caches the parquet footers and HTTP metadata: much faster on repeated queries, but a
-    # replaced parquet file keeps being served from the cached metadata until restart
+    # caches the HTTP metadata of the files, which saves a HEAD per query, but a parquet file
+    # replaced in the bucket fails to read until restart (the footers are cached either way)
     DUCKDB_METADATA_CACHE: bool = False
     # every query is interrupted after QUERY_TIMEOUT seconds, at most QUERY_WORKERS of them run
     # at once, and at most QUERY_WORKERS CSV/JSON exports are open at once

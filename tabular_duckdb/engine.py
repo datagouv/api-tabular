@@ -95,9 +95,12 @@ class DuckDBEngine:
         # 503 is retried seven times with a doubling backoff, holding a query thread for 30 s
         db.execute("SET GLOBAL http_retries=0")
         db.execute(f"SET GLOBAL http_timeout={settings.QUERY_TIMEOUT}")
+        # a cached footer is checked against the Last-Modified of a HEAD on every query, which
+        # tells a file replaced in the bucket; the HTTP metadata cache saves that HEAD, at the cost
+        # of reading a replaced file with the size of the old one
+        db.execute("SET GLOBAL parquet_metadata_cache=true")
         if settings.DUCKDB_METADATA_CACHE:
             db.execute("SET GLOBAL enable_http_metadata_cache=true")
-            db.execute("SET GLOBAL parquet_metadata_cache=true")
         return db
 
     async def start(self) -> None:

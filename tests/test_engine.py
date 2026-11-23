@@ -1,6 +1,9 @@
 import asyncio
 import gc
+import os
 import time
+from email.utils import formatdate
+from pathlib import Path
 
 import duckdb
 import pytest
@@ -8,7 +11,14 @@ import pytest
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import TEMP_DIRECTORY
 
-from .conftest import SLOW_QUERY
+from .conftest import SLOW_QUERY, ParquetFilesHandler, serve
+
+
+class DatedParquetFilesHandler(ParquetFilesHandler):
+    """Dates the files by their mtime, like the bucket dates an object by its upload."""
+
+    def last_modified(self, path: Path) -> str:
+        return formatdate(path.stat().st_mtime, usegmt=True)
 
 
 @pytest.fixture
@@ -72,6 +82,27 @@ async def test_a_storage_that_never_answers_does_not_hold_a_thread(
             engine.query(f"SELECT * FROM read_parquet('{silent_storage}/x.parquet')"), 15
         )
     assert time.monotonic() - started < 5
+
+
+async def test_a_parquet_file_replaced_in_the_bucket_is_read_again(start_engine, tmp_path):
+    """The footers are cached: a replaced file must not be read through the old one."""
+    path = tmp_path / "r.parquet"
+
+    def upload(rows: int, uploaded_at: int) -> None:
+        with duckdb.connect() as conn:
+            conn.execute(
+                f"COPY (SELECT range AS a FROM range({rows})) TO '{path}' (FORMAT parquet)"
+            )
+        os.utime(path, (uploaded_at, uploaded_at))
+
+    engine = await start_engine()
+    handler = type("Handler", (DatedParquetFilesHandler,), {"directory": tmp_path})
+    with serve(handler) as base_url:
+        count = f"SELECT count(*) FROM read_parquet('{base_url}/r.parquet')"
+        upload(10, 1_700_000_000)
+        assert await engine.query_value(count) == 10
+        upload(25, 1_700_000_060)
+        assert await engine.query_value(count) == 25
 
 
 async def test_a_storage_failing_the_reads_fails_the_query_at_once(storage, start_engine):

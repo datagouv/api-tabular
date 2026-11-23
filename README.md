@@ -283,7 +283,7 @@ Configuration is handled through environment variables or a `.env` file ([.env.e
 | `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
 | `DOC_PATH` | `/api/doc` | path of the API documentation |
 | `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
-| `DUCKDB_METADATA_CACHE` | `false` | cache parquet footers and HTTP metadata (see below) |
+| `DUCKDB_METADATA_CACHE` | `false` | cache the HTTP metadata of the files (see below) |
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
 | `STREAM_CHUNK_SIZE` | `1000` | rows fetched at once by the CSV/JSON downloads |
@@ -293,7 +293,7 @@ Configuration is handled through environment variables or a `.env` file ([.env.e
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
 | `SENTRY_DSN` / `SENTRY_SAMPLE_RATE` | empty / `1.0` | error reporting |
 
-Reading over the network costs one footer fetch per query (~120 ms on the OVH bucket). `DUCKDB_METADATA_CACHE=true` removes it almost entirely, but DuckDB offers no way to invalidate that cache, so a parquet file replaced in the bucket keeps being served from the cached metadata until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
+The parquet footers are always cached: each query still sends a HEAD, whose `Last-Modified` tells DuckDB that a file was replaced in the bucket and that its footer must be read again. `DUCKDB_METADATA_CACHE=true` also caches the HTTP metadata, which saves that HEAD, but a file replaced in the bucket then fails to read (its size no longer matches the cached one) until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
 
 ## 🧪 Testing
 

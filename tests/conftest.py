@@ -218,6 +218,9 @@ class ParquetFilesHandler(BaseHTTPRequestHandler):
 
     directory: Path
 
+    def last_modified(self, path: Path) -> str:
+        return LAST_MODIFIED
+
     def _file(self) -> Path | None:
         path = self.directory / self.path.strip("/")
         return path if path.is_file() else None
@@ -230,7 +233,7 @@ class ParquetFilesHandler(BaseHTTPRequestHandler):
             return
         self.send_response(200)
         self.send_header("Content-Length", str(path.stat().st_size))
-        self.send_header("Last-Modified", LAST_MODIFIED)
+        self.send_header("Last-Modified", self.last_modified(path))
         self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
 
