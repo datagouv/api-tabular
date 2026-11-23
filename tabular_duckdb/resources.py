@@ -12,7 +12,7 @@ from starlette.exceptions import HTTPException
 from tabular_duckdb.config import settings
 from tabular_duckdb.engine import engine, quote_literal
 from tabular_duckdb.errors import QueryException, handle_exception, safe_message
-from tabular_duckdb.query import ID_COLUMN, python_type, quote_ident
+from tabular_duckdb.query import ID_COLUMN, is_text, python_type, quote_ident
 
 RESOURCE_ID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -47,6 +47,15 @@ class Resource:
     @property
     def url_literal(self) -> str:
         return parquet_literal(self.resource_id)
+
+    @property
+    def json_columns(self) -> set[str]:
+        """Columns typed json by csv-detective, which hydra stores as text."""
+        return {
+            name
+            for name, column in profile_columns(self).items()
+            if column["python_type"] == "json" and is_text(self.columns.get(name, ""))
+        }
 
     @property
     def source_sql(self) -> str:

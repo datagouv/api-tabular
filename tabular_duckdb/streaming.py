@@ -1,7 +1,7 @@
 import csv
 import io
 import json
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Collection, Sequence
 from contextlib import aclosing
 from typing import Any
 
@@ -75,12 +75,14 @@ async def stream_csv(chunks: AsyncGenerator[QueryResult]) -> AsyncGenerator[byte
             yield buffer.getvalue().encode("utf-8")
 
 
-async def stream_json(chunks: AsyncGenerator[QueryResult]) -> AsyncGenerator[bytes]:
+async def stream_json(
+    chunks: AsyncGenerator[QueryResult], json_columns: Collection[str]
+) -> AsyncGenerator[bytes]:
     separator = ""
     yield b"["
     async with aclosing(chunks):
         async for chunk in chunks:
-            rows = rows_to_json(chunk.columns, chunk.rows)
+            rows = rows_to_json(chunk.columns, chunk.rows, json_columns)
             yield (
                 separator + ",".join(json.dumps(row, ensure_ascii=False) for row in rows)
             ).encode("utf-8")

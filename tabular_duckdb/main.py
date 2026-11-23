@@ -280,7 +280,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     path = request.url.path
     return JSONResponse(
         {
-            "data": rows_to_json(result.columns, rows),
+            "data": rows_to_json(result.columns, rows, resource.json_columns),
             "links": {
                 "profile": resource_url(rid, "profile/"),
                 "swagger": resource_url(rid, "swagger/"),
@@ -303,7 +303,7 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
 async def stream_resource_data(
     request: Request,
     rid: str,
-    streamer: Callable[[AsyncGenerator[QueryResult]], AsyncGenerator[bytes]],
+    streamer: Callable[[AsyncGenerator[QueryResult], Resource], AsyncGenerator[bytes]],
     media_type: str,
     extension: str,
 ) -> ClosingStreamingResponse:
@@ -317,7 +317,7 @@ async def stream_resource_data(
     except duckdb.Error as exc:
         raise database_error(exc, rid) from exc
     return ClosingStreamingResponse(
-        streamer(chunks),
+        streamer(chunks, resource),
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{rid}.{extension}"'},
     )
@@ -325,12 +325,21 @@ async def stream_resource_data(
 
 @get("/api/resources/{rid}/data/csv/")
 async def resource_data_csv(request: Request, rid: str) -> ClosingStreamingResponse:
-    return await stream_resource_data(request, rid, stream_csv, "text/csv", "csv")
+    # json columns keep their text, as in the CSV export of the PostgREST-based API
+    return await stream_resource_data(
+        request, rid, lambda chunks, _: stream_csv(chunks), "text/csv", "csv"
+    )
 
 
 @get("/api/resources/{rid}/data/json/")
 async def resource_data_json(request: Request, rid: str) -> ClosingStreamingResponse:
-    return await stream_resource_data(request, rid, stream_json, "application/json", "json")
+    return await stream_resource_data(
+        request,
+        rid,
+        lambda chunks, resource: stream_json(chunks, resource.json_columns),
+        "application/json",
+        "json",
+    )
 
 
 @get("/health/")

@@ -40,6 +40,20 @@ def test_timestamp_with_time_zone_is_serialized(duckdb_connection):
     duckdb_connection.execute("SET TimeZone='UTC'")
     cursor = duckdb_connection.execute("SELECT TIMESTAMPTZ '2024-01-01 12:00:00+00' AS t")
     rows = cursor.fetchall()
-    [row] = rows_to_json(["t"], rows)
+    [row] = rows_to_json(["t"], rows, json_columns=set())
     assert row["t"] == "2024-01-01T12:00:00+00:00"
     assert as_csv_value(rows[0][0]) == "2024-01-01T12:00:00+00:00"
+
+
+def test_json_columns_are_parsed():
+    rows = [('{"a": [1, null]}', '{"a": 1}'), ("[]", "[]"), (None, None)]
+    assert rows_to_json(["parsed", "text"], rows, json_columns={"parsed"}) == [
+        {"parsed": {"a": [1, None]}, "text": '{"a": 1}'},
+        {"parsed": [], "text": "[]"},
+        {"parsed": None, "text": None},
+    ]
+
+
+def test_a_json_column_holding_invalid_json_keeps_its_text():
+    """The source file is checked by csv-detective only: nothing else validates the values."""
+    assert rows_to_json(["l"], [("[1, 2",)], json_columns={"l"}) == [{"l": "[1, 2"}]

@@ -1,5 +1,6 @@
 import json
 import math
+from collections.abc import Collection
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
@@ -28,8 +29,25 @@ def jsonable(value: Any) -> Any:
     return str(value)
 
 
-def rows_to_json(columns: list[str], rows: list[tuple]) -> list[dict]:
-    return [{column: jsonable(value) for column, value in zip(columns, row)} for row in rows]
+def json_value(value: Any) -> Any:
+    """A value of a column typed json by csv-detective, which hydra stores as text."""
+    if not isinstance(value, str):
+        return jsonable(value)
+    try:
+        return json.loads(value)
+    except ValueError:
+        # csv-detective types a column from the values it samples: one may not parse
+        return value
+
+
+def rows_to_json(
+    columns: list[str], rows: list[tuple], json_columns: Collection[str]
+) -> list[dict]:
+    converters = [json_value if column in json_columns else jsonable for column in columns]
+    return [
+        {column: convert(value) for column, convert, value in zip(columns, converters, row)}
+        for row in rows
+    ]
 
 
 def as_csv_value(value: Any) -> str:

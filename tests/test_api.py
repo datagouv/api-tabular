@@ -515,14 +515,30 @@ def test_resource_swagger_uses_the_inspection_types(client):
 
 
 def test_resource_data_with_a_parquet_inspection(client):
+    """`liste` is stored as text, but typed json: served as a JSON value, like PostgREST served
+    the JSON column of the table."""
     response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/")
     assert response.status_code == 200
     body = response.json()
     assert body["data"] == [
-        {"__id": 1, "code": "62", "liste": "[1, 2]", "n": 3},
+        {"__id": 1, "code": "62", "liste": [1, 2], "n": 3},
         {"__id": 2, "code": "59", "liste": None, "n": 4},
     ]
     assert body["meta"]["total"] == 2
+
+
+def test_resource_json_download_with_a_parquet_inspection(client):
+    rows = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/json/").json()
+    assert [row["liste"] for row in rows] == [[1, 2], None]
+
+
+def test_resource_csv_download_keeps_the_text_of_json_columns(client):
+    rows = list(
+        csv.reader(
+            io.StringIO(client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/csv/").text)
+        )
+    )
+    assert [row[2] for row in rows[1:]] == ["[1, 2]", ""]
 
 
 def test_resource_swagger(client):
