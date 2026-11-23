@@ -401,8 +401,15 @@ class ParsedQuery:
 
     def data_sql(self, source: str) -> Statement:
         # the last keys break the ties of the requested sort, so that pagination is
-        # deterministic: __id for rows, the grouped columns for groups
-        tiebreak = self.group_by if self.is_aggregated else [f"{quote_ident(ID_COLUMN)} ASC"]
+        # deterministic: __id for rows, the grouped columns for groups. Unsorted rows need none:
+        # preserve_insertion_order returns them in the order of the file, that is of __id, where
+        # an ORDER BY __id would read and sort the whole file to reach a deep page
+        if self.is_aggregated:
+            tiebreak = self.group_by
+        elif self.order_by:
+            tiebreak = [f"{quote_ident(ID_COLUMN)} ASC"]
+        else:
+            tiebreak = []
         order_by = [*self.order_by, *tiebreak]
         sql = f"SELECT {self.select_clause()} {self.from_clause(source)}"
         if order_by:

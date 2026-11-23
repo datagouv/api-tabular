@@ -591,6 +591,25 @@ def test_resource_data_last_page_has_no_next(client):
     assert body["links"]["next"] is None
 
 
+@pytest.mark.parametrize(
+    "params, row_values, page",
+    [
+        # rows 9975 to 10009: across the boundary of the first two row groups
+        ({}, range(RARE_NULL_TOTAL_LINES), 286),
+        # rows 19980 to 20014 of the filtered ones: across the boundary of the next two
+        ({"value__greater": 5000}, range(5000, RARE_NULL_TOTAL_LINES), 429),
+    ],
+)
+def test_resource_data_unsorted_pages_follow_the_file_order(client, params, row_values, page):
+    """Without a sort, pages come in __id order, across the row groups of the file."""
+    page_size = 35
+    # the value of a row is its index in the file, its __id the next integer
+    expected = [i + 1 for i in row_values][(page - 1) * page_size : page * page_size]
+    url = f"/api/resources/{RARE_NULL_RESOURCE_ID}/data/"
+    body = client.get(url, params={**params, "page": page, "page_size": page_size}).json()
+    assert [row["__id"] for row in body["data"]] == expected
+
+
 def test_resource_data_with_page_size_error(client):
     response = client.get(DATA_URL, params={"page": 1, "page_size": settings.PAGE_SIZE_MAX + 1})
     assert response.status_code == 400

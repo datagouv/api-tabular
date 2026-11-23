@@ -84,6 +84,8 @@ class DuckDBEngine:
         db.execute("INSTALL httpfs")
         db.execute("LOAD httpfs")
         db.execute("SET GLOBAL max_expression_depth=500")
+        # the default, which the unsorted pagination relies on to return rows in __id order
+        db.execute("SET GLOBAL preserve_insertion_order=true")
         # the dates of the files (`created_at`), whatever the time zone of the server
         db.execute("SET GLOBAL TimeZone='UTC'")
         # reuse connections across the many range requests a parquet scan needs
