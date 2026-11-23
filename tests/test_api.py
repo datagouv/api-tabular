@@ -33,6 +33,7 @@ from .conftest import (
     SLOW_QUERY,
     TOTAL_LINES,
     UNKNOWN_RESOURCE_ID,
+    UPPER_ID_COLUMN_RESOURCE_ID,
 )
 
 DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
@@ -428,6 +429,14 @@ def test_resource_profile(client):
         "Nom de l'élu": "string",
         "liste": "json",
     }
+    assert profile["formats"] == {
+        "string": ["id", "Nom de l'élu"],
+        "float": ["score"],
+        "int": ["decompte"],
+        "bool": ["is_true"],
+        "date": ["birth"],
+        "json": ["liste"],
+    }
     # SUMMARIZE renders min and max as strings, whatever the column type
     assert profile["profile"]["decompte"]["min"] == "0"
     assert profile["profile"]["decompte"]["max"] == "6"
@@ -438,7 +447,7 @@ def test_resource_profile(client):
     assert profile["profile"]["Nom de l'élu"]["nb_missing_values"] == TOTAL_LINES // 5
     assert profile["profile"]["decompte"]["nb_missing_values"] == 0
     # a nested column, which the parquet footer only describes through its leaves
-    assert profile["profile"]["liste"]["nb_missing_values"] == 0
+    assert profile["profile"]["liste"]["nb_missing_values"] == TOTAL_LINES // 3
 
 
 def test_resource_profile_counts_rare_missing_values_across_row_groups(
@@ -490,7 +499,8 @@ def test_resource_profile_from_the_parquet_inspection(client):
 
 
 def test_resource_swagger_uses_the_inspection_types(client):
-    """`liste` is stored as a string but csv-detective typed it as json: null checks only."""
+    """`liste` is stored as a string but csv-detective typed it as json: only null checks are
+    advertised."""
     response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/swagger/")
     swagger = yaml.safe_load(response.text)
     names = {
@@ -648,9 +658,10 @@ def test_resource_data_value_not_castable(client):
     assert response.status_code == 400
 
 
-def test_a_column_named_like_the_row_id_is_replaced_by_it(client):
+@pytest.mark.parametrize("resource_id", [ID_COLUMN_RESOURCE_ID, UPPER_ID_COLUMN_RESOURCE_ID])
+def test_a_column_named_like_the_row_id_is_replaced_by_it(client, resource_id):
     """`__id` stays the row number of the API, instead of the file's column hiding it."""
-    response = client.get(f"/api/resources/{ID_COLUMN_RESOURCE_ID}/data/")
+    response = client.get(f"/api/resources/{resource_id}/data/")
     assert response.status_code == 200
     assert response.json()["data"] == [
         {"__id": 1, "value": 0},

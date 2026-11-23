@@ -85,7 +85,8 @@ TYPE_POSSIBILITIES = {
         "groupby",
         "count",
     ],
-    # columns holding nested values only support null checks
+    # only null checks are advertised on nested values: the other filters compare their text
+    # rendering, whose form a client cannot guess
     "json": [
         "isnull",
         "isnotnull",

@@ -32,7 +32,9 @@ COMPARATORS = {
 }
 SORT_DIRECTIONS = {"asc": "ASC", "desc": "DESC"}
 NULLS_PLACEMENTS = {"nullsfirst": "NULLS FIRST", "nullslast": "NULLS LAST"}
-RESERVED_ARGUMENTS = ("page", "page_size", "columns")
+# handled by the caller, which needs them to build the pagination links
+PAGINATION_ARGUMENTS = ("page", "page_size")
+RESERVED_ARGUMENTS = (*PAGINATION_ARGUMENTS, "columns")
 MAX_GROUP_DEPTH = 50
 
 TRUE_VALUES = ("true", "t", "1", "yes", "y")
@@ -455,8 +457,7 @@ def build_query(
                 raise ValueError(f"argument '{key}' could not be parsed")
             parsed.add_condition(build_condition(key, "", columns))
             continue
-        if key in ("page", "page_size"):
-            # handled by the caller, which needs them to build the pagination links
+        if key in PAGINATION_ARGUMENTS:
             continue
         if key == "columns":
             if '"' in value:

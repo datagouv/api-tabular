@@ -43,16 +43,13 @@ def server_busy(seconds: float) -> QueryException:
     )
 
 
-def handle_exception(
-    status: int, title: str, detail: str, resource_id: str | None = None
-) -> QueryException:
+def handle_exception(status: int, title: str, detail: str, resource_id: str) -> QueryException:
     """Report to Sentry (when configured) and build the exception to raise."""
     event_id = None
     if sentry_sdk.get_client().is_active():
         with sentry_sdk.new_scope() as scope:
-            tags = {"status": status, "title": title, "detail": detail}
-            if resource_id:
-                tags["resource_id"] = resource_id
-            scope.set_tags(tags)
+            scope.set_tags(
+                {"status": status, "title": title, "detail": detail, "resource_id": resource_id}
+            )
             event_id = sentry_sdk.capture_exception(Exception(detail))
     return QueryException(status, title, detail, event_id)

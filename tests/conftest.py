@@ -32,7 +32,7 @@ SELECT
     i % 2 = 0 AS is_true,
     (DATE '1950-01-01' + to_years(i::INTEGER))::DATE AS birth,
     CASE WHEN i % 5 = 0 THEN NULL ELSE 'Élu ' || i END AS "Nom de l'élu",
-    ['a', 'b'] AS liste
+    CASE WHEN i % 3 = 0 THEN NULL ELSE ['a', 'b'] END AS liste
 FROM range(1, {TOTAL_LINES + 1}) AS t(i)
 """
 HEADER = ["id", "score", "decompte", "is_true", "birth", "Nom de l'élu", "liste"]
@@ -106,6 +106,9 @@ CORRUPT_RESOURCE_ID = "aaaaaaaa-dead-bbbb-beef-cccccccccccc"
 # files with a column of the name the API uses for the row id, or reads the row numbers from
 ID_COLUMN_RESOURCE_ID = "aaaaaaaa-1d1d-bbbb-1d1d-cccccccccccc"
 ID_COLUMN_RESOURCE_SQL = "SELECT 'own-' || i AS __id, i AS value FROM range(3) AS t(i)"
+# DuckDB names are case insensitive: this column hides the row id too
+UPPER_ID_COLUMN_RESOURCE_ID = "aaaaaaaa-1d1d-bbbb-1d1d-dddddddddddd"
+UPPER_ID_COLUMN_RESOURCE_SQL = "SELECT 'own-' || i AS __ID, i AS value FROM range(3) AS t(i)"
 ROW_NUMBER_COLUMN_RESOURCE_ID = "aaaaaaaa-4040-bbbb-4040-cccccccccccc"
 ROW_NUMBER_COLUMN_RESOURCE_SQL = "SELECT i AS File_Row_Number FROM range(3) AS t(i)"
 
@@ -133,6 +136,10 @@ def parquet_dir(tmp_path_factory) -> str:
         )
         conn.execute(
             f"COPY ({ID_COLUMN_RESOURCE_SQL}) TO '{directory}/{ID_COLUMN_RESOURCE_ID}.parquet'"
+        )
+        conn.execute(
+            f"COPY ({UPPER_ID_COLUMN_RESOURCE_SQL}) "
+            f"TO '{directory}/{UPPER_ID_COLUMN_RESOURCE_ID}.parquet'"
         )
         conn.execute(
             f"COPY ({ROW_NUMBER_COLUMN_RESOURCE_SQL}) "

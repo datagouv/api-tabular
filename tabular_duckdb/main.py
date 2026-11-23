@@ -29,7 +29,7 @@ from tabular_duckdb.errors import (
     invalid_query_string,
     safe_message,
 )
-from tabular_duckdb.query import ParsedQuery, Statement, build_query
+from tabular_duckdb.query import PAGINATION_ARGUMENTS, ParsedQuery, Statement, build_query
 from tabular_duckdb.resources import (
     Resource,
     build_profile,
@@ -66,7 +66,7 @@ def build_link_with_page(path: str, query_string: list[str], page: int, page_siz
     query = [
         argument
         for argument in query_string
-        if argument.partition("=")[0] not in ("page", "page_size")
+        if argument.partition("=")[0] not in PAGINATION_ARGUMENTS
     ]
     query.extend([f"page={page}", f"page_size={page_size}"])
     return external_url(f"{path}?{'&'.join(query)}")
@@ -300,7 +300,13 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     )
 
 
-async def stream_resource_data(request: Request, rid: str, format: str) -> ClosingStreamingResponse:
+async def stream_resource_data(
+    request: Request,
+    rid: str,
+    streamer: Callable[[AsyncGenerator[QueryResult]], AsyncGenerator[bytes]],
+    media_type: str,
+    extension: str,
+) -> ClosingStreamingResponse:
     resource = await resource_cache.get(rid)
     parsed = parse_query(query_arguments(request), resource.query_columns)
     check_output_size(await run_count(parsed, resource, rid))
@@ -310,24 +316,21 @@ async def stream_resource_data(request: Request, rid: str, format: str) -> Closi
         chunks = await start_stream(statement.sql, statement.params)
     except duckdb.Error as exc:
         raise database_error(exc, rid) from exc
-    streamer, mime = (
-        (stream_json, "application/json") if format == "json" else (stream_csv, "text/csv")
-    )
     return ClosingStreamingResponse(
         streamer(chunks),
-        media_type=mime,
-        headers={"Content-Disposition": f'attachment; filename="{rid}.{format}"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{rid}.{extension}"'},
     )
 
 
 @get("/api/resources/{rid}/data/csv/")
 async def resource_data_csv(request: Request, rid: str) -> ClosingStreamingResponse:
-    return await stream_resource_data(request, rid, format="csv")
+    return await stream_resource_data(request, rid, stream_csv, "text/csv", "csv")
 
 
 @get("/api/resources/{rid}/data/json/")
 async def resource_data_json(request: Request, rid: str) -> ClosingStreamingResponse:
-    return await stream_resource_data(request, rid, format="json")
+    return await stream_resource_data(request, rid, stream_json, "application/json", "json")
 
 
 @get("/health/")

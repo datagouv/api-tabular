@@ -23,6 +23,7 @@ def row(i: int) -> dict:
         "is_true": i % 2 == 0,
         "birth": date(1950 + i, 1, 1),
         NAME: None if i % 5 == 0 else f"Élu {i}",
+        "liste": None if i % 3 == 0 else ["a", "b"],
     }
 
 
@@ -80,10 +81,22 @@ def test_query_pagination_arguments_are_left_to_the_caller(source):
     assert ids(source, ["page=2", "page_size=20"]) == list(range(1, TOTAL_LINES + 1))
 
 
-@pytest.mark.parametrize("direction", ["asc", "desc"])
+@pytest.mark.parametrize("direction", ["asc", "desc", "DESC"])
 def test_query_sort(source, direction):
     values = [r["decompte"] for r in run(source, [f"decompte__sort={direction}"])]
-    assert values == sorted(values, reverse=direction == "desc")
+    assert values == sorted(values, reverse=direction.lower() == "desc")
+
+
+@pytest.mark.parametrize(
+    "argument, predicate",
+    [
+        ("decompte__EXACT=3", lambda r: r["decompte"] == 3),
+        ('or=("decompte"__Strictly_Greater.3)', lambda r: r["decompte"] > 3),
+    ],
+)
+def test_query_operators_are_case_insensitive(source, argument, predicate):
+    """Like the PostgREST-based API."""
+    assert ids(source, [argument]) == expected_ids(predicate)
 
 
 def test_query_multiple_sorts(source):
@@ -309,8 +322,8 @@ def test_query_value_not_castable_to_a_date_column(source, value):
         # contains on a non-text column, which the swagger offers for dates
         ("birth__contains=198", lambda r: "198" in r["birth"].isoformat()),
         # a nested value has no Python counterpart: it is compared through its text rendering
-        ("liste__exact=[a, b]", lambda r: True),
-        ("liste__differs=[a, b]", lambda r: False),
+        ("liste__exact=[a, b]", lambda r: r["liste"] is not None),
+        ("liste__differs=[a, b]", lambda r: r["liste"] is None),
     ],
 )
 def test_query_filters(source, argument, predicate):

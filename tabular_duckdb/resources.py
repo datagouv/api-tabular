@@ -75,7 +75,7 @@ def is_missing_file(exc: duckdb.Error) -> bool:
     return isinstance(exc, duckdb.HTTPException) and getattr(exc, "status_code", None) in (403, 404)
 
 
-def read_error(exc: duckdb.Error, resource_id: str | None = None) -> Exception:
+def read_error(exc: duckdb.Error, resource_id: str) -> Exception:
     """DuckDB cannot read the file: missing resource, failing storage, or unusable parquet."""
     if is_missing_file(exc):
         # also a parquet file deleted while its resource was still in the cache

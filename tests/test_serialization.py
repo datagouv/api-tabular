@@ -35,9 +35,11 @@ def test_duckdb_values_are_serialized(duckdb_connection, expression, json_value,
 
 
 def test_timestamp_with_time_zone_is_serialized(duckdb_connection):
-    """DuckDB converts TIMESTAMPTZ values to timezone-aware datetimes when fetching them."""
+    """DuckDB converts TIMESTAMPTZ values to timezone-aware datetimes when fetching them, in the
+    time zone of the engine."""
+    duckdb_connection.execute("SET TimeZone='UTC'")
     cursor = duckdb_connection.execute("SELECT TIMESTAMPTZ '2024-01-01 12:00:00+00' AS t")
     rows = cursor.fetchall()
     [row] = rows_to_json(["t"], rows)
-    assert row["t"].startswith("2024-01-01")
-    assert as_csv_value(rows[0][0]).startswith("2024-01-01")
+    assert row["t"] == "2024-01-01T12:00:00+00:00"
+    assert as_csv_value(rows[0][0]) == "2024-01-01T12:00:00+00:00"

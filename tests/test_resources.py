@@ -79,6 +79,10 @@ async def test_concurrent_requests_share_a_failing_load(monkeypatch):
     assert all(isinstance(result, QueryException) for result in results)
     assert loads == [FAST_RESOURCE_ID]
     assert time.monotonic() - started < 0.4
+    # a failure is not cached: the parquet file may be exported right after
+    with pytest.raises(QueryException):
+        await cache.get(FAST_RESOURCE_ID)
+    assert loads == [FAST_RESOURCE_ID] * 2
 
 
 @pytest.mark.parametrize("ttl, loads", [(0, 2), (300, 1)])

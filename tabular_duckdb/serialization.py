@@ -1,7 +1,6 @@
 import json
 import math
-import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
@@ -17,10 +16,6 @@ def jsonable(value: Any) -> Any:
         return float(value)
     if isinstance(value, (datetime, date, time)):
         return value.isoformat()
-    if isinstance(value, timedelta):
-        return str(value)
-    if isinstance(value, uuid.UUID):
-        return str(value)
     if isinstance(value, bytes):
         # escaped rather than replaced: two different invalid values (or map keys) stay apart
         return value.decode("utf-8", errors="backslashreplace")
@@ -29,6 +24,7 @@ def jsonable(value: Any) -> Any:
     # lists come as lists, fixed-size arrays as tuples
     if isinstance(value, (list, tuple)):
         return [jsonable(item) for item in value]
+    # UUID, timedelta…
     return str(value)
 
 

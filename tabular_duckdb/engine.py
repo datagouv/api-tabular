@@ -3,6 +3,7 @@ import tempfile
 import threading
 from collections.abc import AsyncGenerator, Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
@@ -115,31 +116,39 @@ class DuckDBEngine:
         """A connection of its own: in a `with`, closed afterwards with everything it created."""
         return self._db.cursor()
 
+    @staticmethod
+    @asynccontextmanager
+    async def _hold(semaphore: asyncio.Semaphore) -> AsyncGenerator[None]:
+        """A slot of the semaphore, or a 503 once QUERY_TIMEOUT is spent waiting for one."""
+        try:
+            await asyncio.wait_for(semaphore.acquire(), settings.QUERY_TIMEOUT)
+        except TimeoutError:
+            raise server_busy(settings.QUERY_TIMEOUT) from None
+        try:
+            yield
+        finally:
+            semaphore.release()
+
     async def run(self, cursor: duckdb.DuckDBPyConnection, call: Callable[[], T]) -> T:
         """Run a blocking call on the query threads, interrupted after QUERY_TIMEOUT seconds."""
         timeout = settings.QUERY_TIMEOUT
-        try:
-            await asyncio.wait_for(self._slots.acquire(), timeout)
-        except TimeoutError:
-            raise server_busy(timeout) from None
-        future = asyncio.get_running_loop().run_in_executor(
-            self._executor, interruptible, cursor, call, timeout
-        )
-        try:
-            return await asyncio.shield(future)
-        except duckdb.InterruptException as exc:
-            raise query_timeout(timeout) from exc
-        except asyncio.CancelledError:
-            # the client went away: stop the query, and let the thread release the cursor
-            # before the caller closes it
-            cursor.interrupt()
-            await asyncio.wait([future])
-            # the interrupted query failed in its thread: read that failure, which asyncio
-            # would otherwise log as an error, and Sentry report, for every client going away
-            future.exception()
-            raise
-        finally:
-            self._slots.release()
+        async with self._hold(self._slots):
+            future = asyncio.get_running_loop().run_in_executor(
+                self._executor, interruptible, cursor, call, timeout
+            )
+            try:
+                return await asyncio.shield(future)
+            except duckdb.InterruptException as exc:
+                raise query_timeout(timeout) from exc
+            except asyncio.CancelledError:
+                # the client went away: stop the query, and let the thread release the cursor
+                # before the caller closes it
+                cursor.interrupt()
+                await asyncio.wait([future])
+                # the interrupted query failed in its thread: read that failure, which asyncio
+                # would otherwise log as an error, and Sentry report, for every client going away
+                future.exception()
+                raise
 
     async def query(self, sql: str, params: Sequence[Any] | None = None) -> QueryResult:
         with self.cursor() as cursor:
@@ -157,11 +166,7 @@ class DuckDBEngine:
         The first chunk is yielded even when empty, so that a CSV export without any row still
         gets its header. The timeout applies to each chunk, not to the whole download, whose
         pace is the client's. At most QUERY_WORKERS exports are open at once."""
-        try:
-            await asyncio.wait_for(self._exports.acquire(), settings.QUERY_TIMEOUT)
-        except TimeoutError:
-            raise server_busy(settings.QUERY_TIMEOUT) from None
-        try:
+        async with self._hold(self._exports):
             with self.cursor() as cursor:
 
                 async def fetch_chunk() -> list[tuple]:
@@ -177,8 +182,6 @@ class DuckDBEngine:
                     rows = await fetch_chunk()
                     if rows:
                         yield QueryResult(columns, rows)
-        finally:
-            self._exports.release()
 
     async def ping(self) -> None:
         """Liveness check, run on the default executor so that busy query threads don't fail it."""
