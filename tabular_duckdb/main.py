@@ -1,4 +1,5 @@
 import asyncio
+import re
 import urllib.error
 import urllib.request
 from collections.abc import AsyncGenerator, Callable, Mapping
@@ -7,6 +8,7 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import duckdb
 import sentry_sdk
@@ -76,6 +78,24 @@ def query_arguments(request: Request) -> list[str]:
     return request.url.query.split("&") if request.url.query else []
 
 
+# the escapes aiohttp left encoded in request.query_string: decoding them would change where the
+# arguments and their values split
+SEPARATOR_ESCAPES = re.compile(r"(%26|%2B|%3B|%3D)", re.IGNORECASE)
+
+
+def decode_like_aiohttp(argument: str) -> str:
+    """A first decoding of a query string argument, before the one of build_query.
+
+    TODO: remove once no client encodes the query twice (the assistant of udata, reusers of the
+    API). The PostgREST-based API decoded the query in aiohttp's request.query_string, then
+    PostgREST decoded what it was sent: a query encoded once or twice gave the same rows, which
+    this decoding, the same as aiohttp's, keeps.
+    """
+    parts = SEPARATOR_ESCAPES.split(argument.replace("+", " "))
+    # the odd parts are the separator escapes, kept as they are
+    return "".join(part if i % 2 else unquote(part) for i, part in enumerate(parts))
+
+
 def int_argument(request: Request, name: str, label: str, default: int) -> int:
     raw = request.query_params.get(name)
     if raw is None:
@@ -96,7 +116,8 @@ def parse_query(
     offset: int = 0,
 ) -> ParsedQuery:
     try:
-        return build_query(query_string, columns, page_size, offset)
+        arguments = [decode_like_aiohttp(argument) for argument in query_string]
+        return build_query(arguments, columns, page_size, offset)
     except ValueError as exc:
         raise invalid_query_string(f"Malformed query: {exc}") from exc
 

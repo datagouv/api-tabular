@@ -4,6 +4,7 @@ import gc
 import io
 import shutil
 from pathlib import Path
+from urllib.parse import quote
 
 import duckdb
 import pytest
@@ -37,6 +38,7 @@ from .conftest import (
 )
 
 DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
+NAME = "Nom de l'élu"
 # its parquet file is deleted by a test, which writes it first
 DELETED_RESOURCE_ID = "aaaaaaaa-3333-bbbb-4444-cccccccccccc"
 FIRST_ROW = {
@@ -736,6 +738,58 @@ def test_resource_data_or_group(client):
     assert response.status_code == 200
     expected = [i for i in range(1, TOTAL_LINES + 1) if i % 5 == 0 or i % 7 == 6]
     assert response.json()["meta"]["total"] == len(expected)
+
+
+def encode(text: str) -> str:
+    """encodeURIComponent, which the front of data.gouv.fr encodes the queries with."""
+    return quote(text, safe="-_.!~*'()")
+
+
+@pytest.mark.parametrize("times", [1, 2])
+@pytest.mark.parametrize(
+    "arguments, total",
+    [
+        ([(f"{NAME}__exact", "Élu 7")], 1),
+        # `Élu 1`, `Élu 11`, `Élu 12`... except the NULL names, every fifth row
+        (
+            [(f"{NAME}__contains", "Élu 1")],
+            len([i for i in range(1, TOTAL_LINES + 1) if i % 5 and str(i).startswith("1")]),
+        ),
+        ([("columns", f"id,{NAME}"), (f"{NAME}__sort", "desc")], TOTAL_LINES),
+        (
+            [("or", f'("{NAME}"__isnull,decompte__exact.6)')],
+            len([i for i in range(1, TOTAL_LINES + 1) if i % 5 == 0 or i % 7 == 6]),
+        ),
+    ],
+)
+def test_resource_data_query_encoded_once_or_twice(client, arguments, total, times):
+    """The PostgREST-based API decoded the query twice: clients encode it either way."""
+
+    def encoded(text: str) -> str:
+        for _ in range(times):
+            text = encode(text)
+        return text
+
+    query = "&".join(f"{encoded(key)}={encoded(value)}" for key, value in arguments)
+    response = client.get(f"{DATA_URL}?{query}")
+    assert response.status_code == 200, response.json()
+    assert response.json()["meta"]["total"] == total
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        # a plus sign is a space, an encoded one a plus sign, encoded once or twice
+        ("Élu+7", "Élu 7"),
+        (encode("Élu+7"), "Élu+7"),
+        (encode(encode("Élu+7")), "Élu+7"),
+    ],
+)
+def test_resource_data_query_plus_signs(client, value, expected):
+    response = client.get(f"{DATA_URL}?{encode(NAME)}__exact={value}")
+    assert response.status_code == 200
+    # no row holds `Élu+7`: only the decoded value tells the two apart
+    assert response.json()["meta"]["total"] == (1 if expected == "Élu 7" else 0)
 
 
 def test_resource_data_columns(client):
