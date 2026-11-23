@@ -267,8 +267,11 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
     if offset + page_size + 1 > BIGINT_MAX:
         raise invalid_query_string("Page is too large")
 
-    # one extra row tells whether a next page exists when there is no total (aggregation)
-    parsed = parse_query(query_string, resource.query_columns, page_size + 1, offset)
+    parsed = parse_query(query_string, resource.query_columns, page_size, offset)
+    if parsed.is_aggregated:
+        # one extra row tells whether a next page exists, as there is no total; only there, as a
+        # LIMIT above late_materialization_max_rows reads every column of the scanned rows
+        parsed.limit = page_size + 1
     data = asyncio.create_task(run_query(parsed.data_sql(resource.source_sql), rid))
     # like the PostgREST-based API, no total for aggregated queries; the count runs alongside
     # the data, and a failure of either interrupts the other

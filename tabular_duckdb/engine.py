@@ -86,6 +86,9 @@ class DuckDBEngine:
         db.execute("SET GLOBAL max_expression_depth=500")
         # the default, which the unsorted pagination relies on to return rows in __id order
         db.execute("SET GLOBAL preserve_insertion_order=true")
+        # under this LIMIT, a filtered page reads the filtered columns, then the others for the
+        # rows it keeps only (instead of for every scanned row): 50 by default, below a full page
+        db.execute(f"SET GLOBAL late_materialization_max_rows={int(settings.PAGE_SIZE_MAX)}")
         # the dates of the files (`created_at`), whatever the time zone of the server
         db.execute("SET GLOBAL TimeZone='UTC'")
         # reuse connections across the many range requests a parquet scan needs
