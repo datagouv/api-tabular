@@ -133,6 +133,8 @@ def check_storage() -> None:
 
 
 async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
+    if parsed.reads_every_row:
+        return resource.total_lines
     return int((await run_query(parsed.count_sql(resource.source_sql), resource_id)).rows[0][0])
 
 

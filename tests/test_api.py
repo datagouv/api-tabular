@@ -596,8 +596,13 @@ def test_resource_data_last_page_has_no_next(client):
     [
         # rows 9975 to 10009: across the boundary of the first two row groups
         ({}, range(RARE_NULL_TOTAL_LINES), 286),
-        # rows 19980 to 20014 of the filtered ones: across the boundary of the next two
-        ({"value__greater": 5000}, range(5000, RARE_NULL_TOTAL_LINES), 429),
+        # rows 19980 to 20014 of the filtered ones: across the boundary of the next two; the
+        # value of row 25000 is NULL, which the filter leaves out
+        (
+            {"value__greater": 5000},
+            [i for i in range(5000, RARE_NULL_TOTAL_LINES) if i != 25000],
+            429,
+        ),
     ],
 )
 def test_resource_data_unsorted_pages_follow_the_file_order(client, params, row_values, page):
@@ -608,6 +613,7 @@ def test_resource_data_unsorted_pages_follow_the_file_order(client, params, row_
     url = f"/api/resources/{RARE_NULL_RESOURCE_ID}/data/"
     body = client.get(url, params={**params, "page": page, "page_size": page_size}).json()
     assert [row["__id"] for row in body["data"]] == expected
+    assert body["meta"]["total"] == len(row_values)
 
 
 def test_resource_data_with_page_size_error(client):

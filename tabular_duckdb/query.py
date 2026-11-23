@@ -364,6 +364,11 @@ class ParsedQuery:
         return any(operator != GROUP_BY for operator in self.aggregators)
 
     @property
+    def reads_every_row(self) -> bool:
+        """Rows of the file as they are: their count is the row count of the file."""
+        return not self.conditions and not self.is_aggregated
+
+    @property
     def group_by(self) -> list[str]:
         return [quote_ident(column) for column in self.aggregators.get(GROUP_BY, [])]
 
@@ -411,6 +416,13 @@ class ParsedQuery:
         else:
             tiebreak = []
         order_by = [*self.order_by, *tiebreak]
+        if self.reads_every_row and not order_by and self.limit is not None:
+            # a page of the file is a range of __id, whose row group DuckDB reads alone: a LIMIT
+            # reads ahead as many row groups as it has threads, to keep only the first rows
+            first = int(self.offset) + 1
+            last = int(self.offset) + int(self.limit)
+            row_range = f"{quote_ident(ID_COLUMN)} BETWEEN {first} AND {last}"
+            return Statement(f"SELECT {self.select_clause()} FROM {source} WHERE {row_range}", [])
         sql = f"SELECT {self.select_clause()} {self.from_clause(source)}"
         if order_by:
             sql += f" ORDER BY {', '.join(order_by)}"

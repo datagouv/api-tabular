@@ -33,6 +33,9 @@ def parquet_literal(resource_id: str) -> str:
 class Resource:
     resource_id: str
     created_at: str | None
+    # the row count of the footer: counting the rows by scanning the file takes longer than
+    # QUERY_TIMEOUT on the biggest resources
+    total_lines: int
     columns: dict[str, str] = field(default_factory=dict)
     # the csv-detective inspection, absent from the files converted before hydra embedded it
     inspection: dict[str, Any] | None = None
@@ -158,6 +161,9 @@ class ResourceCache:
                 "WHERE decode(key) IN (?, ?)",
                 [INSPECTION_KEY, CREATED_AT_KEY],
             )
+            total_lines = await engine.query_value(
+                f"SELECT num_rows FROM parquet_file_metadata({url_literal})"
+            )
             embedded: dict[str, bytes] = dict(metadata.rows)
             if CREATED_AT_KEY in embedded:
                 created_at = datetime.fromisoformat(embedded[CREATED_AT_KEY].decode()).isoformat()
@@ -182,6 +188,7 @@ class ResourceCache:
         return Resource(
             resource_id=resource_id,
             created_at=created_at,
+            total_lines=total_lines,
             columns=columns,
             inspection=json.loads(embedded[INSPECTION_KEY]) if INSPECTION_KEY in embedded else None,
         )
@@ -236,21 +243,12 @@ async def build_profile(resource: Resource) -> Profile | dict[str, Any]:
     for name, description in columns.items():
         formats.setdefault(description["format"], []).append(name)
 
-    # the footer has the row count: counting the rows by scanning the file takes longer than
-    # QUERY_TIMEOUT on the biggest resources
-    try:
-        total_lines = await engine.query_value(
-            f"SELECT num_rows FROM parquet_file_metadata({resource.url_literal})"
-        )
-    except duckdb.Error as exc:
-        raise read_error(exc, resource.resource_id) from exc
-
     with_stats = settings.PROFILE_STATS and bool(resource.columns)
     profile = await summarize(resource) if with_stats else {}
 
     return Profile(
         header=list(resource.columns.keys()),
-        total_lines=total_lines,
+        total_lines=resource.total_lines,
         columns=columns,
         formats=formats,
         profile=profile,

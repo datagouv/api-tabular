@@ -64,7 +64,7 @@ def ids(table: Table, query_string: list[str], **kwargs) -> list[int]:
 def source(duckdb_connection, parquet_dir, monkeypatch) -> Table:
     """The test resource, exposed exactly like the API does (`__id` included)."""
     monkeypatch.setattr("tabular_duckdb.resources.settings.PARQUET_BASE_URL", parquet_dir)
-    resource = Resource(resource_id=RESOURCE_ID, created_at=None)
+    resource = Resource(resource_id=RESOURCE_ID, created_at=None, total_lines=TOTAL_LINES)
     duckdb_connection.execute(f"CREATE VIEW source AS SELECT * FROM {resource.source_sql}")
     return Table(duckdb_connection, "source")
 

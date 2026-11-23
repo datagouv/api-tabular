@@ -24,7 +24,7 @@ class SlowLoadCache(ResourceCache):
         self.loads.append(resource_id)
         if resource_id == SLOW_RESOURCE_ID:
             await self.release.wait()
-        return Resource(resource_id=resource_id, created_at=None)
+        return Resource(resource_id=resource_id, created_at=None, total_lines=0)
 
 
 @pytest.fixture
