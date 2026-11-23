@@ -1,7 +1,7 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, time
+from datetime import datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import unquote_plus
@@ -178,13 +178,16 @@ def coerce_value(value: str, duckdb_type: str) -> Any:
             return float(value)
         if kind == "int":
             return int(value)
+        # datetime.fromisoformat rather than date.fromisoformat, which ignores the two characters
+        # after a compact date ('20240101-1' is read as 2024-01-01); it also reads plain dates
         if normalized == "DATE":
-            return date.fromisoformat(value)
+            parsed = datetime.fromisoformat(value)
+            # a time would be silently dropped
+            if parsed.time() != time() or parsed.tzinfo is not None:
+                raise ValueError(value)
+            return parsed.date()
         if normalized.startswith("TIMESTAMP"):
-            try:
-                return datetime.fromisoformat(value)
-            except ValueError:
-                return date.fromisoformat(value)
+            return datetime.fromisoformat(value)
         # TIME, the last type compares_as_varchar leaves out
         return time.fromisoformat(value)
     except (ValueError, InvalidOperation) as exc:

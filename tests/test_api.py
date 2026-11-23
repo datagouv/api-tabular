@@ -322,6 +322,13 @@ def test_resource_meta_created_at_is_the_date_hydra_embeds(client):
     assert response.json()["created_at"] == "2026-06-09T10:00:00.123456+00:00"
 
 
+def test_resource_id_in_upper_case(client):
+    """The PostgREST-based API compared it as a UUID, while hydra names the files in lower case."""
+    response = client.get(f"/api/resources/{RESOURCE_ID.upper()}/data/?page_size=1")
+    assert response.status_code == 200
+    assert response.json()["data"][0]["__id"] == 1
+
+
 @pytest.mark.parametrize("suffix", ["", "profile/", "swagger/", "data/", "data/csv/"])
 def test_unknown_resource(client, suffix):
     response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/{suffix}")

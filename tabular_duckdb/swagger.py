@@ -91,6 +91,9 @@ TYPE_POSSIBILITIES = {
         "isnotnull",
     ],
 }
+# a csv-detective type with no DuckDB counterpart of its own: a BLOB column, compared through
+# its text rendering like a string
+TYPE_POSSIBILITIES["binary"] = TYPE_POSSIBILITIES["string"]
 
 RANGE_COMPARATOR_LABELS = {
     "less": "Less than",

@@ -40,10 +40,21 @@ def test_every_column_type_has_swagger_operators(duckdb_type):
     assert python_type(duckdb_type) in TYPE_POSSIBILITIES
 
 
+# the python_type values of csv-detective, served as is from the inspection hydra embeds
+CSV_DETECTIVE_TYPES = ["string", "int", "float", "bool", "date", "datetime", "json", "binary"]
+
+
+@pytest.mark.parametrize("python_type", CSV_DETECTIVE_TYPES)
+def test_every_csv_detective_type_has_swagger_operators(python_type):
+    assert swagger_parameters({"col": ColumnProfile(python_type=python_type, format=python_type)})
+
+
 @pytest.mark.parametrize(
     "python_type, operators, aggregators",
     [
         ("string", STRING_LIKE, GROUPING),
+        # compared through its text rendering, like a BLOB column without the inspection
+        ("binary", STRING_LIKE, GROUPING),
         ("date", STRING_LIKE, GROUPING),
         ("datetime", STRING_LIKE, GROUPING),
         ("int", NUMERIC, NUMERIC_AGGREGATES),

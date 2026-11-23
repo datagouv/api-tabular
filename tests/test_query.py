@@ -260,6 +260,8 @@ def test_query_filters_on_typed_columns(typed, argument, expected):
     [
         "ts__exact=hier",
         "tstz__less=2024-13-01",
+        # date.fromisoformat reads it as 2024-01-01, ignoring the last two characters
+        "ts__exact=20240101-1",
         "montant__less=abc",
         "uid__exact=12",
         "heure__exact=25:00",
@@ -268,6 +270,14 @@ def test_query_filters_on_typed_columns(typed, argument, expected):
 def test_query_value_not_castable_to_a_typed_column(typed, argument):
     with pytest.raises(ValueError, match="invalid value"):
         ids(typed, [argument])
+
+
+@pytest.mark.parametrize("value", ["19800101-1", "1980-01-01T10:00:00"])
+def test_query_value_not_castable_to_a_date_column(source, value):
+    """Neither a malformed date, which date.fromisoformat would read as 1980-01-01, nor a
+    datetime, whose time would be dropped."""
+    with pytest.raises(ValueError, match="invalid value"):
+        ids(source, [f"birth__exact={value}"])
 
 
 @pytest.mark.parametrize(

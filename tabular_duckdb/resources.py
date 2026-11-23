@@ -113,6 +113,8 @@ class ResourceCache:
     async def get(self, resource_id: str) -> Resource:
         if not RESOURCE_ID_PATTERN.fullmatch(resource_id):
             raise HTTPException(404)
+        # hydra names the files after the lower case id
+        resource_id = resource_id.lower()
         cached = self._entries.get(resource_id)
         if cached and cached.expires_at > time.monotonic():
             return cached.resource
