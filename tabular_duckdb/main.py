@@ -269,15 +269,24 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
 
     # one extra row tells whether a next page exists when there is no total (aggregation)
     parsed = parse_query(query_string, resource.query_columns, page_size + 1, offset)
-    result = await run_query(parsed.data_sql(resource.source_sql), rid)
+    data = asyncio.create_task(run_query(parsed.data_sql(resource.source_sql), rid))
+    # like the PostgREST-based API, no total for aggregated queries; the count runs alongside
+    # the data, and a failure of either interrupts the other
+    count = None if parsed.is_aggregated else asyncio.create_task(run_count(parsed, resource, rid))
+    try:
+        result = await data
+        total = await count if count else None
+    finally:
+        data.cancel()
+        if count:
+            count.cancel()
     rows = result.rows[:page_size]
     meta: dict[str, int] = {"page": page, "page_size": page_size}
-    if parsed.is_aggregated:
-        # like the PostgREST-based API, which reported no total for aggregated queries
+    if total is None:
         has_next = len(result.rows) > page_size
     else:
-        meta["total"] = await run_count(parsed, resource, rid)
-        has_next = page_size + offset < meta["total"]
+        meta["total"] = total
+        has_next = page_size + offset < total
 
     path = request.url.path
     return JSONResponse(
