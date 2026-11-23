@@ -5,7 +5,6 @@ from typing import NotRequired, TypedDict
 
 import yaml
 
-from tabular_duckdb.config import settings
 from tabular_duckdb.resources import ColumnProfile
 
 TYPE_POSSIBILITIES = {
@@ -315,24 +314,6 @@ def swagger_component(resource_columns: Mapping[str, ColumnProfile]) -> dict:
                 },
             },
             "Resource": {"type": "object", "properties": resource_prop_dict},
-            "SqlResult": {
-                "type": "object",
-                "properties": {
-                    "data": {"type": "array", "items": {"type": "object"}},
-                    "meta": {
-                        "type": "object",
-                        "properties": {
-                            "rows": {"description": "Number of returned rows", "type": "integer"},
-                            "truncated": {
-                                "description": "True when the row limit was reached",
-                                "type": "boolean",
-                            },
-                            "row_limit": {"type": "integer"},
-                            "execution_ms": {"type": "integer"},
-                        },
-                    },
-                },
-            },
         }
     }
     return component_dict
@@ -407,44 +388,6 @@ def build_swagger_file(resource_columns: Mapping[str, ColumnProfile], rid: str) 
                     },
                 },
                 "parameters": parameters_list,
-            },
-            f"/api/resources/{rid}/sql/": {
-                "get": {
-                    "description": (
-                        "Runs a read-only SQL query on this resource, exposed as the `resource` "
-                        "table. Only a single SELECT statement is accepted, made of basic "
-                        "processing only (aggregates, arithmetic, LIKE, dates, CTEs). Results "
-                        f"are capped at {settings.SQL_MAX_ROWS:,} rows (`meta.truncated` tells "
-                        "when rows were cut) and the query is interrupted after "
-                        f"{settings.SQL_TIMEOUT} seconds."
-                    ),
-                    "summary": "Run a read-only SQL query on the resource",
-                    "operationId": "getResourceSql",
-                    "responses": {
-                        "200": {
-                            "description": "successful operation",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/SqlResult"}
-                                }
-                            },
-                        },
-                        "400": {"description": "Invalid or rejected SQL query"},
-                        "404": {"description": "Resource not found"},
-                    },
-                },
-                "parameters": [
-                    {
-                        "name": "q",
-                        "in": "query",
-                        "description": (
-                            "The SQL query, for instance: "
-                            "SELECT col, count(*) AS n FROM resource GROUP BY col ORDER BY n DESC"
-                        ),
-                        "required": True,
-                        "schema": {"type": "string"},
-                    }
-                ],
             },
         },
         "components": component_dict,

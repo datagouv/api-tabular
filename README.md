@@ -60,7 +60,6 @@ Any resource converted by Hydra can be queried with its real resource id, as lon
 | `GET /api/resources/{rid}/data/` | paginated JSON data, with filtering and sorting |
 | `GET /api/resources/{rid}/data/csv/` | same, streamed as CSV |
 | `GET /api/resources/{rid}/data/json/` | same, streamed as JSON |
-| `GET /api/resources/{rid}/sql/?q=...` | read-only SQL query on the resource |
 | `GET /health/` | health of DuckDB and reachability of the storage |
 
 ### Resource Endpoints
@@ -80,8 +79,7 @@ Returns basic information about the resource and the available endpoints. `creat
   "links": [
     {"href": "http://localhost:8005/api/resources/{resource_id}/profile/", "type": "GET", "rel": "profile"},
     {"href": "http://localhost:8005/api/resources/{resource_id}/data/", "type": "GET", "rel": "data"},
-    {"href": "http://localhost:8005/api/resources/{resource_id}/swagger/", "type": "GET", "rel": "swagger"},
-    {"href": "http://localhost:8005/api/resources/{resource_id}/sql/", "type": "GET", "rel": "sql"}
+    {"href": "http://localhost:8005/api/resources/{resource_id}/swagger/", "type": "GET", "rel": "swagger"}
   ]
 }
 ```
@@ -268,28 +266,6 @@ curl "http://localhost:8005/api/resources/$RID/data/?columns=Code%20du%20d%C3%A9
 curl "http://localhost:8005/api/resources/$RID/data/?Code%20sexe__exact=F&Code%20du%20d%C3%A9partement__groupby&Nom%20de%20l%27%C3%A9lu__count"
 ```
 
-### SQL Endpoint
-
-Runs a read-only SQL query, where the resource is the table `resource`.
-
-```shell
-curl -G "http://localhost:8005/api/resources/$RID/sql/" \
-  --data-urlencode 'q=SELECT "Code du département" AS dep, count(*) AS n FROM resource GROUP BY 1 ORDER BY n DESC LIMIT 5'
-```
-
-```json
-{
-  "data": [{"dep": "62", "n": 13242}, {"dep": "59", "n": 12325}],
-  "meta": {"table": "resource", "rows": 5, "truncated": false, "row_limit": 10000, "execution_ms": 84}
-}
-```
-
-The endpoint is read-only, as the query is checked against an allowlist before running:
-
-- the query is parsed by [sqlglot](https://github.com/tobymao/sqlglot), and must be a single `SELECT` made only of allowed constructs (`ALLOWED_NODES` in `tabular_duckdb/sql.py`), reading no other table than `resource` and its own CTEs: no file, URL, table function or catalog view can be named. What runs is the SQL regenerated from the parsed tree, never the text of the client;
-- the endpoint serves basic processing of the data (aggregates for a chart, rounding, dates): `count`, `min`, `max`, `sum`, `avg`, `median`, the arithmetic operators, `round`, `abs`, `floor`, `ceil`, `nullif`, `coalesce`, `CASE`, `CAST`, `LIKE`/`ILIKE`, `lower`, `upper`, `length`, `year`, `month`, `day`, `date_trunc`, `date_part`/`EXTRACT`, `strftime`, comparisons, `IN`, `BETWEEN`, joins, subqueries, CTEs at the start of the query, `GROUP BY`, `HAVING`, `ORDER BY`, `LIMIT`. `repeat`, `string_agg`, `||`..., `range`, `UNION` and recursive CTEs are refused: they would let a short query build a value or a number of rows of any size. A refused query gets a 400 quoting the part at fault;
-- the result is capped at `SQL_MAX_ROWS` rows (`meta.truncated` says whether the cap was hit), and the query is interrupted after `SQL_TIMEOUT` seconds.
-
 ### Health Check
 
 ```shell
@@ -315,9 +291,6 @@ Configuration is handled through environment variables or a `.env` file ([.env.e
 | `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
-| `SQL_MAX_ROWS` | `10000` | row cap of the SQL endpoint |
-| `SQL_TIMEOUT` | `30` | timeout of the SQL endpoint, in seconds |
-| `SQL_MAX_LENGTH` | `10000` | maximum length of the `q` parameter |
 | `SENTRY_DSN` / `SENTRY_SAMPLE_RATE` | empty / `1.0` | error reporting |
 
 Reading over the network costs one footer fetch per query (~120 ms on the OVH bucket). `DUCKDB_METADATA_CACHE=true` removes it almost entirely, but DuckDB offers no way to invalidate that cache, so a parquet file replaced in the bucket keeps being served from the cached metadata until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
@@ -335,7 +308,6 @@ uv run pytest
 
 - **`tests/test_api.py`** - API endpoint tests, run in process against parquet files served over HTTP like the bucket
 - **`tests/test_query.py`** - Query building tests, executed on DuckDB
-- **`tests/test_sql_security.py`** - What the SQL endpoint refuses, and what it allows
 - **`tests/test_engine.py`** - The DuckDB instance: settings, timeouts, cancellations, failing storages
 - **`tests/test_resources.py`** - The resource cache
 - **`tests/test_errors.py`** - The filtering of the error messages

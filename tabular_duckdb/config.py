@@ -40,11 +40,6 @@ class Settings(BaseSettings):
     RESOURCE_CACHE_TTL: int = 300
     PROFILE_STATS: bool = True
 
-    # read-only SQL endpoint, whose queries share the QUERY_WORKERS threads
-    SQL_MAX_ROWS: PositiveInt = 10000
-    SQL_TIMEOUT: int = 30
-    SQL_MAX_LENGTH: int = 10000
-
     SENTRY_DSN: str = ""
     SENTRY_SAMPLE_RATE: float = 1.0
 

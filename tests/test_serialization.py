@@ -27,7 +27,7 @@ from tabular_duckdb.serialization import as_csv_value, jsonable, rows_to_json
     ],
 )
 def test_duckdb_values_are_serialized(duckdb_connection, expression, json_value, csv_value):
-    """Any of them can come out of the SQL endpoint, whatever the parquet files hold."""
+    """Any of them can come out of an aggregation, whatever the parquet files hold."""
     [(value,)] = duckdb_connection.execute(f"SELECT {expression}").fetchall()
     assert jsonable(value) == json_value
     if csv_value is not None:

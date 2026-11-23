@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim
 
-# the API runs arbitrary user SQL in DuckDB: not as root
+# the API reads remote files through DuckDB extensions: not as root
 RUN groupadd --system datagouv && \
     useradd --system --gid datagouv --create-home datagouv
 

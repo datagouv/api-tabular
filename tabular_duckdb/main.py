@@ -38,7 +38,6 @@ from tabular_duckdb.resources import (
     resource_cache,
 )
 from tabular_duckdb.serialization import jsonable, rows_to_json
-from tabular_duckdb.sql import RESOURCE_TABLE, run_user_sql
 from tabular_duckdb.streaming import check_output_size, start_stream, stream_csv, stream_json
 from tabular_duckdb.swagger import build_swagger_file
 
@@ -219,7 +218,6 @@ async def resource_meta(rid: str) -> JSONResponse:
                 {"href": resource_url(rid, "profile/"), "type": "GET", "rel": "profile"},
                 {"href": resource_url(rid, "data/"), "type": "GET", "rel": "data"},
                 {"href": resource_url(rid, "swagger/"), "type": "GET", "rel": "swagger"},
-                {"href": resource_url(rid, "sql/"), "type": "GET", "rel": "sql"},
             ],
         }
     )
@@ -312,24 +310,6 @@ async def resource_data_csv(request: Request, rid: str) -> StreamingResponse:
 @get("/api/resources/{rid}/data/json/")
 async def resource_data_json(request: Request, rid: str) -> StreamingResponse:
     return await stream_resource_data(request, rid, format="json")
-
-
-@get("/api/resources/{rid}/sql/")
-async def resource_sql(rid: str, q: str = "") -> JSONResponse:
-    resource = await resource_cache.get(rid)
-    result = await run_user_sql(resource, q)
-    return JSONResponse(
-        {
-            "data": result.rows,
-            "meta": {
-                "table": RESOURCE_TABLE,
-                "rows": len(result.rows),
-                "truncated": result.truncated,
-                "row_limit": settings.SQL_MAX_ROWS,
-                "execution_ms": result.execution_ms,
-            },
-        }
-    )
 
 
 @get("/health/")

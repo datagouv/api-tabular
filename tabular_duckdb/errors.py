@@ -20,8 +20,7 @@ class QueryException(Exception):
 def safe_message(message: str) -> str:
     """Do not leak the storage location in DuckDB error messages."""
     # the `LINE 1: ...` context quotes the SQL that ran, which reads the parquet file by its
-    # location and is cut at an arbitrary length: no replacement can catch a truncated prefix.
-    # It is never exactly what the client wrote anyway: /sql/ runs the query wrapped in a LIMIT.
+    # location and is cut at an arbitrary length: no replacement can catch a truncated prefix
     redacted = message.partition("\nLINE ")[0]
     return redacted.replace(settings.PARQUET_BASE_URL.rstrip("/") + "/", "<resource>/").strip()
 

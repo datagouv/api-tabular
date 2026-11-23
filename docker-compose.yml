@@ -20,5 +20,3 @@ services:
       - PROFILE_STATS
       - QUERY_TIMEOUT
       - QUERY_WORKERS
-      - SQL_MAX_ROWS
-      - SQL_TIMEOUT

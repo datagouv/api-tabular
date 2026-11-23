@@ -47,9 +47,8 @@ def interruptible(conn: duckdb.DuckDBPyConnection, call: Callable[[], T], timeou
 class DuckDBEngine:
     """Owns the single DuckDB instance of the process.
 
-    Every query runs on its own connection (`cursor()`), whose temporary objects (the `resource`
-    view of /sql/) disappear when it is closed, while the HTTP connections and the caches of the
-    instance are shared by all.
+    Every query runs on its own connection (`cursor()`), while the HTTP connections and the caches
+    of the instance are shared by all.
 
     Everything is set by `start()`, which the application lifespan runs before serving any
     request."""
@@ -109,14 +108,9 @@ class DuckDBEngine:
         """A connection of its own: in a `with`, closed afterwards with everything it created."""
         return self._db.cursor()
 
-    async def run(
-        self,
-        cursor: duckdb.DuckDBPyConnection,
-        call: Callable[[], T],
-        timeout: float | None = None,
-    ) -> T:
-        """Run a blocking call on the query threads, interrupted after `timeout` seconds."""
-        timeout = timeout or settings.QUERY_TIMEOUT
+    async def run(self, cursor: duckdb.DuckDBPyConnection, call: Callable[[], T]) -> T:
+        """Run a blocking call on the query threads, interrupted after QUERY_TIMEOUT seconds."""
+        timeout = settings.QUERY_TIMEOUT
         try:
             await asyncio.wait_for(self._slots.acquire(), timeout)
         except TimeoutError:
