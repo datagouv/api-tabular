@@ -1,53 +1,317 @@
+import asyncio
 import csv
-import json
-from io import StringIO
+import gc
+import io
+import shutil
+from pathlib import Path
+from urllib.parse import quote
 
+import duckdb
 import pytest
+import sentry_sdk
+import yaml
+from fastapi.testclient import TestClient
+from sentry_sdk.transport import Transport
+from starlette.types import Message, Scope
 
-from api_tabular import config
+from tabular_duckdb.config import settings
+from tabular_duckdb.engine import engine
+from tabular_duckdb.errors import QueryException, query_timeout
+from tabular_duckdb.main import app, build_link_with_page
+from tabular_duckdb.resources import resource_cache
 
 from .conftest import (
-    AGG_ALLOWED_INDEXED_RESOURCE_ID,
-    AGG_ALLOWED_RESOURCE_ID,
-    DELETED_RESOURCE_ID,
-    INDEXED_RESOURCE_ID,
-    NULL_VALUES_RESOURCE_ID,
+    CORRUPT_RESOURCE_ID,
+    FLOATS_RESOURCE_ID,
+    HEADER,
+    ID_COLUMN_RESOURCE_ID,
+    INSPECTED_RESOURCE_ID,
+    INSPECTION,
+    RARE_NULL_RESOURCE_ID,
+    RARE_NULL_TOTAL_LINES,
     RESOURCE_ID,
+    ROW_NUMBER_COLUMN_RESOURCE_ID,
+    SLOW_QUERY,
+    TOTAL_LINES,
     UNKNOWN_RESOURCE_ID,
-    patch_csession,
+    UPPER_ID_COLUMN_RESOURCE_ID,
 )
 
-pytestmark = pytest.mark.asyncio
+DATA_URL = f"/api/resources/{RESOURCE_ID}/data/"
+NAME = "Nom de l'élu"
+# its parquet file is deleted by a test, which writes it first
+DELETED_RESOURCE_ID = "aaaaaaaa-3333-bbbb-4444-cccccccccccc"
+FIRST_ROW = {
+    "__id": 1,
+    "id": "id-1",
+    "score": 0.1,
+    "decompte": 1,
+    "is_true": False,
+    "birth": "1951-01-01",
+    "Nom de l'élu": "Élu 1",
+    "liste": ["a", "b"],
+}
 
 
-@pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
-    ],
-)
-async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_id):
-    res = await client.get(f"/api/resources/{_resource_id}/")
-    assert res.status == 200
-    assert await res.json() == {
-        "created_at": tables_index_rows[_resource_id]["created_at"],
-        "url": tables_index_rows[_resource_id]["url"],
+def test_health(client):
+    response = client.get("/health/")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"status", "version", "uptime_since"}
+    assert body["status"] == "ok"
+
+
+def test_health_when_duckdb_is_down(client, monkeypatch):
+    async def broken_ping():
+        raise duckdb.ConnectionException("connection closed")
+
+    monkeypatch.setattr(engine, "ping", broken_ping)
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "DB unavailable"
+
+
+def test_health_when_the_storage_denies_the_base_url(client, storage, monkeypatch):
+    """A 403 on the base URL still proves that the storage answers."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/403")
+    assert client.get("/health/").status_code == 200
+
+
+def test_health_when_the_storage_is_unreachable(client, closed_port, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"http://127.0.0.1:{closed_port}")
+    response = client.get("/health/")
+    assert response.status_code == 503
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage unavailable"
+    assert "127.0.0.1" not in error["detail"]
+
+
+class RecordingTransport(Transport):
+    """Keeps the events instead of sending them to Sentry."""
+
+    def __init__(self, options=None):
+        super().__init__(options)
+        self.events = []
+
+    def capture_envelope(self, envelope):
+        if event := envelope.get_event():
+            self.events.append(event)
+
+
+@pytest.fixture
+def sentry_events():
+    sentry_sdk.init(dsn="https://key@sentry.invalid/1", transport=RecordingTransport)
+    transport = sentry_sdk.get_client().transport
+    assert isinstance(transport, RecordingTransport)
+    yield transport.events
+    sentry_sdk.init()
+
+
+@pytest.fixture
+def read_from(monkeypatch):
+    """Read the parquet files from another storage, with an empty resource cache."""
+
+    def switch(base_url: str) -> None:
+        monkeypatch.setattr(settings, "PARQUET_BASE_URL", base_url)
+        monkeypatch.setattr(resource_cache, "_entries", {})
+
+    return switch
+
+
+@pytest.mark.parametrize("status", [500, 429, 401])
+def test_storage_error_is_reported_without_the_storage_location(
+    client, storage, read_from, sentry_events, status
+):
+    """A throttled or refused read is no fault of the file either."""
+    read_from(f"{storage}/{status}")
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
+    assert response.status_code == 502
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage error"
+    assert storage not in error["detail"]
+    assert [event["event_id"] for event in sentry_events] == [error["code"]]
+    assert sentry_events[0]["tags"]["title"] == "Storage error"
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_health_when_the_storage_fails(client, storage, monkeypatch, status):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"{storage}/{status}")
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Storage unavailable"
+
+
+def test_health_does_not_report_to_sentry(client, closed_port, monkeypatch, sentry_events):
+    """It is polled every few seconds: an outage would otherwise flood Sentry."""
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", f"http://127.0.0.1:{closed_port}")
+    assert client.get("/health/").status_code == 503
+    assert sentry_events == []
+
+
+@pytest.mark.parametrize("status", [403, 404])
+def test_missing_parquet_file(client, storage, read_from, sentry_events, status):
+    """A bucket that does not grant listing answers 403 for a missing object."""
+    read_from(f"{storage}/{status}")
+    assert client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/").status_code == 404
+    assert sentry_events == []
+
+
+def test_parquet_file_deleted_while_its_resource_is_cached(client, parquet_dir):
+    path = Path(parquet_dir) / f"{DELETED_RESOURCE_ID}.parquet"
+    shutil.copy(Path(parquet_dir) / f"{RESOURCE_ID}.parquet", path)
+    assert client.get(f"/api/resources/{DELETED_RESOURCE_ID}/data/").status_code == 200
+    path.unlink()
+    assert client.get(f"/api/resources/{DELETED_RESOURCE_ID}/data/").status_code == 404
+
+
+def test_storage_failing_while_the_parquet_file_is_read(client, storage, read_from, sentry_events):
+    """The HEAD succeeds, then the storage fails the reads of DuckDB: a 502, not the file's fault."""
+    read_from(f"{storage}/200")
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
+    assert response.status_code == 502
+    error = response.json()["errors"][0]
+    assert error["title"] == "Storage error"
+    assert storage not in error["detail"]
+    assert [event["event_id"] for event in sentry_events] == [error["code"]]
+
+
+def test_cors_headers_on_a_server_error(monkeypatch):
+    async def broken(resource_id):
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(resource_cache, "get", broken)
+    # outside of its context manager, so that the application started by `client` is reused
+    response = TestClient(app, raise_server_exceptions=False).get(f"/api/resources/{RESOURCE_ID}/")
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
+    monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
+    monkeypatch.setattr(settings, "HEALTH_TIMEOUT", 1)
+    response = client.get("/health/")
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Storage unavailable"
+
+
+def test_query_timeout(client, monkeypatch):
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    with pytest.raises(QueryException) as raised:
+        client.portal.call(engine.query, SLOW_QUERY)
+    assert raised.value.status == 400
+    assert raised.value.title == "Query timeout"
+
+
+def test_exports_open_at_once_are_bounded(client, monkeypatch):
+    """An open export keeps its result between chunks, at the pace of its client."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    exports = [engine.stream("SELECT 1 AS n") for _ in range(settings.QUERY_WORKERS)]
+
+    async def first_chunk(export):
+        return await anext(export)
+
+    for export in exports:
+        client.portal.call(first_chunk, export)
+    try:
+        response = client.get(f"{DATA_URL}csv/")
+    finally:
+        for export in exports:
+            client.portal.call(export.aclose)
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Server busy"
+    assert client.get(f"{DATA_URL}csv/").status_code == 200
+
+
+async def cut_off_download(path: str) -> int:
+    """A slow client going away while the first chunk of a download is sent, as uvicorn tells
+    the application: the response is cancelled within `send`, with its body suspended at a
+    `yield`. Returns the status of the response."""
+    started = asyncio.Event()
+    status = 0
+
+    async def receive() -> Message:
+        await started.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        nonlocal status
+        if message["type"] == "http.response.start":
+            status = message["status"]
+        elif status == 200:
+            started.set()
+            await asyncio.Event().wait()
+
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+    }
+    await app(scope, receive, send)
+    return status
+
+
+@pytest.mark.parametrize("output", ["csv", "json"])
+def test_a_download_cut_off_by_its_client_frees_its_slot(client, monkeypatch, output):
+    """Without the garbage collector, which Starlette would leave the abandoned body to."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "STREAM_CHUNK_SIZE", 1)
+    gc.disable()
+    try:
+        statuses = [
+            client.portal.call(cut_off_download, f"{DATA_URL}{output}/")
+            for _ in range(settings.QUERY_WORKERS + 1)
+        ]
+    finally:
+        gc.enable()
+    # once every slot leaked, the next download would answer 503 "Server busy"
+    assert statuses == [200] * (settings.QUERY_WORKERS + 1)
+
+
+def test_health_and_data_when_every_query_slot_is_taken(client, monkeypatch):
+    """Slow /data/ queries must neither make /health/ fail nor queue the others forever."""
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    slots = settings.QUERY_WORKERS
+    for _ in range(slots):
+        client.portal.call(engine._slots.acquire)
+    try:
+        assert client.get("/health/").status_code == 200
+        response = client.get(DATA_URL)
+    finally:
+        for _ in range(slots):
+            client.portal.call(engine._slots.release)
+    assert response.status_code == 503
+    assert response.json()["errors"][0]["title"] == "Server busy"
+
+
+def test_resource_meta(client, base_url):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/")
+    assert response.status_code == 200
+    assert response.json() == {
+        # a file without the date hydra embeds: the Last-Modified header of the object
+        "created_at": "2024-01-01T12:00:00+00:00",
+        "url": f"https://www.data.gouv.fr/api/1/datasets/r/{RESOURCE_ID}",
         "links": [
             {
-                "href": f"{base_url}/api/resources/{_resource_id}/profile/",
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
                 "type": "GET",
                 "rel": "profile",
             },
             {
-                "href": f"{base_url}/api/resources/{_resource_id}/data/",
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/data/",
                 "type": "GET",
                 "rel": "data",
             },
             {
-                "href": f"{base_url}/api/resources/{_resource_id}/swagger/",
+                "href": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
                 "type": "GET",
                 "rel": "swagger",
             },
@@ -55,288 +319,321 @@ async def test_api_resource_meta(client, base_url, tables_index_rows, _resource_
     }
 
 
-async def test_api_resource_meta_deleted(client):
-    """Test that deleted resources return 410 Gone for metadata endpoint"""
-    res = await client.get(f"api/resources/{DELETED_RESOURCE_ID}/")
-    assert res.status == 410
-    text = await res.text()
-    assert "permanently deleted" in text
-    assert DELETED_RESOURCE_ID in text
+def test_resource_meta_created_at_is_the_date_hydra_embeds(client):
+    """The ingestion date the PostgREST-based API served from tables_index, not the upload."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/")
+    assert response.json()["created_at"] == "2026-06-09T10:00:00.123456+00:00"
 
 
-async def test_api_resource_meta_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/")
-    assert res.status == 404
+def test_resource_id_in_upper_case(client):
+    """The PostgREST-based API compared it as a UUID, while hydra names the files in lower case."""
+    response = client.get(f"/api/resources/{RESOURCE_ID.upper()}/data/?page_size=1")
+    assert response.status_code == 200
+    assert response.json()["data"][0]["__id"] == 1
+
+
+@pytest.mark.parametrize("suffix", ["", "profile/", "swagger/", "data/", "data/csv/"])
+def test_unknown_resource(client, suffix):
+    response = client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 404
+    # the plain text body of aiohttp, which served the PostgREST-based API
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text == "404: Not Found"
+
+
+def test_malformed_resource_id(client):
+    response = client.get("/api/resources/not-an-uuid/data/")
+    assert response.status_code == 404
+    assert response.text == "404: Not Found"
+
+
+def test_resource_id_with_a_trailing_newline(client):
+    """`$` would match before the newline, which then breaks the HEAD on the storage."""
+    response = client.get(f"/api/resources/{RESOURCE_ID}%0A/data/")
+    assert response.status_code == 404
+
+
+def test_cors_headers_without_origin(client):
+    """The same headers whatever the origin, as the Nginx cache serves a response to them all."""
+    response = client.get(DATA_URL)
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["access-control-expose-headers"] == "*"
+
+
+@pytest.mark.parametrize("headers", [{}, {"Origin": "https://www.data.gouv.fr"}])
+def test_cors_preflight(client, headers):
+    response = client.options(DATA_URL, headers=headers)
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "*"
+    assert response.headers["access-control-allow-methods"] == "GET, OPTIONS"
+
+
+def test_cors_preflight_on_an_unknown_resource(client):
+    """The route exists: whether the resource does is up to the request that follows."""
+    response = client.options(
+        f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/",
+        headers={"Access-Control-Request-Method": "GET"},
+    )
+    assert response.status_code == 204
+
+
+def test_cors_preflight_on_an_unknown_path(client):
+    response = client.options(
+        "/api/does-not-exist/", headers={"Access-Control-Request-Method": "GET"}
+    )
+    assert response.status_code == 404
+    assert response.text == "404: Not Found"
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+def test_cors_preflight_for_a_method_the_route_refuses(client):
+    response = client.options(DATA_URL, headers={"Access-Control-Request-Method": "POST"})
+    assert response.status_code == 405
+    assert set(response.headers["allow"].replace(" ", "").split(",")) == {"GET", "HEAD"}
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+@pytest.mark.parametrize("suffix", ["", "data/"])
+def test_invalid_resource_file(client, http_parquet_dir, suffix):
+    response = client.get(f"/api/resources/{CORRUPT_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 400
+    error = response.json()["errors"][0]
+    assert error["title"] == "Invalid resource file"
+    # the storage location is not disclosed
+    assert http_parquet_dir not in error["detail"]
+    assert f"<resource>/{CORRUPT_RESOURCE_ID}.parquet" in error["detail"]
 
 
 @pytest.mark.parametrize(
-    "_resource_id",
-    [
-        AGG_ALLOWED_INDEXED_RESOURCE_ID,
-        AGG_ALLOWED_RESOURCE_ID,
-        INDEXED_RESOURCE_ID,
-        RESOURCE_ID,
-    ],
+    "path",
+    ["/health/", f"/api/resources/{RESOURCE_ID}/", f"/api/resources/{RESOURCE_ID}/data/"],
 )
-async def test_api_resource_profile(client, tables_index_rows, exceptions_rows, _resource_id):
-    indexes = (
-        list(json.loads(exceptions_rows[_resource_id]["table_indexes"]).keys())
-        if _resource_id in exceptions_rows
-        else None
+def test_head_requests(client, path):
+    response = client.head(path)
+    assert response.status_code == 200
+    assert response.content == b""
+
+
+def test_resource_profile(client):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["indexes"] is None
+    profile = body["profile"]
+    assert profile["header"] == HEADER
+    assert profile["total_lines"] == TOTAL_LINES
+    assert {name: column["python_type"] for name, column in profile["columns"].items()} == {
+        "id": "string",
+        "score": "float",
+        "decompte": "int",
+        "is_true": "bool",
+        "birth": "date",
+        "Nom de l'élu": "string",
+        "liste": "json",
+    }
+    assert profile["formats"] == {
+        "string": ["id", "Nom de l'élu"],
+        "float": ["score"],
+        "int": ["decompte"],
+        "bool": ["is_true"],
+        "date": ["birth"],
+        "json": ["liste"],
+    }
+    # SUMMARIZE renders min and max as strings, whatever the column type
+    assert profile["profile"]["decompte"]["min"] == "0"
+    assert profile["profile"]["decompte"]["max"] == "6"
+    decomptes = [i % 7 for i in range(1, TOTAL_LINES + 1)]
+    assert profile["profile"]["decompte"]["mean"] == pytest.approx(sum(decomptes) / TOTAL_LINES)
+    assert profile["profile"]["decompte"]["std"] is not None
+    assert profile["profile"]["decompte"]["nb_distinct"] == 7
+    assert profile["profile"]["Nom de l'élu"]["nb_missing_values"] == TOTAL_LINES // 5
+    assert profile["profile"]["decompte"]["nb_missing_values"] == 0
+    # a nested column, which the parquet footer only describes through its leaves
+    assert profile["profile"]["liste"]["nb_missing_values"] == TOTAL_LINES // 3
+
+
+def test_resource_profile_counts_rare_missing_values_across_row_groups(
+    client, parquet_dir, duckdb_connection
+):
+    path = f"{parquet_dir}/{RARE_NULL_RESOURCE_ID}.parquet"
+    [(row_groups,)] = duckdb_connection.execute(
+        f"SELECT num_row_groups FROM parquet_file_metadata('{path}')"
+    ).fetchall()
+    assert row_groups > 1
+    response = client.get(f"/api/resources/{RARE_NULL_RESOURCE_ID}/profile/")
+    profile = response.json()["profile"]
+    assert profile["total_lines"] == RARE_NULL_TOTAL_LINES
+    assert profile["profile"]["value"]["nb_missing_values"] == 2
+
+
+def test_resource_profile_without_statistics(client, monkeypatch):
+    monkeypatch.setattr(settings, "PROFILE_STATS", False)
+    profile = client.get(f"/api/resources/{RESOURCE_ID}/profile/").json()["profile"]
+    assert profile["total_lines"] == TOTAL_LINES
+    assert profile["profile"] == {}
+
+
+def test_resource_profile_of_a_file_too_big_to_scan_in_time(client, monkeypatch):
+    """Only the statistics scan the file: when that times out, the profile comes without them."""
+    # loading the resource only describes the file, it is not part of what times out here
+    assert client.get(f"/api/resources/{RESOURCE_ID}/").status_code == 200
+    query = engine.query
+
+    async def scans_time_out(sql, params=None):
+        if "read_parquet" in sql:
+            raise query_timeout(settings.QUERY_TIMEOUT)
+        return await query(sql, params)
+
+    monkeypatch.setattr(engine, "query", scans_time_out)
+    response = client.get(f"/api/resources/{RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    profile = response.json()["profile"]
+    assert profile["header"] == HEADER
+    assert profile["total_lines"] == TOTAL_LINES
+    assert profile["profile"] == {}
+
+
+def test_resource_profile_from_the_parquet_inspection(client):
+    """The csv-detective inspection embedded by hydra is served as is."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/profile/")
+    assert response.status_code == 200
+    assert response.json() == {"profile": INSPECTION, "indexes": None}
+
+
+def test_resource_swagger_uses_the_inspection_types(client):
+    """`liste` is stored as a string but csv-detective typed it as json: only null checks are
+    advertised."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/swagger/")
+    swagger = yaml.safe_load(response.text)
+    names = {
+        p["name"]
+        for p in swagger["paths"][f"/api/resources/{INSPECTED_RESOURCE_ID}/data/"]["parameters"]
+    }
+    assert {name for name in names if name.startswith("liste__")} == {
+        "liste__isnull",
+        "liste__isnotnull",
+    }
+    assert "code__contains" in names
+
+
+def test_resource_data_with_a_parquet_inspection(client):
+    """`liste` is stored as text, but typed json: served as a JSON value, like PostgREST served
+    the JSON column of the table."""
+    response = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [
+        {"__id": 1, "code": "62", "liste": [1, 2], "n": 3},
+        {"__id": 2, "code": "59", "liste": None, "n": 4},
+    ]
+    assert body["meta"]["total"] == 2
+
+
+def test_resource_json_download_with_a_parquet_inspection(client):
+    rows = client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/json/").json()
+    assert [row["liste"] for row in rows] == [[1, 2], None]
+
+
+def test_resource_csv_download_keeps_the_text_of_json_columns(client):
+    rows = list(
+        csv.reader(
+            io.StringIO(client.get(f"/api/resources/{INSPECTED_RESOURCE_ID}/data/csv/").text)
+        )
     )
-    res = await client.get(f"/api/resources/{_resource_id}/profile/")
-    assert res.status == 200
-    body = await res.json()
-    assert body["profile"] == json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    if indexes is None:
-        assert body["indexes"] is None
-    else:
-        assert sorted(body["indexes"]) == sorted(indexes)
+    assert [row[2] for row in rows[1:]] == ["[1, 2]", ""]
 
 
-async def test_api_resource_profile_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/profile/")
-    assert res.status == 404
+def test_resource_swagger(client):
+    response = client.get(f"/api/resources/{RESOURCE_ID}/swagger/")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/plain; charset=utf-8"
+    assert f"/api/resources/{RESOURCE_ID}/data/" in response.text
 
 
-async def test_api_resource_data(client, base_url, tables_index_rows):
-    detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/")
-    assert res.status == 200
-    body = await res.json()
-    assert all(key in body for key in ["data", "links", "meta"])
-    assert isinstance(body["data"], list) and len(body["data"]) == 20
-    assert isinstance(body["data"][0], dict) and all(
-        col in body["data"][0] for col in detection["header"]
-    )
+def test_resource_data(client, base_url):
+    response = client.get(DATA_URL)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"][0] == FIRST_ROW
+    assert [row["__id"] for row in body["data"]] == list(range(1, 21))
     assert body["links"] == {
-        "next": f"{base_url}/api/resources/{RESOURCE_ID}/data/?page=2&page_size=20",
+        "next": f"{base_url}{DATA_URL}?page=2&page_size=20",
         "prev": None,
         "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
         "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
     }
-    assert body["meta"] == {"page": 1, "page_size": 20, "total": detection["total_lines"]}
+    assert body["meta"] == {"page": 1, "page_size": 20, "total": TOTAL_LINES}
 
 
-@pytest.mark.parametrize(
-    "args",
-    [
-        {"page": 2},
-        {"page_size": 40},
-        {"page": 4, "page_size": 5},
-    ],
-)
-async def test_api_resource_data_with_meta_args(client, base_url, tables_index_rows, args):
-    detection = json.loads(tables_index_rows[RESOURCE_ID]["csv_detective"])
-    params = "&".join(f"{k}={v}" for k, v in args.items())
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
-    assert res.status == 200
-    body = await res.json()
-    assert len(body["data"]) == args.get("page_size", config.PAGE_SIZE_DEFAULT)
+@pytest.mark.parametrize("args", [{"page": 2}, {"page_size": 40}, {"page": 4, "page_size": 5}])
+def test_resource_data_with_meta_args(client, base_url, args):
+    page = args.get("page", 1)
+    page_size = args.get("page_size", settings.PAGE_SIZE_DEFAULT)
+    response = client.get(DATA_URL, params=args)
+    assert response.status_code == 200
+    body = response.json()
+    first = (page - 1) * page_size + 1
+    assert [row["__id"] for row in body["data"]] == list(range(first, first + page_size))
     assert body["links"] == {
-        "next": (
-            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
-            f"?page={args.get('page', 1) + 1}"
-            f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
-        ),
-        "prev": (
-            f"{base_url}/api/resources/{RESOURCE_ID}/data/"
-            f"?page={args.get('page', 1) - 1}"
-            f"&page_size={args.get('page_size', config.PAGE_SIZE_DEFAULT)}"
-        )
-        if args.get("page", 1) > 1
-        else None,
+        "next": f"{base_url}{DATA_URL}?page={page + 1}&page_size={page_size}",
+        "prev": f"{base_url}{DATA_URL}?page={page - 1}&page_size={page_size}" if page > 1 else None,
         "profile": f"{base_url}/api/resources/{RESOURCE_ID}/profile/",
         "swagger": f"{base_url}/api/resources/{RESOURCE_ID}/swagger/",
     }
-    assert body["meta"] == {
-        "page": args.get("page", 1),
-        "page_size": args.get("page_size", config.PAGE_SIZE_DEFAULT),
-        "total": detection["total_lines"],
-    }
+    assert body["meta"] == {"page": page, "page_size": page_size, "total": TOTAL_LINES}
+
+
+def test_pagination_links_keep_filters_on_columns_named_page():
+    link = build_link_with_page(DATA_URL, ["pages__exact=3", "page=2", "page_size=5"], 3, 5)
+    assert link.endswith(f"{DATA_URL}?pages__exact=3&page=3&page_size=5")
+
+
+def test_resource_data_last_page_has_no_next(client):
+    body = client.get(DATA_URL, params={"page": 3}).json()
+    assert body["links"]["next"] is None
 
 
 @pytest.mark.parametrize(
-    "page,page_size,expected_ids",
+    "params, row_values, page",
     [
-        (49, 20, list(range(961, 981))),
-        (50, 20, list(range(981, 1001))),
-        (34, 30, list(range(991, 1001))),
-    ],
-)
-async def test_api_resource_data_raw_page_never_contains_next_page_row(
-    client, base_url, page, page_size, expected_ids
-):
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?page={page}&page_size={page_size}")
-    assert res.status == 200
-    body = await res.json()
-    assert [row["__id"] for row in body["data"]] == expected_ids
-    assert body["meta"]["total"] == 1000
-    expected_next = (
-        f"{base_url}/api/resources/{RESOURCE_ID}/data/?page={page + 1}&page_size={page_size}"
-        if page * page_size < 1000
-        else None
-    )
-    assert body["links"]["next"] == expected_next
-
-
-# AGG_ALLOWED_RESOURCE_ID has 10 rows with distinct `id` values and 2 distinct `is_true` values;
-# PostgREST only groups rows when an aggregate function is selected, hence the `__count`
-@pytest.mark.parametrize(
-    "query,nb_rows,expected_next_query",
-    [
-        ("id__groupby&decompte__count&page_size=10", 10, None),
-        ("id__groupby&decompte__count&page=2&page_size=5", 5, None),
+        # rows 9975 to 10009: across the boundary of the first two row groups
+        ({}, range(RARE_NULL_TOTAL_LINES), 286),
+        # rows 19980 to 20014 of the filtered ones: across the boundary of the next two; the
+        # value of row 25000 is NULL, which the filter leaves out
         (
-            "id__groupby&decompte__count&page_size=9",
-            9,
-            "id__groupby&decompte__count&page=2&page_size=9",
+            {"value__greater": 5000},
+            [i for i in range(5000, RARE_NULL_TOTAL_LINES) if i != 25000],
+            429,
         ),
-        (
-            "id__groupby&decompte__count&page=2&page_size=4",
-            4,
-            "id__groupby&decompte__count&page=3&page_size=4",
-        ),
-        ("id__groupby&decompte__count&page=3&page_size=4", 2, None),
-        ("is_true__groupby&id__count&page_size=10", 2, None),
     ],
 )
-async def test_api_resource_data_aggregated_next_link_is_exact(
-    client, base_url, query, nb_rows, expected_next_query
-):
-    res = await client.get(f"/api/resources/{AGG_ALLOWED_RESOURCE_ID}/data/?{query}")
-    assert res.status == 200
-    body = await res.json()
-    assert len(body["data"]) == nb_rows
-    assert "total" not in body["meta"]
-    assert body["links"]["next"] == (
-        f"{base_url}/api/resources/{AGG_ALLOWED_RESOURCE_ID}/data/?{expected_next_query}"
-        if expected_next_query
-        else None
-    )
+def test_resource_data_unsorted_pages_follow_the_file_order(client, params, row_values, page):
+    """Without a sort, pages come in __id order, across the row groups of the file."""
+    page_size = 35
+    # the value of a row is its index in the file, its __id the next integer
+    expected = [i + 1 for i in row_values][(page - 1) * page_size : page * page_size]
+    url = f"/api/resources/{RARE_NULL_RESOURCE_ID}/data/"
+    body = client.get(url, params={**params, "page": page, "page_size": page_size}).json()
+    assert [row["__id"] for row in body["data"]] == expected
+    assert body["meta"]["total"] == len(row_values)
 
 
-@pytest.mark.parametrize(
-    "filters",
-    [
-        [("id", "exact", "e5b8864b-d1d0-4452-8d83-517d31da7ff2")],
-        [("score", "less", 0.3)],
-        [("is_true", "differs", True)],
-        [("is_true", "differs", False), ("score", "greater", 0.7)],
-        [{"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
-        [("is_true", "differs", True), {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]}],
-        [
-            ("is_true", "exact", True),
-            {"or": [("score", "greater", 0.9), ("score", "less", 0.1)]},
-            {
-                "or": [
-                    {"and": [("decompte", "greater", 80), ("birth", "greater", "1970")]},
-                    {"and": [("decompte", "less", 20), ("birth", "less", "1920")]},
-                ]
-            },
-        ],
-    ],
-)
-async def test_api_resource_data_with_data_args(client, filters):
-    def conforms_filter(row: dict, col: str, comp: str, val) -> bool:
-        if comp == "exact":
-            return (row[col] is val) if isinstance(val, bool) else (row[col] == val)
-        elif comp == "differs":
-            return row[col] != val
-        elif comp == "less":
-            return row[col] <= val
-        elif comp == "greater":
-            return row[col] >= val
-        raise NotImplementedError
-
-    def conforms(row, filters: list, group: str) -> bool:
-        op = all if group == "and" else any
-        return op(
-            conforms_filter(row, *_filter)
-            if isinstance(_filter, tuple)
-            else conforms(row, list(_filter.values())[0], list(_filter)[0])
-            for _filter in filters
-        )
-
-    def build_single_param(_filter: tuple, top_level: bool = False):
-        col, op, val = _filter
-        sep = "=" if top_level else "."
-        value = str(val)
-        if isinstance(val, bool):
-            value = value.lower()
-        if not top_level:
-            value = f'"{value}"'
-        return f"{col}__{op}{sep}{value}"
-
-    def build_params(filters, group: str, top_level: bool = False) -> str:
-        if top_level:
-            return "&".join(
-                build_single_param(_filter, top_level=True)
-                if isinstance(_filter, tuple)
-                else f"{group}=({build_params(list(_filter.values())[0], group)})"
-                for _filter in filters
-            )
-        else:
-            return ",".join(
-                build_single_param(_filter)
-                if isinstance(_filter, tuple)
-                else f"{list(_filter)[0]}({build_params(list(_filter.values())[0], list(_filter)[0])})"
-                for _filter in filters
-            )
-
-    params = build_params(filters, group="or", top_level=True)
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
-    assert res.status == 200
-    body = await res.json()
-    # only checking first page
-    assert body["data"]
-    for row in body["data"]:
-        assert conforms(row, filters, group="and")
-
-
-async def test_api_resource_data_or_group_with_quoted_columns_and_strict_operators(client):
-    params = 'or=("score"__strictly_greater."0.9","score"__strictly_less."0.1")'
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{params}")
-    assert res.status == 200
-    body = await res.json()
-    # only checking first page
-    assert body["data"]
-    for row in body["data"]:
-        assert row["score"] > 0.9 or row["score"] < 0.1
-
-
-async def test_api_resource_data_with_args_error(client):
-    args = "TESTCOLUM_NAME__EXACT=BIDULEpage=1"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
-    assert res.status == 400
-    assert await res.json() == {
+def test_resource_data_with_page_size_error(client):
+    response = client.get(DATA_URL, params={"page": 1, "page_size": settings.PAGE_SIZE_MAX + 1})
+    assert response.status_code == 400
+    assert response.json() == {
         "errors": [
             {
                 "code": None,
                 "title": "Invalid query string",
-                "detail": f"Malformed query: argument '{args}' could not be parsed",
-            }
-        ]
-    }
-
-
-async def test_api_resource_data_with_page_size_error(client):
-    args = f"page=1&page_size={config.PAGE_SIZE_MAX + 1}"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
-    assert res.status == 400
-    assert await res.json() == {
-        "errors": [
-            {
-                "code": None,
-                "detail": f"Page size exceeds allowed maximum: {config.PAGE_SIZE_MAX}",
-                "title": "Invalid query string",
+                "detail": f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}",
             }
         ]
     }
 
 
 @pytest.mark.parametrize(
-    "args,detail",
+    "argument, detail",
     [
         ("page_size=0", "Page size must be at least 1"),
         ("page_size=-1", "Page size must be at least 1"),
@@ -347,177 +644,312 @@ async def test_api_resource_data_with_page_size_error(client):
         ("page=", "Page must be an integer"),
         ("page=0", "Page must be at least 1"),
         ("page=-1", "Page must be at least 1"),
+        # an offset beyond the BIGINT of DuckDB, which would fail as a database error
+        ("page=1000000000000000000", "Page is too large"),
     ],
 )
-async def test_api_resource_data_with_invalid_pagination_returns_400(client, args, detail):
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{args}")
-    assert res.status == 400
-    assert await res.json() == {
-        "errors": [{"code": None, "detail": detail, "title": "Invalid query string"}]
+def test_resource_data_with_invalid_page(client, argument, detail):
+    """The messages of the PostgREST-based API."""
+    response = client.get(f"{DATA_URL}?{argument}")
+    assert response.status_code == 400
+    assert response.json() == {
+        "errors": [{"code": None, "title": "Invalid query string", "detail": detail}]
     }
 
 
-async def test_api_resource_data_not_found(client):
-    res = await client.get(f"/api/resources/{UNKNOWN_RESOURCE_ID}/data/")
-    assert res.status == 404
+def test_resource_data_filter(client):
+    response = client.get(DATA_URL, params={"decompte__exact": 3, "is_true__exact": "true"})
+    assert response.status_code == 200
+    body = response.json()
+    expected = [i for i in range(1, TOTAL_LINES + 1) if i % 7 == 3 and i % 2 == 0]
+    assert [row["__id"] for row in body["data"]] == expected
+    assert body["meta"]["total"] == len(expected)
 
 
-async def test_api_with_unsupported_args(client):
-    arg = "limit=1"
-    res = await client.get(f"/api/resources/{RESOURCE_ID}/data/?{arg}")
-    assert res.status == 400
-    body = {
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "limit=1",
+        # a missing `&` makes an argument with two `=`
+        "TESTCOLUM_NAME__EXACT=BIDULEpage=1",
+    ],
+)
+def test_resource_data_with_unparseable_argument(client, argument):
+    response = client.get(f"{DATA_URL}?{argument}")
+    assert response.status_code == 400
+    assert response.json() == {
         "errors": [
             {
                 "code": None,
                 "title": "Invalid query string",
-                "detail": f"Malformed query: argument '{arg}' could not be parsed",
-            },
-        ],
+                "detail": f"Malformed query: argument '{argument}' could not be parsed",
+            }
+        ]
     }
-    assert await res.json() == body
+
+
+def test_resource_data_contains_wildcard(client):
+    """PostgREST treats `*` as a wildcard in `ilike` patterns."""
+    response = client.get(DATA_URL, params={"id__contains": "d-*0"})
+    assert response.json()["meta"]["total"] == len(
+        [i for i in range(1, TOTAL_LINES + 1) if i % 10 == 0]
+    )
+
+
+def test_resource_data_value_not_castable(client):
+    response = client.get(DATA_URL, params={"decompte__greater": "12.5"})
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("resource_id", [ID_COLUMN_RESOURCE_ID, UPPER_ID_COLUMN_RESOURCE_ID])
+def test_a_column_named_like_the_row_id_is_replaced_by_it(client, resource_id):
+    """`__id` stays the row number of the API, instead of the file's column hiding it."""
+    response = client.get(f"/api/resources/{resource_id}/data/")
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {"__id": 1, "value": 0},
+        {"__id": 2, "value": 1},
+        {"__id": 3, "value": 2},
+    ]
+
+
+def test_a_column_named_like_the_row_numbers_is_refused_once(client, sentry_events):
+    """DuckDB cannot number the rows of such a file: a clear error, not a failure per query."""
+    response = client.get(f"/api/resources/{ROW_NUMBER_COLUMN_RESOURCE_ID}/data/")
+    assert response.status_code == 400
+    error = response.json()["errors"][0]
+    assert error["title"] == "Invalid resource file"
+    assert "File_Row_Number" in error["detail"]
+    assert sentry_events == []
+
+
+def test_resource_data_database_error(client, http_parquet_dir):
+    """An error only DuckDB detects, such as the average of a text column."""
+    response = client.get(f"{DATA_URL}?id__avg")
+    assert response.status_code == 400
+    error = response.json()["errors"][0]
+    assert error["title"] == "Database error"
+    # the storage location is not disclosed
+    assert http_parquet_dir not in error["detail"]
+
+
+def test_resource_data_or_group(client):
+    response = client.get(DATA_URL, params={"or": '("Nom de l\'élu"__isnull,decompte__exact.6)'})
+    assert response.status_code == 200
+    expected = [i for i in range(1, TOTAL_LINES + 1) if i % 5 == 0 or i % 7 == 6]
+    assert response.json()["meta"]["total"] == len(expected)
+
+
+def encode(text: str) -> str:
+    """encodeURIComponent, which the front of data.gouv.fr encodes the queries with."""
+    return quote(text, safe="-_.!~*'()")
+
+
+@pytest.mark.parametrize("times", [1, 2])
+@pytest.mark.parametrize(
+    "arguments, total",
+    [
+        ([(f"{NAME}__exact", "Élu 7")], 1),
+        # `Élu 1`, `Élu 11`, `Élu 12`... except the NULL names, every fifth row
+        (
+            [(f"{NAME}__contains", "Élu 1")],
+            len([i for i in range(1, TOTAL_LINES + 1) if i % 5 and str(i).startswith("1")]),
+        ),
+        ([("columns", f"id,{NAME}"), (f"{NAME}__sort", "desc")], TOTAL_LINES),
+        (
+            [("or", f'("{NAME}"__isnull,decompte__exact.6)')],
+            len([i for i in range(1, TOTAL_LINES + 1) if i % 5 == 0 or i % 7 == 6]),
+        ),
+    ],
+)
+def test_resource_data_query_encoded_once_or_twice(client, arguments, total, times):
+    """The PostgREST-based API decoded the query twice: clients encode it either way."""
+
+    def encoded(text: str) -> str:
+        for _ in range(times):
+            text = encode(text)
+        return text
+
+    query = "&".join(f"{encoded(key)}={encoded(value)}" for key, value in arguments)
+    response = client.get(f"{DATA_URL}?{query}")
+    assert response.status_code == 200, response.json()
+    assert response.json()["meta"]["total"] == total
 
 
 @pytest.mark.parametrize(
-    "params",
+    "value, expected",
     [
-        (RESOURCE_ID, True),
-        (INDEXED_RESOURCE_ID, True),
-        (AGG_ALLOWED_RESOURCE_ID, False),
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, False),
+        # a plus sign is a space, an encoded one a plus sign, encoded once or twice
+        ("Élu+7", "Élu 7"),
+        (encode("Élu+7"), "Élu+7"),
+        (encode(encode("Élu+7")), "Élu+7"),
     ],
 )
-async def test_api_aggregation_does_not_depend_on_indexes(client, tables_index_rows, params):
-    """Only ALLOW_AGGREGATION decides whether a resource can be aggregated, and then on all of its
-    columns: an index on the grouped column does not make a full-table aggregation any cheaper"""
-    _resource_id, forbidden = params
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
+def test_resource_data_query_plus_signs(client, value, expected):
+    response = client.get(f"{DATA_URL}?{encode(NAME)}__exact={value}")
+    assert response.status_code == 200
+    # no row holds `Élu+7`: only the decoded value tells the two apart
+    assert response.json()["meta"]["total"] == (1 if expected == "Élu 7" else 0)
 
-    # checking that the resource is readable with no filter
-    res = await client.get(f"/api/resources/{_resource_id}/data/?page=1&page_size=1")
-    assert res.status == 200
 
-    # checking that the resource can be filtered on all columns
-    for col, results in detection["columns"].items():
-        if results["python_type"] == "json":
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__exact=1&page=1&page_size=1"
-        )
-        assert res.status == 200
+def test_resource_data_columns(client):
+    response = client.get(DATA_URL, params={"columns": "id,decompte", "page_size": 1})
+    assert response.json()["data"] == [{"id": "id-1", "decompte": 1}]
 
-    # if aggregation is allowed:
-    # checking whether aggregation is allowed on all columns or none
-    for col, results in detection["columns"].items():
-        if results["python_type"] == "json":
-            continue
-        res = await client.get(
-            f"/api/resources/{_resource_id}/data/?{col}__groupby&page=1&page_size=1"
-        )
-        assert res.status == (403 if forbidden else 200)
+
+def test_resource_data_unknown_column(client):
+    response = client.get(DATA_URL, params={"nope__exact": 1})
+    assert response.status_code == 400
+    assert "unknown column" in response.json()["errors"][0]["detail"]
 
 
 @pytest.mark.parametrize(
-    "params",
+    "page, page_size, groups, has_next",
     [
-        (503, 503, ["errors"]),
-        (200, 200, ["status", "version", "uptime_since"]),
+        (1, 3, [0, 1, 2], True),
+        (3, 3, [6], False),
+        (1, 6, list(range(6)), True),
+        # a full last page does not link to an empty one
+        (1, 7, list(range(7)), False),
     ],
 )
-async def test_health(client, mocker, params):
-    postgrest_resp_code, api_expected_resp_code, expected_keys = params
-    mocked_head = patch_csession(mocker, client, postgrest_resp_code)
-    res = await client.get("/health/")
-    assert res.status == api_expected_resp_code
-    res_json = await res.json()
-    assert all(key in res_json for key in expected_keys)
-    mocked_head.assert_called_once_with(f"{config.PGREST_ENDPOINT}/migrations_csv")
+def test_resource_data_aggregation(client, page, page_size, groups, has_next):
+    response = client.get(
+        f"{DATA_URL}?decompte__groupby&id__count&page={page}&page_size={page_size}"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [
+        {
+            "decompte": group,
+            "id__count": sum(1 for i in range(1, TOTAL_LINES + 1) if i % 7 == group),
+        }
+        for group in groups
+    ]
+    # the total of an aggregation is not computed
+    assert body["meta"] == {"page": page, "page_size": page_size}
+    assert (body["links"]["next"] is not None) == has_next
 
 
-async def test_aggregation_exceptions(client):
-    res = await client.get("/api/aggregation-exceptions/")
-    aggregations = await res.json()
-    assert not aggregations["allowed"]
-    assert aggregations["exceptions"] == config.ALLOW_AGGREGATION_EXCEPTIONS
+def test_resource_data_groupby_alone(client):
+    response = client.get(f"{DATA_URL}?decompte__groupby&page_size=2")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"] == [{"decompte": 1}, {"decompte": 2}]
+    assert body["meta"]["total"] == TOTAL_LINES
 
 
-@pytest.mark.parametrize(
-    "_resource_id,batch_size",
-    [
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
-        (AGG_ALLOWED_RESOURCE_ID, None),
-        (INDEXED_RESOURCE_ID, None),
-        (RESOURCE_ID, None),
-        (RESOURCE_ID, 5),
-    ],
-)
-async def test_api_csv_export(client, mocker, tables_index_rows, _resource_id, batch_size):
-    if batch_size is not None:
-        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"/api/resources/{_resource_id}/data/csv/")
-    if batch_size is not None:
-        assert res.status == 403
-        return
-    assert res.status == 200
-    content = await res.text()
-    reader = csv.reader(StringIO(content))
-    columns = next(reader)
-    rows = [r for r in reader]
-    # __id is added by tabular-api
-    assert columns == ["__id"] + list(detection["columns"])
-    assert len(rows) == detection["total_lines"]
+def test_resource_data_aggregation_with_columns(client):
+    response = client.get(f"{DATA_URL}?decompte__groupby&columns=decompte")
+    assert response.status_code == 400
+    assert response.json()["errors"][0] == {
+        "code": None,
+        "title": "Invalid query string",
+        "detail": "Malformed query: the argument `columns` cannot be set alongside aggregators",
+    }
 
 
-@pytest.mark.parametrize(
-    "_resource_id,batch_size",
-    [
-        (AGG_ALLOWED_INDEXED_RESOURCE_ID, None),
-        (AGG_ALLOWED_RESOURCE_ID, None),
-        (INDEXED_RESOURCE_ID, None),
-        (RESOURCE_ID, None),
-        (RESOURCE_ID, 5),
-    ],
-)
-async def test_api_json_export(client, mocker, tables_index_rows, _resource_id, batch_size):
-    if batch_size is not None:
-        mocker.patch("api_tabular.config.BATCH_SIZE", batch_size)
-    detection = json.loads(tables_index_rows[_resource_id]["csv_detective"])
-    res = await client.get(f"/api/resources/{_resource_id}/data/json/")
-    if batch_size is not None:
-        assert res.status == 403
-        return
-    assert res.status == 200
-    content = await res.text()
-    rows = json.loads(content)
-    assert len(rows) == detection["total_lines"]
-    for row in rows:
-        # __id is added by tabular-api
-        assert list(row.keys()) == ["__id"] + list(detection["columns"])
+def test_resource_data_csv_aggregation(client):
+    response = client.get(f"{DATA_URL}csv/?is_true__groupby&decompte__sum")
+    assert response.status_code == 200
+    rows = list(csv.reader(io.StringIO(response.text)))
+    expected_sum = {
+        value: sum(i % 7 for i in range(1, TOTAL_LINES + 1) if (i % 2 == 0) == value)
+        for value in (False, True)
+    }
+    assert rows == [
+        ["is_true", "decompte__sum"],
+        ["false", str(expected_sum[False])],
+        ["true", str(expected_sum[True])],
+    ]
 
 
-async def test_api_resource_with_null_values(client):
-    # in this table we have exactly two NULL values per column, 10 rows in total
-    response = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/profile/")
-    profile = await response.json()
-    columns = [col for col in profile["profile"]["columns"].keys()]
-    for col in columns:
-        res = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnull")
-        body = await res.json()
-        assert len(body["data"]) == 2
-        assert all(row[col] is None for row in body["data"])
-        res = await client.get(f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__isnotnull")
-        body = await res.json()
-        assert len(body["data"]) == 8
-        assert all(row[col] is not None for row in body["data"])
-        # checking that `differs` can return NULL values
-        if profile["profile"]["columns"][col]["python_type"] == "json":
-            # except for json type
-            continue
-        value = 1
-        res = await client.get(
-            f"/api/resources/{NULL_VALUES_RESOURCE_ID}/data/?{col}__differs={value}"
-        )
-        body = await res.json()
-        assert all(row[col] != value for row in body["data"])
-        assert len([row for row in body["data"] if row[col] is None]) == 2
+def test_aggregation_exceptions(client):
+    response = client.get("/api/aggregation-exceptions/")
+    assert response.status_code == 200
+    assert response.json() == {"allowed": True, "exceptions": []}
+
+
+def test_resource_data_csv(client):
+    response = client.get(f"{DATA_URL}csv/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == f'attachment; filename="{RESOURCE_ID}.csv"'
+    rows = list(csv.reader(io.StringIO(response.text)))
+    assert rows[0] == ["__id"] + HEADER
+    assert len(rows) == TOTAL_LINES + 1
+    assert rows[1] == ["1", "id-1", "0.1", "1", "false", "1951-01-01", "Élu 1", '["a", "b"]']
+
+
+def test_resource_data_csv_non_finite_floats(client):
+    """Rendered like PostgreSQL does, which is also what pandas reads back as floats."""
+    response = client.get(f"/api/resources/{FLOATS_RESOURCE_ID}/data/csv/")
+    assert response.status_code == 200
+    rows = list(csv.reader(io.StringIO(response.text)))
+    assert rows == [
+        ["__id", "value"],
+        ["1", "NaN"],
+        ["2", "Infinity"],
+        ["3", "-Infinity"],
+        ["4", ""],
+        ["5", "1.5"],
+    ]
+
+
+def test_resource_data_json(client):
+    response = client.get(f"{DATA_URL}json/")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == f'attachment; filename="{RESOURCE_ID}.json"'
+    rows = response.json()
+    assert len(rows) == TOTAL_LINES
+    assert rows[0] == FIRST_ROW
+    assert all(list(row) == ["__id"] + HEADER for row in rows)
+    assert response.text.endswith("]\n")
+
+
+def test_resource_data_downloads_in_several_chunks(client, monkeypatch):
+    monkeypatch.setattr(settings, "STREAM_CHUNK_SIZE", 7)
+    rows = client.get(f"{DATA_URL}json/").json()
+    assert [row["__id"] for row in rows] == list(range(1, TOTAL_LINES + 1))
+    lines = list(csv.reader(io.StringIO(client.get(f"{DATA_URL}csv/").text)))
+    assert lines[0] == ["__id"] + HEADER
+    assert [line[0] for line in lines[1:]] == [str(i) for i in range(1, TOTAL_LINES + 1)]
+
+
+def test_resource_data_downloads_without_any_row(client):
+    """The CSV keeps its header, so that it can still be read with its columns."""
+    csv_response = client.get(f"{DATA_URL}csv/?decompte__exact=99")
+    assert list(csv.reader(io.StringIO(csv_response.text))) == [["__id"] + HEADER]
+    assert client.get(f"{DATA_URL}json/?decompte__exact=99").json() == []
+
+
+@pytest.mark.parametrize("suffix", ["data/", "data/json/"])
+def test_resource_data_non_finite_floats_in_json(client, suffix):
+    """NaN and infinities are not valid JSON."""
+    response = client.get(f"/api/resources/{FLOATS_RESOURCE_ID}/{suffix}")
+    assert response.status_code == 200
+    body = response.json()
+    rows = body["data"] if suffix == "data/" else body
+    assert [row["value"] for row in rows] == [None, None, None, None, 1.5]
+
+
+@pytest.mark.parametrize("output", ["csv", "json"])
+def test_resource_data_download_failing_once_run(client, output):
+    """The count passes, the query fails: the error must come before a 200 is sent."""
+    response = client.get(f"{DATA_URL}{output}/?decompte__sum&id__sort=asc")
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["title"] == "Database error"
+
+
+@pytest.mark.parametrize("output", ["csv", "json"])
+def test_resource_data_download_too_long(client, monkeypatch, output):
+    monkeypatch.setattr(settings, "BATCH_SIZE", 5)
+    response = client.get(f"{DATA_URL}{output}/")
+    assert response.status_code == 403
+    assert response.json()["errors"][0]["title"] == "Output is too long"
+
+
+def test_doc_is_served(client):
+    assert client.get("/api/doc").status_code == 200
+    # the path where the PostgREST-based API served its spec
+    assert "Tabular API" in client.get("/api/doc/swagger.json").json()["info"]["title"]

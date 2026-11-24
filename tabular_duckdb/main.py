@@ -1,0 +1,420 @@
+import asyncio
+import re
+import urllib.error
+import urllib.request
+from collections.abc import AsyncGenerator, Callable, Mapping
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from http import HTTPStatus
+from pathlib import Path
+from typing import Any
+from urllib.parse import unquote
+
+import duckdb
+import sentry_sdk
+import uvicorn
+import yaml
+from fastapi import FastAPI, Request
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.types import DecoratedCallable
+from starlette.datastructures import MutableHeaders
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from tabular_duckdb import __version__
+from tabular_duckdb.config import settings
+from tabular_duckdb.engine import QueryResult, engine
+from tabular_duckdb.errors import (
+    QueryException,
+    handle_exception,
+    invalid_query_string,
+    safe_message,
+)
+from tabular_duckdb.query import PAGINATION_ARGUMENTS, ParsedQuery, Statement, build_query
+from tabular_duckdb.resources import (
+    Resource,
+    build_profile,
+    is_storage_failure,
+    profile_columns,
+    read_error,
+    resource_cache,
+)
+from tabular_duckdb.serialization import jsonable, rows_to_json
+from tabular_duckdb.streaming import (
+    ClosingStreamingResponse,
+    check_output_size,
+    start_stream,
+    stream_csv,
+    stream_json,
+)
+from tabular_duckdb.swagger import build_swagger_file
+
+SWAGGER_FILE = Path(__file__).resolve().parent.parent / "tabular_swagger.yaml"
+OPENAPI_DOCUMENT = yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8"))
+OPENAPI_DOCUMENT["info"]["version"] = __version__
+BIGINT_MAX = 2**63 - 1
+
+
+def external_url(path: str) -> str:
+    return f"{settings.SCHEME}://{settings.SERVER_NAME}{path}"
+
+
+def resource_url(resource_id: str, suffix: str = "") -> str:
+    return external_url(f"/api/resources/{resource_id}/{suffix}")
+
+
+def build_link_with_page(path: str, query_string: list[str], page: int, page_size: int) -> str:
+    query = [
+        argument
+        for argument in query_string
+        if argument.partition("=")[0] not in PAGINATION_ARGUMENTS
+    ]
+    query.extend([f"page={page}", f"page_size={page_size}"])
+    return external_url(f"{path}?{'&'.join(query)}")
+
+
+def query_arguments(request: Request) -> list[str]:
+    return request.url.query.split("&") if request.url.query else []
+
+
+# the escapes aiohttp left encoded in request.query_string: decoding them would change where the
+# arguments and their values split
+SEPARATOR_ESCAPES = re.compile(r"(%26|%2B|%3B|%3D)", re.IGNORECASE)
+
+
+def decode_like_aiohttp(argument: str) -> str:
+    """A first decoding of a query string argument, before the one of build_query.
+
+    TODO: remove once no client encodes the query twice (the assistant of udata, reusers of the
+    API). The PostgREST-based API decoded the query in aiohttp's request.query_string, then
+    PostgREST decoded what it was sent: a query encoded once or twice gave the same rows, which
+    this decoding, the same as aiohttp's, keeps.
+    """
+    parts = SEPARATOR_ESCAPES.split(argument.replace("+", " "))
+    # the odd parts are the separator escapes, kept as they are
+    return "".join(part if i % 2 else unquote(part) for i, part in enumerate(parts))
+
+
+def int_argument(request: Request, name: str, label: str, default: int) -> int:
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise invalid_query_string(f"{label} must be an integer") from None
+    if value < 1:
+        raise invalid_query_string(f"{label} must be at least 1")
+    return value
+
+
+def parse_query(
+    query_string: list[str],
+    columns: Mapping[str, str],
+    page_size: int | None = None,
+    offset: int = 0,
+) -> ParsedQuery:
+    try:
+        arguments = [decode_like_aiohttp(argument) for argument in query_string]
+        return build_query(arguments, columns, page_size, offset)
+    except ValueError as exc:
+        raise invalid_query_string(f"Malformed query: {exc}") from exc
+
+
+def database_error(exc: duckdb.Error, resource_id: str) -> Exception:
+    if is_storage_failure(exc):
+        return read_error(exc, resource_id)
+    return handle_exception(400, "Database error", safe_message(str(exc)), resource_id)
+
+
+async def run_query(statement: Statement, resource_id: str) -> QueryResult:
+    try:
+        return await engine.query(statement.sql, statement.params)
+    except duckdb.Error as exc:
+        raise database_error(exc, resource_id) from exc
+
+
+def check_storage() -> None:
+    """The storage is up when it answers on the prefix, even a 403 (the bucket denies listing)."""
+    request = urllib.request.Request(settings.PARQUET_BASE_URL, method="HEAD")
+    try:
+        urllib.request.urlopen(request, timeout=settings.HEALTH_TIMEOUT).close()
+    except urllib.error.HTTPError as exc:
+        if exc.code >= 500:
+            raise QueryException(
+                503, "Storage unavailable", f"The storage answered HTTP {exc.code}"
+            ) from exc
+    except OSError as exc:
+        # urllib only wraps the connection errors into URLError: a timeout or a disconnection
+        # while waiting for the response surfaces as a bare TimeoutError or ConnectionError
+        raise QueryException(
+            503, "Storage unavailable", f"The storage is unreachable: {exc}"
+        ) from exc
+
+
+async def run_count(parsed: ParsedQuery, resource: Resource, resource_id: str) -> int:
+    if parsed.reads_every_row:
+        return resource.total_lines
+    return int((await run_query(parsed.count_sql(resource.source_sql), resource_id)).rows[0][0])
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+    if settings.SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            sample_rate=settings.SENTRY_SAMPLE_RATE,
+            release=__version__,
+        )
+    await engine.start()
+    app.state.started_at = datetime.now(UTC)
+    try:
+        yield
+    finally:
+        await engine.stop()
+
+
+api = FastAPI(
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Expose-Headers": "*",
+}
+
+
+class CORSHeadersMiddleware:
+    """The CORS headers on every response.
+
+    Unlike Starlette's CORSMiddleware, the headers do not depend on the request having an
+    Origin: the Nginx cache in front of the API serves a response to every origin. It wraps the
+    whole application rather than being added to it, where the 500 responses would escape it.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cors(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message).update(CORS_HEADERS)
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
+
+def get(path: str, **kwargs: Any) -> Callable[[DecoratedCallable], DecoratedCallable]:
+    """GET route also answering HEAD, like every GET route of the PostgREST-based API."""
+    return api.api_route(path, methods=["GET", "HEAD"], **kwargs)
+
+
+@api.exception_handler(QueryException)
+async def query_exception_handler(request: Request, exc: QueryException) -> JSONResponse:
+    return JSONResponse(status_code=exc.status, content=exc.body())
+
+
+@api.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> Response:
+    # no route accepts OPTIONS: the router answers 405 on an existing path, listing its methods.
+    # A preflight gets a 204 only when the route accepts the method it asks for, otherwise the
+    # 404 or 405 of the route, like the PostgREST-based API
+    if (
+        request.method == "OPTIONS"
+        and exc.status_code == 405
+        and request.headers.get("access-control-request-method", "GET")
+        in (exc.headers or {}).get("Allow", "").split(", ")
+    ):
+        return Response(status_code=204)
+    # the plain text body of the PostgREST-based API for its HTTP errors, e.g. "404: Not Found"
+    return PlainTextResponse(
+        f"{exc.status_code}: {HTTPStatus(exc.status_code).phrase}",
+        status_code=exc.status_code,
+        headers=exc.headers,
+    )
+
+
+@get("/api/resources/{rid}/")
+async def resource_meta(rid: str) -> JSONResponse:
+    resource = await resource_cache.get(rid)
+    return JSONResponse(
+        {
+            "created_at": resource.created_at,
+            # redirects to the current URL of the source file
+            "url": f"{settings.DATAGOUV_URL.rstrip('/')}/api/1/datasets/r/{rid}",
+            "links": [
+                {"href": resource_url(rid, "profile/"), "type": "GET", "rel": "profile"},
+                {"href": resource_url(rid, "data/"), "type": "GET", "rel": "data"},
+                {"href": resource_url(rid, "swagger/"), "type": "GET", "rel": "swagger"},
+            ],
+        }
+    )
+
+
+@get("/api/resources/{rid}/profile/")
+async def resource_profile(rid: str) -> JSONResponse:
+    resource = await resource_cache.get(rid)
+    profile = await build_profile(resource)
+    # no database index in this architecture, the whole parquet file is scanned
+    return JSONResponse(jsonable({"profile": profile, "indexes": None}))
+
+
+@get("/api/resources/{rid}/swagger/")
+async def resource_swagger(rid: str) -> Response:
+    resource = await resource_cache.get(rid)
+    swagger = build_swagger_file(profile_columns(resource), rid)
+    return PlainTextResponse(swagger)
+
+
+@get("/api/resources/{rid}/data/")
+async def resource_data(request: Request, rid: str) -> JSONResponse:
+    resource = await resource_cache.get(rid)
+    query_string = query_arguments(request)
+    page = int_argument(request, "page", "Page", 1)
+    page_size = int_argument(request, "page_size", "Page size", settings.PAGE_SIZE_DEFAULT)
+    if page_size > settings.PAGE_SIZE_MAX:
+        raise invalid_query_string(f"Page size exceeds allowed maximum: {settings.PAGE_SIZE_MAX}")
+    offset = page_size * (page - 1)
+    # DuckDB takes LIMIT and OFFSET as BIGINT
+    if offset + page_size + 1 > BIGINT_MAX:
+        raise invalid_query_string("Page is too large")
+
+    parsed = parse_query(query_string, resource.query_columns, page_size, offset)
+    if parsed.is_aggregated:
+        # one extra row tells whether a next page exists, as there is no total; only there, as a
+        # LIMIT above late_materialization_max_rows reads every column of the scanned rows
+        parsed.limit = page_size + 1
+    data = asyncio.create_task(run_query(parsed.data_sql(resource.source_sql), rid))
+    # like the PostgREST-based API, no total for aggregated queries; the count runs alongside
+    # the data, and a failure of either interrupts the other
+    count = None if parsed.is_aggregated else asyncio.create_task(run_count(parsed, resource, rid))
+    try:
+        result = await data
+        total = await count if count else None
+    finally:
+        data.cancel()
+        if count:
+            count.cancel()
+    rows = result.rows[:page_size]
+    meta: dict[str, int] = {"page": page, "page_size": page_size}
+    if total is None:
+        has_next = len(result.rows) > page_size
+    else:
+        meta["total"] = total
+        has_next = page_size + offset < total
+
+    path = request.url.path
+    return JSONResponse(
+        {
+            "data": rows_to_json(result.columns, rows, resource.json_columns),
+            "links": {
+                "profile": resource_url(rid, "profile/"),
+                "swagger": resource_url(rid, "swagger/"),
+                "next": (
+                    build_link_with_page(path, query_string, page + 1, page_size)
+                    if has_next
+                    else None
+                ),
+                "prev": (
+                    build_link_with_page(path, query_string, page - 1, page_size)
+                    if page > 1
+                    else None
+                ),
+            },
+            "meta": meta,
+        }
+    )
+
+
+async def stream_resource_data(
+    request: Request,
+    rid: str,
+    streamer: Callable[[AsyncGenerator[QueryResult], Resource], AsyncGenerator[bytes]],
+    media_type: str,
+    extension: str,
+) -> ClosingStreamingResponse:
+    resource = await resource_cache.get(rid)
+    parsed = parse_query(query_arguments(request), resource.query_columns)
+    check_output_size(await run_count(parsed, resource, rid))
+
+    statement = parsed.data_sql(resource.source_sql)
+    try:
+        chunks = await start_stream(statement.sql, statement.params)
+    except duckdb.Error as exc:
+        raise database_error(exc, rid) from exc
+    return ClosingStreamingResponse(
+        streamer(chunks, resource),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{rid}.{extension}"'},
+    )
+
+
+@get("/api/resources/{rid}/data/csv/")
+async def resource_data_csv(request: Request, rid: str) -> ClosingStreamingResponse:
+    # json columns keep their text, as in the CSV export of the PostgREST-based API
+    return await stream_resource_data(
+        request, rid, lambda chunks, _: stream_csv(chunks), "text/csv", "csv"
+    )
+
+
+@get("/api/resources/{rid}/data/json/")
+async def resource_data_json(request: Request, rid: str) -> ClosingStreamingResponse:
+    return await stream_resource_data(
+        request,
+        rid,
+        lambda chunks, resource: stream_json(chunks, resource.json_columns),
+        "application/json",
+        "json",
+    )
+
+
+@get("/health/")
+async def health(request: Request) -> JSONResponse:
+    try:
+        await engine.ping()
+    except duckdb.Error as exc:
+        raise QueryException(503, "DB unavailable", f"DuckDB is not available: {exc}") from exc
+    await asyncio.to_thread(check_storage)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "version": __version__,
+            "uptime_since": request.app.state.started_at.isoformat(),
+        }
+    )
+
+
+@get("/api/aggregation-exceptions/")
+async def aggregation_exceptions() -> JSONResponse:
+    # the PostgREST-based API restricted aggregations to indexed tables, which do not exist here
+    return JSONResponse({"allowed": True, "exceptions": []})
+
+
+# the path where aiohttp_swagger served the spec of the PostgREST-based API
+OPENAPI_PATH = f"{settings.DOC_PATH}/swagger.json"
+
+
+@get(OPENAPI_PATH)
+async def openapi_document() -> JSONResponse:
+    return JSONResponse(OPENAPI_DOCUMENT)
+
+
+@get(settings.DOC_PATH)
+async def documentation() -> Response:
+    return get_swagger_ui_html(openapi_url=OPENAPI_PATH, title="Tabular API (DuckDB)")
+
+
+app = CORSHeadersMiddleware(api)
+
+
+if __name__ == "__main__":
+    uvicorn.run("tabular_duckdb.main:app", host="0.0.0.0", port=8005)
