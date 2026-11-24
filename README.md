@@ -76,7 +76,7 @@ The production API is deployed on data.gouv.fr infrastructure at [`https://tabul
    - **`aaaaaaaa-1111-bbbb-2222-cccccccccccc`** - Main test resource with 1000 rows
    - **`aaaaaaaa-5555-bbbb-6666-cccccccccccc`** - Resource with database indexes
    - **`dddddddd-7777-eeee-8888-ffffffffffff`** - Resource allowed for aggregation
-   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with indexes and aggregation allowed
+   - **`aaaaaaaa-9999-bbbb-1010-cccccccccccc`** - Resource with an index and aggregation allowed
 
 ### 🏭 Run with a real Hydra database
 

@@ -51,18 +51,15 @@ async def get_resource_data(
         return record, total
 
 
-async def get_potential_indexes(session: ClientSession, resource_id: str) -> set[str] | None:
-    q = f"select=table_indexes&resource_id=eq.{resource_id}"
-    url = f"{config.PGREST_ENDPOINT}/resources_exceptions?{q}"
+async def get_indexes(session: ClientSession, resource_id: str) -> list[str] | None:
+    """Columns indexed on the table of the resource, None if there are none"""
+    q = f"select=column_name&resource_id=eq.{resource_id}"
+    url = f"{config.PGREST_ENDPOINT}/resources_indexes?{q}"
     async with session.get(url) as res:
         record = await res.json()
         if not res.ok:
             handle_exception(res.status, "Database error", record, resource_id)
-        if not record:
-            return None
-        # indexes look like {"column_name": "index_type", ...} or None
-        indexes: dict = record[0].get("table_indexes", {})
-        return set(indexes.keys()) if indexes else None
+        return [r["column_name"] for r in record] or None
 
 
 def try_build_query(
