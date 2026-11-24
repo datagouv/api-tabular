@@ -294,8 +294,9 @@ async def resource_data(request: Request, rid: str) -> JSONResponse:
         # LIMIT above late_materialization_max_rows reads every column of the scanned rows
         parsed.limit = page_size + 1
     data = asyncio.create_task(run_query(parsed.data_sql(resource.source_sql), rid))
-    # like the PostgREST-based API, no total for aggregated queries; the count runs alongside
-    # the data, and a failure of either interrupts the other
+    # `total` counts every row matching the filters, while `data` is only the page: the count
+    # runs alongside the data query instead of after it. Like the PostgREST-based API, there is
+    # no total for aggregated queries. A failure of either query interrupts the other
     count = None if parsed.is_aggregated else asyncio.create_task(run_count(parsed, resource, rid))
     try:
         result = await data
