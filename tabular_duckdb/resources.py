@@ -33,8 +33,7 @@ def parquet_literal(resource_id: str) -> str:
 class Resource:
     resource_id: str
     created_at: str | None
-    # the row count of the footer: counting the rows by scanning the file takes longer than
-    # QUERY_TIMEOUT_SECONDS on the biggest resources
+    # the `num_rows` of the parquet footer, read without scanning the file
     total_lines: int
     columns: dict[str, str] = field(default_factory=dict)
     # the csv-detective inspection, absent from the files converted before hydra embedded it
