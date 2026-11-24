@@ -288,6 +288,7 @@ Configuration is handled through environment variables or a `.env` file ([.env.e
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
 | `STREAM_CHUNK_SIZE` | `1000` | rows fetched at once by the CSV/JSON downloads |
 | `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of the DuckDB instance, shared by every query |
+| `DUCKDB_TEMP_DIRECTORY` | `<system temp dir>/duckdb` | where the queries over `DUCKDB_MEMORY_LIMIT` spill (e.g. a fast disk mounted on the machine) |
 | `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
 | `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |

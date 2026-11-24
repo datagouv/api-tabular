@@ -1,3 +1,6 @@
+import tempfile
+from pathlib import Path
+
 from pydantic import PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,6 +33,9 @@ class Settings(BaseSettings):
     # DuckDB, for the single instance shared by every query
     DUCKDB_THREADS: int = 4
     DUCKDB_MEMORY_LIMIT: str = "2GB"
+    # where queries larger than DUCKDB_MEMORY_LIMIT spill: DuckDB defaults to `.tmp` in the
+    # working directory, which the user of the image cannot write to
+    DUCKDB_TEMP_DIRECTORY: str = str(Path(tempfile.gettempdir()) / "duckdb")
     # caches the HTTP metadata of the files, which saves a HEAD per query, but a parquet file
     # replaced in the bucket fails to read until restart (the footers are cached either way)
     DUCKDB_METADATA_CACHE: bool = False

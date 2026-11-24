@@ -9,7 +9,6 @@ import duckdb
 import pytest
 
 from tabular_duckdb.config import settings
-from tabular_duckdb.engine import TEMP_DIRECTORY
 
 from .conftest import SLOW_QUERY, ParquetFilesHandler, serve
 
@@ -66,7 +65,7 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
         "http_retries": 0,
         "max_expression_depth": 500,
         "TimeZone": "UTC",
-        "temp_directory": TEMP_DIRECTORY,
+        "temp_directory": settings.DUCKDB_TEMP_DIRECTORY,
     }
 
 
