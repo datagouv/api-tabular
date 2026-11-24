@@ -34,7 +34,7 @@ class Resource:
     resource_id: str
     created_at: str | None
     # the row count of the footer: counting the rows by scanning the file takes longer than
-    # QUERY_TIMEOUT on the biggest resources
+    # QUERY_TIMEOUT_SECONDS on the biggest resources
     total_lines: int
     columns: dict[str, str] = field(default_factory=dict)
     # the csv-detective inspection, absent from the files converted before hydra embedded it
@@ -147,7 +147,7 @@ class ResourceCache:
             key: entry for key, entry in self._entries.items() if entry.expires_at > now
         }
         self._entries[resource_id] = CacheEntry(
-            expires_at=now + settings.RESOURCE_CACHE_TTL, resource=resource
+            expires_at=now + settings.RESOURCE_CACHE_TTL_SECONDS, resource=resource
         )
         return resource
 

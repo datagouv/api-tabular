@@ -188,14 +188,14 @@ def test_cors_headers_on_a_server_error(monkeypatch):
 
 def test_health_when_the_storage_never_answers(client, silent_storage, monkeypatch):
     monkeypatch.setattr(settings, "PARQUET_BASE_URL", silent_storage)
-    monkeypatch.setattr(settings, "HEALTH_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "HEALTH_TIMEOUT_SECONDS", 1)
     response = client.get("/health/")
     assert response.status_code == 503
     assert response.json()["errors"][0]["title"] == "Storage unavailable"
 
 
 def test_query_timeout(client, monkeypatch):
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 1)
     with pytest.raises(QueryException) as raised:
         client.portal.call(engine.query, SLOW_QUERY)
     assert raised.value.status == 400
@@ -204,7 +204,7 @@ def test_query_timeout(client, monkeypatch):
 
 def test_exports_open_at_once_are_bounded(client, monkeypatch):
     """An open export keeps its result between chunks, at the pace of its client."""
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 1)
     exports = [engine.stream("SELECT 1 AS n") for _ in range(settings.QUERY_WORKERS)]
 
     async def first_chunk(export):
@@ -262,7 +262,7 @@ async def cut_off_download(path: str) -> int:
 @pytest.mark.parametrize("output", ["csv", "json"])
 def test_a_download_cut_off_by_its_client_frees_its_slot(client, monkeypatch, output):
     """Without the garbage collector, which Starlette would leave the abandoned body to."""
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 1)
     monkeypatch.setattr(settings, "STREAM_CHUNK_SIZE", 1)
     gc.disable()
     try:
@@ -278,7 +278,7 @@ def test_a_download_cut_off_by_its_client_frees_its_slot(client, monkeypatch, ou
 
 def test_health_and_data_when_every_query_slot_is_taken(client, monkeypatch):
     """Slow /data/ queries must neither make /health/ fail nor queue the others forever."""
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 1)
     slots = settings.QUERY_WORKERS
     for _ in range(slots):
         client.portal.call(engine._slots.acquire)
@@ -481,7 +481,7 @@ def test_resource_profile_of_a_file_too_big_to_scan_in_time(client, monkeypatch)
 
     async def scans_time_out(sql, params=None):
         if "read_parquet" in sql:
-            raise query_timeout(settings.QUERY_TIMEOUT)
+            raise query_timeout(settings.QUERY_TIMEOUT_SECONDS)
         return await query(sql, params)
 
     monkeypatch.setattr(engine, "query", scans_time_out)

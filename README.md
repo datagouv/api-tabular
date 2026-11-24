@@ -279,22 +279,22 @@ Configuration is handled through environment variables or a `.env` file ([.env.e
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PARQUET_BASE_URL` | `https://hydra.s3.rbx.io.cloud.ovh.net/parquet` | prefix holding the `<resource_id>.parquet` files |
-| `HEALTH_TIMEOUT` | `20` | timeout of the HEAD `/health/` sends to the storage, in seconds |
+| `HEALTH_TIMEOUT_SECONDS` | `20` | timeout of the HEAD `/health/` sends to the storage, in seconds |
 | `SERVER_NAME` / `SCHEME` | `localhost:8005` / `http` | used to build the URLs in responses |
 | `DOC_PATH` | `/api/doc` | path of the API documentation |
 | `DATAGOUV_URL` | `https://www.data.gouv.fr` | instance of the resources: their `url` is its permalink, which redirects to the source file |
-| `DUCKDB_METADATA_CACHE` | `false` | cache the HTTP metadata of the files (see below) |
+| `DUCKDB_ENABLE_HTTP_METADATA_CACHE` | `false` | cache the HTTP metadata of the files (see below) |
 | `PAGE_SIZE_DEFAULT` / `PAGE_SIZE_MAX` | `20` / `50` | pagination |
 | `BATCH_SIZE` | `50000` | maximum number of rows for the CSV/JSON downloads |
 | `STREAM_CHUNK_SIZE` | `1000` | rows fetched at once by the CSV/JSON downloads |
 | `DUCKDB_THREADS` / `DUCKDB_MEMORY_LIMIT` | `4` / `2GB` | limits of the DuckDB instance, shared by every query |
 | `DUCKDB_TEMP_DIRECTORY` | `<system temp dir>/duckdb` | where the queries over `DUCKDB_MEMORY_LIMIT` spill (e.g. a fast disk mounted on the machine) |
-| `QUERY_TIMEOUT` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
-| `RESOURCE_CACHE_TTL` | `300` | how long a parquet schema is cached, in seconds |
+| `QUERY_TIMEOUT_SECONDS` / `QUERY_WORKERS` | `30` / `8` | queries are interrupted after this many seconds, at most this many run at once and at most this many downloads are open at once (a 503 is returned to the others once the timeout is spent waiting) |
+| `RESOURCE_CACHE_TTL_SECONDS` | `300` | how long a parquet schema is cached, in seconds |
 | `PROFILE_STATS` | `true` | compute `SUMMARIZE` statistics in `/profile/` |
 | `SENTRY_DSN` / `SENTRY_SAMPLE_RATE` | empty / `1.0` | error reporting |
 
-The parquet footers are always cached: each query still sends a HEAD, whose `Last-Modified` tells DuckDB that a file was replaced in the bucket and that its footer must be read again. `DUCKDB_METADATA_CACHE=true` also caches the HTTP metadata, which saves that HEAD, but a file replaced in the bucket then fails to read (its size no longer matches the cached one) until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
+The parquet footers are always cached: each query still sends a HEAD, whose `Last-Modified` tells DuckDB that a file was replaced in the bucket and that its footer must be read again. `DUCKDB_ENABLE_HTTP_METADATA_CACHE=true` also caches the HTTP metadata, which saves that HEAD, but a file replaced in the bucket then fails to read (its size no longer matches the cached one) until the process restarts. It is therefore off by default, and only worth enabling when the files are immutable.
 
 ## 🧪 Testing
 

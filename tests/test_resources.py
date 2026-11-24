@@ -87,7 +87,7 @@ async def test_concurrent_requests_share_a_failing_load(monkeypatch):
 
 @pytest.mark.parametrize("ttl, loads", [(0, 2), (300, 1)])
 async def test_cached_resource_expires_after_the_ttl(cache, monkeypatch, ttl, loads):
-    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL", ttl)
+    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL_SECONDS", ttl)
     await cache.get(FAST_RESOURCE_ID)
     await cache.get(FAST_RESOURCE_ID)
     assert cache.loads == [FAST_RESOURCE_ID] * loads
@@ -95,7 +95,7 @@ async def test_cached_resource_expires_after_the_ttl(cache, monkeypatch, ttl, lo
 
 async def test_expired_resources_do_not_pile_up(cache, monkeypatch):
     """Every resource ever requested would otherwise stay in memory, inspection included."""
-    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL", 0)
+    monkeypatch.setattr(settings, "RESOURCE_CACHE_TTL_SECONDS", 0)
     await cache.get(FAST_RESOURCE_ID)
     await cache.get(OTHER_RESOURCE_ID)
     assert list(cache._entries) == [OTHER_RESOURCE_ID]

@@ -278,7 +278,7 @@ def closed_port() -> int:
 @pytest.fixture
 async def start_engine():
     """Start an engine of its own, with the settings patched before the call (QUERY_WORKERS,
-    QUERY_TIMEOUT...)."""
+    QUERY_TIMEOUT_SECONDS...)."""
     engines: list[DuckDBEngine] = []
 
     async def start() -> DuckDBEngine:

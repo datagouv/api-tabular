@@ -88,15 +88,16 @@ class DuckDBEngine:
         # reuse connections across the many range requests a parquet scan needs
         db.execute("SET GLOBAL httpfs_connection_caching=true")
         # interrupting a query does not cut an HTTP request blocked on the network: httpfs must
-        # give up by itself within QUERY_TIMEOUT. Without retries: even with http_retries=1, a
-        # 503 is retried seven times with a doubling backoff, holding a query thread for 30 s
+        # give up by itself within QUERY_TIMEOUT_SECONDS. Without retries: even with
+        # http_retries=1, a 503 is retried seven times with a doubling backoff, holding a query
+        # thread for 30 s
         db.execute("SET GLOBAL http_retries=0")
-        db.execute(f"SET GLOBAL http_timeout={settings.QUERY_TIMEOUT}")
+        db.execute(f"SET GLOBAL http_timeout={settings.QUERY_TIMEOUT_SECONDS}")
         # a cached footer is checked against the Last-Modified of a HEAD on every query, which
         # tells a file replaced in the bucket; the HTTP metadata cache saves that HEAD, at the cost
         # of reading a replaced file with the size of the old one
         db.execute("SET GLOBAL parquet_metadata_cache=true")
-        if settings.DUCKDB_METADATA_CACHE:
+        if settings.DUCKDB_ENABLE_HTTP_METADATA_CACHE:
             db.execute("SET GLOBAL enable_http_metadata_cache=true")
         return db
 
@@ -121,19 +122,19 @@ class DuckDBEngine:
     @staticmethod
     @asynccontextmanager
     async def _hold(semaphore: asyncio.Semaphore) -> AsyncGenerator[None]:
-        """A slot of the semaphore, or a 503 once QUERY_TIMEOUT is spent waiting for one."""
+        """A slot of the semaphore, or a 503 once QUERY_TIMEOUT_SECONDS is spent waiting for one."""
         try:
-            await asyncio.wait_for(semaphore.acquire(), settings.QUERY_TIMEOUT)
+            await asyncio.wait_for(semaphore.acquire(), settings.QUERY_TIMEOUT_SECONDS)
         except TimeoutError:
-            raise server_busy(settings.QUERY_TIMEOUT) from None
+            raise server_busy(settings.QUERY_TIMEOUT_SECONDS) from None
         try:
             yield
         finally:
             semaphore.release()
 
     async def run(self, cursor: duckdb.DuckDBPyConnection, call: Callable[[], T]) -> T:
-        """Run a blocking call on the query threads, interrupted after QUERY_TIMEOUT seconds."""
-        timeout = settings.QUERY_TIMEOUT
+        """Run a blocking call on the query threads, interrupted after QUERY_TIMEOUT_SECONDS."""
+        timeout = settings.QUERY_TIMEOUT_SECONDS
         async with self._hold(self._slots):
             future = asyncio.get_running_loop().run_in_executor(
                 self._executor, interruptible, cursor, call, timeout

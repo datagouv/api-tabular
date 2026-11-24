@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # where the parquet files live, read over HTTP(S) without credentials: a resource is read at
     # <PARQUET_BASE_URL>/<resource_id>.parquet
     PARQUET_BASE_URL: str = "https://hydra.s3.rbx.io.cloud.ovh.net/parquet"
-    # of the HEAD that /health/ sends to the storage; the reads of DuckDB use QUERY_TIMEOUT
-    HEALTH_TIMEOUT: int = 20
+    # of the HEAD that /health/ sends to the storage (DuckDB reads use QUERY_TIMEOUT_SECONDS)
+    HEALTH_TIMEOUT_SECONDS: int = 20
 
     # the data.gouv.fr instance whose resources are served, for the permalink to their file
     DATAGOUV_URL: str = "https://www.data.gouv.fr"
@@ -38,12 +38,12 @@ class Settings(BaseSettings):
     DUCKDB_TEMP_DIRECTORY: str = str(Path(tempfile.gettempdir()) / "duckdb")
     # caches the HTTP metadata of the files, which saves a HEAD per query, but a parquet file
     # replaced in the bucket fails to read until restart (the footers are cached either way)
-    DUCKDB_METADATA_CACHE: bool = False
-    # every query is interrupted after QUERY_TIMEOUT seconds, at most QUERY_WORKERS of them run
+    DUCKDB_ENABLE_HTTP_METADATA_CACHE: bool = False
+    # every query is interrupted after QUERY_TIMEOUT_SECONDS, at most QUERY_WORKERS of them run
     # at once, and at most QUERY_WORKERS CSV/JSON exports are open at once
-    QUERY_TIMEOUT: int = 30
+    QUERY_TIMEOUT_SECONDS: int = 30
     QUERY_WORKERS: PositiveInt = 8
-    RESOURCE_CACHE_TTL: int = 300
+    RESOURCE_CACHE_TTL_SECONDS: int = 300
     PROFILE_STATS: bool = True
 
     SENTRY_DSN: str = ""

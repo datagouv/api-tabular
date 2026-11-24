@@ -24,12 +24,12 @@ class DatedParquetFilesHandler(ParquetFilesHandler):
 async def single_worker_engine(start_engine, monkeypatch):
     """An engine with a single data thread: a query only runs once the previous one freed it."""
     monkeypatch.setattr(settings, "QUERY_WORKERS", 1)
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 60)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 60)
     return await start_engine()
 
 
 async def test_a_cancelled_query_frees_its_thread(single_worker_engine):
-    """A client going away interrupts its query, instead of holding a thread for QUERY_TIMEOUT."""
+    """A client going away interrupts its query, instead of holding a thread until the timeout."""
     slow = asyncio.create_task(single_worker_engine.query(SLOW_QUERY))
     await asyncio.sleep(0.5)
     slow.cancel()
@@ -61,7 +61,7 @@ async def test_the_settings_apply_to_the_connection_of_every_query(single_worker
             "SELECT " + ", ".join(f"current_setting('{name}')" for name in names)
         ).fetchone()
     assert dict(zip(names, values)) == {
-        "http_timeout": settings.QUERY_TIMEOUT,
+        "http_timeout": settings.QUERY_TIMEOUT_SECONDS,
         "http_retries": 0,
         "max_expression_depth": 500,
         "TimeZone": "UTC",
@@ -73,7 +73,7 @@ async def test_a_storage_that_never_answers_does_not_hold_a_thread(
     silent_storage, start_engine, monkeypatch
 ):
     """Interrupting DuckDB does not cut a blocked HTTP read: httpfs must give up by itself."""
-    monkeypatch.setattr(settings, "QUERY_TIMEOUT", 1)
+    monkeypatch.setattr(settings, "QUERY_TIMEOUT_SECONDS", 1)
     engine = await start_engine()
     started = time.monotonic()
     with pytest.raises(duckdb.Error):
