@@ -11,9 +11,9 @@ import duckdb
 import pytest
 from fastapi.testclient import TestClient
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.engine import DuckDBEngine
-from tabular_duckdb.main import app
+from api_tabular.config import settings
+from api_tabular.engine import DuckDBEngine
+from api_tabular.main import app
 
 # keeps a query thread busy until it is interrupted
 SLOW_QUERY = "SELECT sum(hash(range)) FROM range(10000000000)"

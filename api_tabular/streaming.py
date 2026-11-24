@@ -8,10 +8,10 @@ from typing import Any
 from fastapi.responses import StreamingResponse
 from starlette.types import Receive, Scope, Send
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.engine import QueryResult, engine
-from tabular_duckdb.errors import QueryException
-from tabular_duckdb.serialization import as_csv_value, rows_to_json
+from api_tabular.config import settings
+from api_tabular.engine import QueryResult, engine
+from api_tabular.errors import QueryException
+from api_tabular.serialization import as_csv_value, rows_to_json
 
 
 def check_output_size(total: int) -> None:

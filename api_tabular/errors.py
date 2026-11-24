@@ -1,6 +1,6 @@
 import sentry_sdk
 
-from tabular_duckdb.config import settings
+from api_tabular.config import settings
 
 
 class QueryException(Exception):

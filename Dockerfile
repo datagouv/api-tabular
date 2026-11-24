@@ -12,7 +12,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 # the version comes from git tags, which are not in the build context: the CI passes it
 ARG VERSION=0.0.0
-COPY tabular_duckdb ./tabular_duckdb
+COPY api_tabular ./api_tabular
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION} uv sync --frozen --no-dev
 
 COPY tabular_swagger.yaml ./
@@ -25,4 +25,4 @@ RUN uv run --no-sync python -c "import duckdb; duckdb.execute('INSTALL httpfs')"
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8005
 
-CMD ["uv", "run", "--no-sync", "uvicorn", "tabular_duckdb.main:app", "--host", "0.0.0.0", "--port", "8005"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "api_tabular.main:app", "--host", "0.0.0.0", "--port", "8005"]

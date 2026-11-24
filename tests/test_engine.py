@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from tabular_duckdb.config import settings
+from api_tabular.config import settings
 
 from .conftest import SLOW_QUERY, ParquetFilesHandler, serve
 

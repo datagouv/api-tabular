@@ -1,6 +1,6 @@
 import pytest
 
-from tabular_duckdb.serialization import as_csv_value, jsonable, rows_to_json
+from api_tabular.serialization import as_csv_value, jsonable, rows_to_json
 
 
 @pytest.mark.parametrize(

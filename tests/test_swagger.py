@@ -1,8 +1,8 @@
 import pytest
 
-from tabular_duckdb.query import PYTHON_TYPES, python_type
-from tabular_duckdb.resources import ColumnProfile
-from tabular_duckdb.swagger import TYPE_POSSIBILITIES, swagger_parameters
+from api_tabular.query import PYTHON_TYPES, python_type
+from api_tabular.resources import ColumnProfile
+from api_tabular.swagger import TYPE_POSSIBILITIES, swagger_parameters
 
 GLOBAL_PARAMETERS = {"page", "page_size", "columns", "or"}
 COMPARE = {"less", "greater", "strictly_less", "strictly_greater"}

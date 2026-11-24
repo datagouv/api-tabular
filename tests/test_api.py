@@ -14,11 +14,11 @@ from fastapi.testclient import TestClient
 from sentry_sdk.transport import Transport
 from starlette.types import Message, Scope
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine
-from tabular_duckdb.errors import QueryException, query_timeout
-from tabular_duckdb.main import app, build_link_with_page
-from tabular_duckdb.resources import resource_cache
+from api_tabular.config import settings
+from api_tabular.engine import engine
+from api_tabular.errors import QueryException, query_timeout
+from api_tabular.main import app, build_link_with_page
+from api_tabular.resources import resource_cache
 
 from .conftest import (
     CORRUPT_RESOURCE_ID,

@@ -9,10 +9,10 @@ from typing import Any, NotRequired, TypedDict
 import duckdb
 from starlette.exceptions import HTTPException
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.engine import engine, quote_literal
-from tabular_duckdb.errors import QueryException, handle_exception, safe_message
-from tabular_duckdb.query import ID_COLUMN, is_text, python_type, quote_ident
+from api_tabular.config import settings
+from api_tabular.engine import engine, quote_literal
+from api_tabular.errors import QueryException, handle_exception, safe_message
+from api_tabular.query import ID_COLUMN, is_text, python_type, quote_ident
 
 RESOURCE_ID_PATTERN = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"

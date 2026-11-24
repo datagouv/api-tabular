@@ -1,5 +1,5 @@
-from tabular_duckdb.config import settings
-from tabular_duckdb.errors import safe_message
+from api_tabular.config import settings
+from api_tabular.errors import safe_message
 
 
 def test_safe_message_drops_the_quoted_sql():

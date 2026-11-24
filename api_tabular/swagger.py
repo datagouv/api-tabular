@@ -5,9 +5,9 @@ from typing import NotRequired, TypedDict
 
 import yaml
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.query import RANGE_COMPARATORS
-from tabular_duckdb.resources import ColumnProfile
+from api_tabular.config import settings
+from api_tabular.query import RANGE_COMPARATORS
+from api_tabular.resources import ColumnProfile
 
 TYPE_POSSIBILITIES = {
     "string": [

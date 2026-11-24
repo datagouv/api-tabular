@@ -3,9 +3,9 @@ import time
 
 import pytest
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.errors import QueryException
-from tabular_duckdb.resources import Resource, ResourceCache
+from api_tabular.config import settings
+from api_tabular.errors import QueryException
+from api_tabular.resources import Resource, ResourceCache
 
 SLOW_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000001"
 FAST_RESOURCE_ID = "aaaaaaaa-0000-0000-0000-000000000002"

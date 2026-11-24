@@ -10,7 +10,7 @@ services:
       interval: 5s
       timeout: 10s
       retries: 12
-    # passed through only when set: the defaults live in tabular_duckdb/config.py
+    # passed through only when set: the defaults live in api_tabular/config.py
     environment:
       # a resource is read at <PARQUET_BASE_URL>/<resource_id>.parquet
       - PARQUET_BASE_URL

@@ -22,17 +22,17 @@ from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from tabular_duckdb import __version__
-from tabular_duckdb.config import settings
-from tabular_duckdb.engine import QueryResult, engine
-from tabular_duckdb.errors import (
+from api_tabular import __version__
+from api_tabular.config import settings
+from api_tabular.engine import QueryResult, engine
+from api_tabular.errors import (
     QueryException,
     handle_exception,
     invalid_query_string,
     safe_message,
 )
-from tabular_duckdb.query import PAGINATION_ARGUMENTS, ParsedQuery, Statement, build_query
-from tabular_duckdb.resources import (
+from api_tabular.query import PAGINATION_ARGUMENTS, ParsedQuery, Statement, build_query
+from api_tabular.resources import (
     Resource,
     build_profile,
     is_storage_failure,
@@ -40,15 +40,15 @@ from tabular_duckdb.resources import (
     read_error,
     resource_cache,
 )
-from tabular_duckdb.serialization import jsonable, rows_to_json
-from tabular_duckdb.streaming import (
+from api_tabular.serialization import jsonable, rows_to_json
+from api_tabular.streaming import (
     ClosingStreamingResponse,
     check_output_size,
     start_stream,
     stream_csv,
     stream_json,
 )
-from tabular_duckdb.swagger import build_swagger_file
+from api_tabular.swagger import build_swagger_file
 
 SWAGGER_FILE = Path(__file__).resolve().parent.parent / "tabular_swagger.yaml"
 OPENAPI_DOCUMENT = yaml.safe_load(SWAGGER_FILE.read_text(encoding="utf-8"))
@@ -418,4 +418,4 @@ app = CORSHeadersMiddleware(api)
 
 
 if __name__ == "__main__":
-    uvicorn.run("tabular_duckdb.main:app", host="0.0.0.0", port=8005)
+    uvicorn.run("api_tabular.main:app", host="0.0.0.0", port=8005)

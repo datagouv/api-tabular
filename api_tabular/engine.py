@@ -8,8 +8,8 @@ from typing import Any, TypeVar
 
 import duckdb
 
-from tabular_duckdb.config import settings
-from tabular_duckdb.errors import query_timeout, server_busy
+from api_tabular.config import settings
+from api_tabular.errors import query_timeout, server_busy
 
 T = TypeVar("T")
 

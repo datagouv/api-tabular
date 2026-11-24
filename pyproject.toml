@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "udata-hydra-csvapi"
+name = "api-tabular"
 dynamic = ["version"]
 description = "Tabular API over Parquet resources, served by DuckDB"
 authors = [
@@ -40,7 +40,7 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["tabular_duckdb*"]
+include = ["api_tabular*"]
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"

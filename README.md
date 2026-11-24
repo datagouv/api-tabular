@@ -43,7 +43,7 @@ curl "http://localhost:8005/api/resources/$RID/data/?page_size=5"
 
 ```shell
 uv sync
-uv run uvicorn tabular_duckdb.main:app --port 8005 --reload
+uv run uvicorn api_tabular.main:app --port 8005 --reload
 ```
 
 Configuration comes from environment variables or a `.env` file, see [.env.example](.env.example) and the [⚙️ Configuration](#️-configuration) section; the defaults point at the public OVH bucket. Another storage only needs `PARQUET_BASE_URL`, an HTTP(S) prefix readable without credentials.
