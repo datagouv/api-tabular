@@ -140,8 +140,9 @@ class ResourceCache:
     async def _load_and_cache(self, resource_id: str) -> Resource:
         resource = await self._load(resource_id)
         now = time.monotonic()
-        # an expired entry is only replaced when its resource is requested again: without this
-        # purge, every resource ever requested would stay in memory
+        # loading a resource also drops the expired entries of the others, which are otherwise
+        # only replaced when their resource is requested again: every resource ever requested
+        # would stay in memory
         self._entries = {
             key: entry for key, entry in self._entries.items() if entry.expires_at > now
         }
